@@ -1,0 +1,11 @@
+{
+  "name": "@makerbay/assistant-api",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "@makerbay/core": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145"
+  }
+}
