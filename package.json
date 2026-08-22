@@ -1,0 +1,14 @@
+{
+  "name": "makerbay",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "infra",
+    "packages/*",
+    "modules/*/api",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}
