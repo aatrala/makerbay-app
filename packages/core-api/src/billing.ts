@@ -6,7 +6,7 @@ import {
   setTenantBilling,
   type CallerContext,
 } from '@makerbay/core'
-import { isTestMode, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
+import { isTestMode, METER_EVENT_NAME, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -93,10 +93,27 @@ async function summary(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {
   })
 }
 
+/** Find or create the Billing Meter that backs the metered price. */
+async function assistantMeter(stripe: Awaited<ReturnType<typeof stripeClient>>) {
+  const existing = await stripe.billing.meters.list({ status: 'active', limit: 100 })
+  const found = existing.data.find((m) => m.event_name === METER_EVENT_NAME)
+  if (found) return found
+
+  return stripe.billing.meters.create({
+    display_name: 'MakerBay assistant messages',
+    event_name: METER_EVENT_NAME,
+    default_aggregation: { formula: 'sum' },
+    customer_mapping: { type: 'by_id', event_payload_key: 'stripe_customer_id' },
+    value_settings: { event_payload_key: 'value' },
+  })
+}
+
 /**
- * Find or create the Pro product and its two prices (flat base + metered
- * overage). Idempotent via a lookup key, so repeat calls reuse the same
- * price objects rather than cluttering the Stripe account.
+ * Find or create the Pro product and its two prices: a flat monthly base and
+ * a metered price backed by the meter. The metered price is tiered so the
+ * plan's included messages cost nothing and only the excess is charged —
+ * that lets us report total usage and let Stripe apply the allowance.
+ * Idempotent via lookup keys, so repeat calls reuse the same objects.
  */
 async function proPrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
   const plan = PLANS.pro
@@ -105,7 +122,6 @@ async function proPrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
 
   const existing = await stripe.prices.list({
     lookup_keys: [baseLookup, meteredLookup],
-    expand: ['data.product'],
     limit: 10,
   })
   let base = existing.data.find((p) => p.lookup_key === baseLookup)
@@ -131,13 +147,19 @@ async function proPrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
     })
   }
   if (!metered) {
+    const meter = await assistantMeter(stripe)
     metered = await stripe.prices.create({
       product: product.id,
       currency: 'usd',
-      unit_amount: plan.overageCentsPerMessage,
-      recurring: { interval: 'month', usage_type: 'metered', aggregate_usage: 'sum' },
+      billing_scheme: 'tiered',
+      tiers_mode: 'graduated',
+      tiers: [
+        { up_to: plan.includedMessages, unit_amount: 0 },
+        { up_to: 'inf', unit_amount: plan.overageCentsPerMessage },
+      ],
+      recurring: { interval: 'month', usage_type: 'metered', meter: meter.id },
       lookup_key: meteredLookup,
-      nickname: 'Additional messages',
+      nickname: 'Assistant messages',
     })
   }
   return { base, metered }

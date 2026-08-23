@@ -182,6 +182,23 @@ export async function getMonthUsage(
   return totals
 }
 
+/** Quantity recorded for one metric on one calendar day. */
+export async function getDayUsage(
+  tenantId: string,
+  moduleId: string,
+  metric: string,
+  date: string, // yyyy-mm-dd
+): Promise<number> {
+  const [yyyy, mm, dd] = date.split('-')
+  const r = await ddb.send(
+    new GetCommand({
+      TableName: Tables.usage(),
+      Key: { pk: `${tenantId}#${yyyy}-${mm}`, sk: `${moduleId}#${metric}#${dd}` },
+    }),
+  )
+  return Number(r.Item?.quantity ?? 0)
+}
+
 export async function addUsage(
   tenantId: string,
   moduleId: string,

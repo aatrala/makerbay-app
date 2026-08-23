@@ -10,10 +10,48 @@ let cached: { apiKey: string; webhookSecret: string } | undefined
  */
 async function credentials(): Promise<{ apiKey: string; webhookSecret: string }> {
   if (cached) return cached
-  const r = await sm.send(new GetSecretValueCommand({ SecretId: process.env.STRIPE_SECRET_ARN! }))
-  const parsed = JSON.parse(r.SecretString ?? '{}')
-  if (!parsed.apiKey || parsed.apiKey === 'REPLACE_ME') throw new Error('stripe_not_configured')
-  cached = { apiKey: parsed.apiKey, webhookSecret: parsed.webhookSecret ?? '' }
+  let raw: string
+  try {
+    const r = await sm.send(new GetSecretValueCommand({ SecretId: process.env.STRIPE_SECRET_ARN! }))
+    raw = r.SecretString ?? ''
+  } catch (err) {
+    console.error('could not read stripe secret', {
+      name: err instanceof Error ? err.name : 'unknown',
+      message: err instanceof Error ? err.message : '',
+    })
+    throw new Error('stripe_not_configured')
+  }
+
+  let parsed: Record<string, string>
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    // Shape only — no secret content in the log.
+    console.warn('stripe secret is not valid JSON', {
+      length: raw.length,
+      startsWithBrace: raw.trimStart().startsWith('{'),
+    })
+    throw new Error('stripe_not_configured')
+  }
+
+  // Accept the common field-name variants so a hand-edited secret works.
+  const apiKey: string = parsed.apiKey ?? parsed.api_key ?? parsed.secretKey ?? parsed.STRIPE_SECRET_KEY ?? ''
+  const hook: string =
+    parsed.webhookSecret ?? parsed.webhook_secret ?? parsed.signingSecret ?? parsed.STRIPE_WEBHOOK_SECRET ?? ''
+
+  // Secret keys are sk_*, restricted keys rk_* — both are valid server-side.
+  const usable = /^(sk|rk)_(test|live)_/.test(apiKey)
+  if (!usable) {
+    // Field names and the key-type prefix only — never key material.
+    console.warn('stripe credentials unusable', {
+      fieldsPresent: Object.keys(parsed),
+      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 8)}…` : '(empty)',
+      apiKeyLength: apiKey.length,
+      webhookSecretPrefix: hook ? `${hook.slice(0, 6)}…` : '(empty)',
+    })
+    throw new Error('stripe_not_configured')
+  }
+  cached = { apiKey, webhookSecret: hook }
   return cached
 }
 
@@ -64,3 +102,5 @@ export const PLANS: Record<string, PlanDefinition> = {
 }
 
 export const PRO_PRODUCT_KEY = 'makerbay-assistant-pro'
+/** Billing Meter event name. Metered prices must be backed by a meter. */
+export const METER_EVENT_NAME = 'makerbay_assistant_messages'

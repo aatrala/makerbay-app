@@ -1,12 +1,16 @@
-import { getMonthUsage, listBillableTenants } from '@makerbay/core'
-import { PLANS, stripeClient } from './stripe-client'
+import { getDayUsage, listBillableTenants } from '@makerbay/core'
+import { METER_EVENT_NAME, stripeClient } from './stripe-client'
 
 /**
- * Daily: report month-to-date overage to Stripe for every subscribed
- * tenant. Uses `action: 'set'` so a re-run overwrites rather than
- * double-charges — the job is safe to retry.
+ * Daily: report the previous day's assistant messages to the Stripe Billing
+ * Meter. Meters aggregate by sum, so each run sends that day's delta — not a
+ * running total. The identifier makes the event idempotent, so a retry or an
+ * accidental second run on the same day cannot double-bill.
+ *
+ * Allowances are handled by the tiered metered price (included messages are
+ * priced at zero), so we report total messages rather than computed overage.
  */
-export const handler = async (): Promise<{ reported: number; skipped: number }> => {
+export const handler = async (event: { date?: string } = {}): Promise<{ reported: number; skipped: number }> => {
   let stripe
   try {
     stripe = await stripeClient()
@@ -15,33 +19,38 @@ export const handler = async (): Promise<{ reported: number; skipped: number }> 
     return { reported: 0, skipped: 0 }
   }
 
-  const month = new Date().toISOString().slice(0, 7)
+  const day = event.date ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const tenants = await listBillableTenants()
   let reported = 0
   let skipped = 0
 
   for (const tenant of tenants) {
-    if (!tenant.stripeMeteredItemId || !['active', 'trialing'].includes(tenant.subscriptionStatus ?? '')) {
+    const subscribed = ['active', 'trialing'].includes(tenant.subscriptionStatus ?? '')
+    if (!subscribed || !tenant.stripeCustomerId) {
       skipped++
       continue
     }
     try {
-      const totals = await getMonthUsage(tenant.tenantId, month)
-      const messages = totals['assistant.message'] ?? 0
-      const included = (PLANS[tenant.plan] ?? PLANS.pro).includedMessages
-      const overage = Math.max(0, Math.round(messages - included))
-
-      await stripe.subscriptionItems.createUsageRecord(tenant.stripeMeteredItemId, {
-        quantity: overage,
-        timestamp: 'now',
-        action: 'set',
+      const messages = await getDayUsage(tenant.tenantId, 'assistant', 'message', day)
+      if (messages <= 0) {
+        skipped++
+        continue
+      }
+      await stripe.billing.meterEvents.create({
+        event_name: METER_EVENT_NAME,
+        identifier: `${tenant.tenantId}-${day}`,
+        payload: {
+          stripe_customer_id: tenant.stripeCustomerId,
+          value: String(Math.round(messages)),
+        },
       })
       reported++
-      console.log('usage reported', { tenantId: tenant.tenantId, messages, overage })
+      console.log('usage reported', { tenantId: tenant.tenantId, day, messages })
     } catch (err) {
       skipped++
-      console.error('usage report failed', { tenantId: tenant.tenantId, err })
+      console.error('usage report failed', { tenantId: tenant.tenantId, day, err })
     }
   }
+  console.log('reporting complete', { day, reported, skipped })
   return { reported, skipped }
 }
