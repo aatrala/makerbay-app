@@ -216,3 +216,18 @@ export async function addUsage(
     }),
   )
 }
+
+/** Remove all Stripe linkage and return the tenant to the free plan. */
+export async function clearTenantBilling(tenantId: string): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.tenants(),
+      Key: { tenantId },
+      UpdateExpression:
+        'REMOVE stripeCustomerId, stripeSubscriptionId, stripeMeteredItemId, subscriptionStatus, currentPeriodEnd SET #p = :free',
+      ExpressionAttributeNames: { '#p': 'plan' },
+      ExpressionAttributeValues: { ':free': 'free' },
+      ConditionExpression: 'attribute_exists(tenantId)',
+    }),
+  )
+}

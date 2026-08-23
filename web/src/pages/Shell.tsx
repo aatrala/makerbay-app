@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { logout, type Me } from '../api'
 
-export default function Shell({ me }: { me: Me }) {
+export default function Shell({ me, stripeMode }: { me: Me; stripeMode?: 'test' | 'live' | null }) {
   const modules = me.entitlements?.modules ?? {}
   return (
     <div className="shell">
@@ -24,6 +24,11 @@ export default function Shell({ me }: { me: Me }) {
           <NavLink to="/billing">Billing</NavLink>
         </nav>
         <div className="spacer" />
+        {stripeMode && (
+          <div className={`modebadge ${stripeMode}`}>
+            {stripeMode === 'live' ? 'LIVE BILLING' : 'TEST BILLING'}
+          </div>
+        )}
         <div className="whoami">
           {me.tenant?.name}<br />{me.user.email}<br />
           <a href="#" onClick={(e) => { e.preventDefault(); logout() }}>Sign out</a>

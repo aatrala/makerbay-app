@@ -115,6 +115,8 @@ export interface Me {
 }
 
 export const getMe = (): Promise<Me> => api('GET', '/v1/core/me')
+export const getBillingSummary = () => api('GET', '/v1/core/billing/summary')
+export const resetBilling = (force = false) => api('POST', '/v1/core/billing/reset', { force })
 export const CHAT_BASE = 'https://chat.makerbay.app'
 export const WIDGET_BASE = 'https://widget.makerbay.app'
 export const createTenant = (name: string) => api('POST', '/v1/core/tenants', { name })

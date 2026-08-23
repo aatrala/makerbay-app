@@ -105,3 +105,11 @@ pre.code {
 /* Usage bars */
 .bar { height: 8px; border-radius: 6px; background: #e8edf5; overflow: hidden; margin-top: 6px; }
 .bar > div { height: 100%; background: var(--accent); border-radius: 6px; }
+
+/* Billing mode badge — always visible so live vs test is never a guess */
+.modebadge {
+  margin: 0 10px 8px; padding: 5px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-align: center;
+}
+.modebadge.test { background: #4a3c10; color: #ffd97a; }
+.modebadge.live { background: #10402c; color: #6ee7b7; }

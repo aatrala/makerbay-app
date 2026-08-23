@@ -1,8 +1,11 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import {
+  clearTenantBilling,
+  getEntitlements,
   getMonthUsage,
   getTenant,
   getUser,
+  setModuleEntitlement,
   setTenantBilling,
   type CallerContext,
 } from '@makerbay/core'
@@ -32,6 +35,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'GET' && path === '/v1/core/billing/summary') return await summary(tenant)
     if (method === 'POST' && path === '/v1/core/billing/checkout') return await checkout(tenant)
     if (method === 'POST' && path === '/v1/core/billing/portal') return await portal(tenant)
+    if (method === 'POST' && path === '/v1/core/billing/reset') return await reset(tenant, event)
     return json(404, { error: 'not_found' })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'error'
@@ -189,6 +193,41 @@ async function checkout(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {
     cancel_url: `${process.env.APP_URL}/billing`,
   })
   return json(200, { url: session.url })
+}
+
+/**
+ * Detach this workspace from Stripe and return it to the free plan.
+ *
+ * Local state only — it does NOT cancel anything at Stripe. Its purpose is
+ * clearing stale linkage, most often test-mode ids left behind after a
+ * switch to live keys. Because forgetting a live subscription would leave a
+ * customer paying with nothing to show for it, an active subscription is
+ * refused unless the caller explicitly forces it.
+ */
+async function reset(tenant: TenantLike, event: Event): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const active = ['active', 'trialing', 'past_due'].includes(tenant.subscriptionStatus ?? '')
+  if (active && body.force !== true) {
+    return json(409, {
+      error: 'subscription_active',
+      message:
+        'This workspace has a live subscription. Cancel it in the billing portal first, or pass force:true to detach anyway (Stripe keeps billing).',
+      subscriptionStatus: tenant.subscriptionStatus,
+    })
+  }
+
+  await clearTenantBilling(tenant.tenantId)
+  const free = PLANS.free
+  const entitlements = await getEntitlements(tenant.tenantId)
+  for (const moduleId of Object.keys(entitlements.modules)) {
+    await setModuleEntitlement(tenant.tenantId, moduleId, {
+      enabled: entitlements.modules[moduleId].enabled,
+      plan: free.id,
+      limits: free.limits,
+    })
+  }
+  console.log('billing reset', { tenantId: tenant.tenantId, forced: body.force === true })
+  return json(200, { plan: free.id, modulesReset: Object.keys(entitlements.modules) })
 }
 
 async function portal(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {

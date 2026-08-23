@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { getMe, isLoggedIn, type Me } from './api'
+import { getBillingSummary, getMe, isLoggedIn, type Me } from './api'
 import Login from './pages/Login'
 import Onboarding from './pages/Onboarding'
 import Shell from './pages/Shell'
@@ -16,11 +16,16 @@ import UsagePage from './pages/UsagePage'
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(isLoggedIn())
+  const [stripeMode, setStripeMode] = useState<'test' | 'live' | null>(null)
 
   const reload = useCallback(async () => {
     if (!isLoggedIn()) { setLoading(false); return }
     try {
       setMe(await getMe())
+      // Owner-only; members simply get no badge.
+      getBillingSummary()
+        .then((b) => setStripeMode(b.billingConfigured ? (b.testMode ? 'test' : 'live') : null))
+        .catch(() => setStripeMode(null))
     } finally {
       setLoading(false)
     }
@@ -36,7 +41,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route element={<Shell me={me} />}>
+      <Route element={<Shell me={me} stripeMode={stripeMode} />}>
         <Route path="/" element={<Navigate to="/assistant/playground" replace />} />
         <Route path="/assistant/knowledge" element={<Knowledge />} />
         <Route path="/assistant/behavior" element={<Behavior />} />
