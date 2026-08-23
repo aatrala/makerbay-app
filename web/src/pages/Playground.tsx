@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { api } from '../api'
+import { api, streamChat } from '../api'
 
 interface ChatMsg {
   role: 'user' | 'bot'
@@ -39,6 +39,36 @@ export default function Playground() {
     setMessages((m) => [...m, { role: 'user', text: message }])
     setBusy(true)
     try {
+      // Stream first so the answer starts appearing immediately; fall back to
+      // the single-response route if streaming is unavailable.
+      let streamed = false
+      try {
+        const meta = await streamChat({ sessionId, message }, (delta) => {
+          setMessages((m) => {
+            if (!streamed) {
+              streamed = true
+              return [...m, { role: 'bot', text: delta }]
+            }
+            const copy = [...m]
+            const last = copy[copy.length - 1]
+            copy[copy.length - 1] = { ...last, text: last.text + delta }
+            return copy
+          })
+        })
+        setSessionId(meta.sessionId)
+        if (streamed) {
+          setMessages((m) => {
+            const copy = [...m]
+            const last = copy[copy.length - 1]
+            copy[copy.length - 1] = { ...last, citations: meta.citations, messageId: meta.messageId }
+            return copy
+          })
+          return
+        }
+      } catch {
+        if (streamed) return // partial answer is on screen; don't duplicate it
+      }
+
       const r = await api('POST', '/v1/assistant/chat', { sessionId, message })
       setSessionId(r.sessionId)
       setMessages((m) => [...m, { role: 'bot', text: r.answer, citations: r.citations, messageId: r.messageId }])
@@ -83,7 +113,9 @@ export default function Playground() {
               )}
             </div>
           ))}
-          {busy && <div className="msg bot">Thinking…</div>}
+          {busy && messages[messages.length - 1]?.role === 'user' && (
+            <div className="msg bot">Thinking…</div>
+          )}
         </div>
         <form className="chat-input" onSubmit={send}>
           <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type a question…" autoFocus />

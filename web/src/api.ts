@@ -117,6 +117,49 @@ export interface Me {
 export const getMe = (): Promise<Me> => api('GET', '/v1/core/me')
 export const getBillingSummary = () => api('GET', '/v1/core/billing/summary')
 export const resetBilling = (force = false) => api('POST', '/v1/core/billing/reset', { force })
+export const STREAM_BASE = 'https://stream.makerbay.app'
+
+/**
+ * Streaming chat. Yields text deltas as they arrive and resolves with the
+ * final metadata. Callers fall back to the plain route if this rejects.
+ */
+export async function streamChat(
+  body: { sessionId?: string; message: string },
+  onDelta: (text: string) => void,
+): Promise<{ sessionId: string; messageId: string; citations?: Array<{ sourceId: string; name: string }>; fallback?: boolean }> {
+  const r = await fetch(STREAM_BASE, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${store.idToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok || !r.body) throw new ApiError(r.status, 'no_stream')
+
+  const reader = r.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let meta: any = {}
+
+  const handle = (line: string) => {
+    if (!line.trim()) return
+    let evt: any
+    try { evt = JSON.parse(line) } catch { return }
+    if (evt.type === 'delta') onDelta(evt.text)
+    else if (evt.type === 'meta') meta = { ...meta, ...evt }
+    else if (evt.type === 'done') meta = { ...meta, ...evt }
+    else if (evt.type === 'error') throw new ApiError(200, evt.error)
+  }
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) { if (buf.trim()) handle(buf); break }
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    lines.forEach(handle)
+  }
+  return meta
+}
+
 export const CHAT_BASE = 'https://chat.makerbay.app'
 export const WIDGET_BASE = 'https://widget.makerbay.app'
 export const createTenant = (name: string) => api('POST', '/v1/core/tenants', { name })

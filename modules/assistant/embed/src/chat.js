@@ -5,6 +5,7 @@
  */
 ;(function () {
   var API = 'https://api.makerbay.app'
+  var STREAM = 'https://stream.makerbay.app'
   var app = document.getElementById('app')
   var params = new URLSearchParams(location.search)
   var key = params.get('key')
@@ -32,6 +33,12 @@
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     })
+  }
+
+  function identify(payload) {
+    if (key) payload.key = key
+    else payload.slug = slug
+    return payload
   }
 
   fetch(API + '/v1/public/assistant/config?' + query)
@@ -64,41 +71,52 @@
     if (!embedded) app.querySelector('#input').focus()
   }
 
-  function add(role, text, sources, messageId) {
+  /** Create a message bubble. Text is set via textContent, never innerHTML. */
+  function add(role, text) {
     var log = document.getElementById('log')
     var el = document.createElement('div')
     el.className = 'msg ' + (role === 'me' ? 'me' : 'bot')
-    el.innerHTML =
-      esc(text) +
-      (sources && sources.length
-        ? '<div class="src">Sources: ' + esc(sources.map(function (s) { return s.name }).join(', ')) + '</div>'
-        : '')
-
-    if (messageId) {
-      var rate = document.createElement('div')
-      rate.className = 'src rate'
-      rate.innerHTML =
-        'Was this helpful? <button type="button" data-v="up" aria-label="Helpful">&#128077;</button>' +
-        ' <button type="button" data-v="down" aria-label="Not helpful">&#128078;</button>'
-      rate.addEventListener('click', function (e) {
-        var v = e.target && e.target.getAttribute && e.target.getAttribute('data-v')
-        if (!v) return
-        rate.textContent = 'Thanks for the feedback.'
-        var payload = { sessionId: sessionId, messageId: messageId, feedback: v }
-        if (key) payload.key = key
-        else payload.slug = slug
-        fetch(API + '/v1/public/assistant/feedback', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).catch(function () {})
-      })
-      el.appendChild(rate)
-    }
-
+    var body = document.createElement('span')
+    body.className = 'body'
+    body.textContent = text || ''
+    el.appendChild(body)
     log.appendChild(el)
     log.scrollTop = log.scrollHeight
     return el
+  }
+
+  function appendText(bubble, text) {
+    bubble.querySelector('.body').textContent += text
+    var log = document.getElementById('log')
+    log.scrollTop = log.scrollHeight
+  }
+
+  /** Attach sources and the thumbs control once an answer is complete. */
+  function decorate(bubble, sources, messageId) {
+    if (sources && sources.length) {
+      var src = document.createElement('div')
+      src.className = 'src'
+      src.textContent = 'Sources: ' + sources.map(function (s) { return s.name }).join(', ')
+      bubble.appendChild(src)
+    }
+    if (!messageId) return
+
+    var rate = document.createElement('div')
+    rate.className = 'src rate'
+    rate.innerHTML =
+      'Was this helpful? <button type="button" data-v="up" aria-label="Helpful">&#128077;</button>' +
+      ' <button type="button" data-v="down" aria-label="Not helpful">&#128078;</button>'
+    rate.addEventListener('click', function (e) {
+      var v = e.target && e.target.getAttribute && e.target.getAttribute('data-v')
+      if (!v) return
+      rate.textContent = 'Thanks for the feedback.'
+      fetch(API + '/v1/public/assistant/feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(identify({ sessionId: sessionId, messageId: messageId, feedback: v })),
+      }).catch(function () {})
+    })
+    bubble.appendChild(rate)
   }
 
   function send(e) {
@@ -111,42 +129,105 @@
     busy = true
     document.getElementById('send').disabled = true
 
+    var log = document.getElementById('log')
     var typing = document.createElement('div')
     typing.className = 'typing'
     typing.textContent = 'Typing…'
-    var log = document.getElementById('log')
     log.appendChild(typing)
     log.scrollTop = log.scrollHeight
 
-    var payload = { message: message, sessionId: sessionId || undefined }
-    if (key) payload.key = key
-    else payload.slug = slug
+    var payload = identify({ message: message, sessionId: sessionId || undefined })
+    var bubble = null
+    var messageId = null
+    var limitHit = false
 
-    fetch(API + '/v1/public/assistant/chat', {
+    function finish() {
+      busy = false
+      document.getElementById('send').disabled = false
+      document.getElementById('input').focus()
+    }
+
+    function ensureBubble() {
+      if (bubble) return
+      if (typing.parentNode) typing.remove()
+      bubble = add('bot', '')
+    }
+
+    // Stream tokens as they arrive. If streaming is unavailable — an older
+    // browser, a proxy that buffers, a network error before any token lands —
+    // fall back to the single-response route so the answer still appears.
+    fetch(STREAM, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     })
-      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d } }) })
-      .then(function (res) {
-        typing.remove()
-        if (res.status === 200) {
-          sessionId = res.data.sessionId
-          add('bot', res.data.answer, res.data.citations, res.data.messageId)
-        } else if (res.status === 429) {
-          add('bot', 'This assistant has reached its message limit for the month.')
-        } else {
-          add('bot', 'Sorry, something went wrong. Please try again.')
+      .then(function (r) {
+        if (!r.ok || !r.body || !r.body.getReader) throw new Error('no_stream')
+        var reader = r.body.getReader()
+        var decoder = new TextDecoder()
+        var buf = ''
+
+        function handle(line) {
+          if (!line.trim()) return
+          var evt
+          try { evt = JSON.parse(line) } catch (err) { return }
+          if (evt.type === 'meta') {
+            sessionId = evt.sessionId
+            messageId = evt.messageId
+          } else if (evt.type === 'delta') {
+            ensureBubble()
+            appendText(bubble, evt.text)
+          } else if (evt.type === 'done') {
+            ensureBubble()
+            decorate(bubble, evt.citations, evt.messageId || messageId)
+          } else if (evt.type === 'error') {
+            if (evt.error === 'limit_exceeded') limitHit = true
+            throw new Error(evt.error)
+          }
         }
+
+        function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) {
+              if (buf.trim()) handle(buf)
+              return
+            }
+            buf += decoder.decode(res.value, { stream: true })
+            var lines = buf.split('\n')
+            buf = lines.pop()
+            lines.forEach(handle)
+            return pump()
+          })
+        }
+        return pump()
       })
       .catch(function () {
-        typing.remove()
-        add('bot', 'Sorry, something went wrong. Please try again.')
+        // A partial answer is already on screen; leave it rather than duplicate.
+        if (bubble) return
+        if (typing.parentNode) typing.remove()
+        if (limitHit) {
+          add('bot', 'This assistant has reached its message limit for the month.')
+          return
+        }
+        return fetch(API + '/v1/public/assistant/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d } }) })
+          .then(function (res) {
+            if (res.status === 200) {
+              sessionId = res.data.sessionId
+              var el = add('bot', res.data.answer)
+              decorate(el, res.data.citations, res.data.messageId)
+            } else if (res.status === 429) {
+              add('bot', 'This assistant has reached its message limit for the month.')
+            } else {
+              add('bot', 'Sorry, something went wrong. Please try again.')
+            }
+          })
+          .catch(function () { add('bot', 'Sorry, something went wrong. Please try again.') })
       })
-      .then(function () {
-        busy = false
-        document.getElementById('send').disabled = false
-        document.getElementById('input').focus()
-      })
+      .then(finish, finish)
   }
 })()
