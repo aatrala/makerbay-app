@@ -311,6 +311,23 @@ export class MakerbayStack extends cdk.Stack {
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     })
 
+    // MCP server: the same modules, reachable by coding agents.
+    const mcpFn = fn(
+      'McpServerFn',
+      'packages/mcp-server/src/handler.ts',
+      {
+        ...tableEnv,
+        TABLE_SOURCES: sources.tableName,
+        TABLE_CONVERSATIONS: conversations.tableName,
+        TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+        KNOWLEDGE_BUCKET: knowledgeBucket.bucketName,
+        KB_ID: kb.attrKnowledgeBaseId,
+        DS_ID: dataSource.attrDataSourceId,
+        CHAT_MODEL_ID,
+      },
+      { timeoutSeconds: 29, memorySize: 512 },
+    )
+
     const usageAggregatorFn = fn('UsageAggregatorFn', 'packages/core-api/src/usage-aggregator.ts', {
       TABLE_USAGE: usage.tableName,
     })
@@ -384,6 +401,26 @@ export class MakerbayStack extends cdk.Stack {
       }),
     )
 
+    for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(mcpFn)
+    for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(mcpFn)
+    bus.grantPutEventsTo(mcpFn)
+    knowledgeBucket.grantReadWrite(mcpFn, 'knowledge/*')
+    mcpFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:Retrieve', 'bedrock:StartIngestionJob'],
+        resources: [kb.attrKnowledgeBaseArn],
+      }),
+    )
+    mcpFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5*',
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5*`,
+        ],
+      }),
+    )
+
     usage.grantReadWriteData(usageAggregatorFn)
 
     for (const f of [billingFn, billingWebhookFn, billingReporterFn]) {
@@ -447,6 +484,13 @@ export class MakerbayStack extends cdk.Stack {
       path: '/v1/billing/webhook',
       methods: [apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration('BillingWebhookIntegration', billingWebhookFn),
+    })
+
+    httpApi.addRoutes({
+      path: '/mcp',
+      methods: [apigwv2.HttpMethod.POST, apigwv2.HttpMethod.GET, apigwv2.HttpMethod.DELETE],
+      integration: new HttpLambdaIntegration('McpIntegration', mcpFn),
+      authorizer,
     })
 
     // Public surface for the embeddable widget and hosted chat page: no
@@ -595,7 +639,25 @@ export class MakerbayStack extends cdk.Stack {
       target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(siteDistribution)),
     })
 
+    // mcp.makerbay.app -> the same HTTP API
+    const mcpDomain = new apigwv2.DomainName(this, 'McpDomain', {
+      domainName: `mcp.${DOMAIN}`,
+      certificate,
+    })
+    new apigwv2.ApiMapping(this, 'McpMapping', { api: httpApi, domainName: mcpDomain })
+    new route53.ARecord(this, 'McpAlias', {
+      zone,
+      recordName: 'mcp',
+      target: route53.RecordTarget.fromAlias(
+        new route53Targets.ApiGatewayv2DomainProperties(
+          mcpDomain.regionalDomainName,
+          mcpDomain.regionalHostedZoneId,
+        ),
+      ),
+    })
+
     // ── Outputs ──────────────────────────────────────────────────────────
+    new cdk.CfnOutput(this, 'McpUrl', { value: `https://mcp.${DOMAIN}/mcp` })
     new cdk.CfnOutput(this, 'StreamUrl', { value: `https://stream.${DOMAIN}` })
     new cdk.CfnOutput(this, 'StreamFunctionUrl', { value: streamUrl.url })
     new cdk.CfnOutput(this, 'SiteBucketName', { value: siteBucket.bucketName })
