@@ -1,6 +1,11 @@
 import { BedrockAgentClient, GetIngestionJobCommand, StartIngestionJobCommand } from '@aws-sdk/client-bedrock-agent'
 import { BedrockAgentRuntimeClient, RetrieveCommand } from '@aws-sdk/client-bedrock-agent-runtime'
-import { BedrockRuntimeClient, ConverseCommand, type Message } from '@aws-sdk/client-bedrock-runtime'
+import {
+  BedrockRuntimeClient,
+  ConverseCommand,
+  ConverseStreamCommand,
+  type Message,
+} from '@aws-sdk/client-bedrock-runtime'
 import type { AssistantConfigRow, MessageRow } from './db'
 
 const agentClient = new BedrockAgentClient({})
@@ -65,12 +70,13 @@ export function classifyAnswer(raw: string, fallbackMessage: string): { text: st
   return rest.length > 40 ? { text: rest, fallback: false } : { text: fb, fallback: true }
 }
 
-export async function generateAnswer(
+/** One prompt definition shared by the streaming and non-streaming paths. */
+function buildPrompt(
   config: AssistantConfigRow,
   chunks: RetrievedChunk[],
   history: MessageRow[],
   userMessage: string,
-): Promise<GeneratedAnswer> {
+): { system: string; messages: Message[] } {
   const context = chunks
     .map((c, i) => `[${i + 1}] (source: ${c.sourceName})\n${c.text}`)
     .join('\n\n')
@@ -102,6 +108,16 @@ export async function generateAnswer(
     })),
     { role: 'user' as const, content: [{ text: userMessage }] },
   ]
+  return { system, messages }
+}
+
+export async function generateAnswer(
+  config: AssistantConfigRow,
+  chunks: RetrievedChunk[],
+  history: MessageRow[],
+  userMessage: string,
+): Promise<GeneratedAnswer> {
+  const { system, messages } = buildPrompt(config, chunks, history, userMessage)
 
   const r = await runtimeClient.send(
     new ConverseCommand({
@@ -124,6 +140,48 @@ export async function generateAnswer(
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
   }
+}
+
+/**
+ * Same prompt and model as generateAnswer, but yields tokens as they arrive.
+ * Callers decide what to do with partial text; the accumulated text is
+ * returned so it can be classified and stored once complete.
+ */
+export async function streamAnswer(
+  config: AssistantConfigRow,
+  chunks: RetrievedChunk[],
+  history: MessageRow[],
+  userMessage: string,
+  onDelta: (text: string) => void,
+): Promise<GeneratedAnswer> {
+  const { system, messages } = buildPrompt(config, chunks, history, userMessage)
+
+  const r = await runtimeClient.send(
+    new ConverseStreamCommand({
+      modelId: MODEL_ID(),
+      system: [{ text: system }],
+      messages,
+      inferenceConfig: { maxTokens: 1024, temperature: 0.4 },
+    }),
+  )
+
+  let text = ''
+  let inputTokens = 0
+  let outputTokens = 0
+  for await (const chunk of r.stream ?? []) {
+    const delta = chunk.contentBlockDelta?.delta?.text
+    if (delta) {
+      text += delta
+      onDelta(delta)
+    }
+    if (chunk.metadata?.usage) {
+      inputTokens = chunk.metadata.usage.inputTokens ?? 0
+      outputTokens = chunk.metadata.usage.outputTokens ?? 0
+    }
+  }
+
+  const decided = classifyAnswer(text, config.fallbackMessage)
+  return { text: decided.text, fallback: decided.fallback, inputTokens, outputTokens }
 }
 
 export async function startIngestion(): Promise<string> {

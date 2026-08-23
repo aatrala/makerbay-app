@@ -282,6 +282,31 @@ export class MakerbayStack extends cdk.Stack {
       },
       { timeoutSeconds: 29, memorySize: 512 },
     )
+    // Streaming chat. API Gateway cannot stream a response, so this runs
+    // behind a Lambda Function URL in RESPONSE_STREAM mode and is fronted by
+    // CloudFront so it still answers on our own domain.
+    const assistantStreamFn = fn(
+      'AssistantStreamFn',
+      'modules/assistant/api/src/chat-stream.ts',
+      {
+        ...tableEnv,
+        TABLE_SOURCES: sources.tableName,
+        TABLE_CONVERSATIONS: conversations.tableName,
+        TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+        KNOWLEDGE_BUCKET: knowledgeBucket.bucketName,
+        KB_ID: kb.attrKnowledgeBaseId,
+        DS_ID: dataSource.attrDataSourceId,
+        CHAT_MODEL_ID,
+        USER_POOL_ID: userPool.userPoolId,
+        USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+      },
+      { timeoutSeconds: 120, memorySize: 512 },
+    )
+    const streamUrl = assistantStreamFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    })
+
     const usageAggregatorFn = fn('UsageAggregatorFn', 'packages/core-api/src/usage-aggregator.ts', {
       TABLE_USAGE: usage.tableName,
     })
@@ -332,6 +357,22 @@ export class MakerbayStack extends cdk.Stack {
     assistantFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['bedrock:InvokeModel'],
+        resources: [
+          'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5*',
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5*`,
+        ],
+      }),
+    )
+
+    for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantStreamFn)
+    for (const t of [users, tenants, apiKeys, entitlements, usage]) t.grantReadData(assistantStreamFn)
+    bus.grantPutEventsTo(assistantStreamFn)
+    assistantStreamFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['bedrock:Retrieve'], resources: [kb.attrKnowledgeBaseArn] }),
+    )
+    assistantStreamFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModelWithResponseStream', 'bedrock:InvokeModel'],
         resources: [
           'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5*',
           `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5*`,
@@ -493,6 +534,27 @@ export class MakerbayStack extends cdk.Stack {
       })
     }
 
+    // ── Streaming endpoint: stream.makerbay.app ──────────────────────────
+    // Caching must stay off and the response must not be buffered, or the
+    // whole point of streaming is lost.
+    const streamDistribution = new cloudfront.Distribution(this, 'StreamDistribution', {
+      defaultBehavior: {
+        origin: new origins.FunctionUrlOrigin(streamUrl),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+      },
+      domainNames: [`stream.${DOMAIN}`],
+      certificate,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    })
+    new route53.ARecord(this, 'StreamAlias', {
+      zone,
+      recordName: 'stream',
+      target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(streamDistribution)),
+    })
+
     // ── Marketing site: makerbay.app + www ───────────────────────────────
     const siteBucket = new s3.Bucket(this, 'SiteBucket', {
       bucketName: `makerbay-site-${this.account}`,
@@ -529,6 +591,8 @@ export class MakerbayStack extends cdk.Stack {
     })
 
     // ── Outputs ──────────────────────────────────────────────────────────
+    new cdk.CfnOutput(this, 'StreamUrl', { value: `https://stream.${DOMAIN}` })
+    new cdk.CfnOutput(this, 'StreamFunctionUrl', { value: streamUrl.url })
     new cdk.CfnOutput(this, 'SiteBucketName', { value: siteBucket.bucketName })
     new cdk.CfnOutput(this, 'SiteDistributionId', { value: siteDistribution.distributionId })
     new cdk.CfnOutput(this, 'SiteUrl', { value: `https://${DOMAIN}` })
