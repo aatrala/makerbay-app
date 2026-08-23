@@ -50,6 +50,10 @@ export class MakerbayStack extends cdk.Stack {
       })
 
     const tenants = table('Tenants', 'tenantId')
+    tenants.addGlobalSecondaryIndex({
+      indexName: 'bySlug',
+      partitionKey: { name: 'slug', type: dynamodb.AttributeType.STRING },
+    })
     const users = table('Users', 'userId')
     const apiKeys = table('ApiKeys', 'tenantId', 'keyId')
     apiKeys.addGlobalSecondaryIndex({
@@ -253,7 +257,7 @@ export class MakerbayStack extends cdk.Stack {
     bus.grantPutEventsTo(coreFn)
 
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
-    for (const t of [users, entitlements, usage]) t.grantReadData(assistantFn)
+    for (const t of [users, tenants, apiKeys, entitlements, usage]) t.grantReadData(assistantFn)
     bus.grantPutEventsTo(assistantFn)
     knowledgeBucket.grantReadWrite(assistantFn, 'knowledge/*')
     assistantFn.addToRolePolicy(
@@ -312,6 +316,15 @@ export class MakerbayStack extends cdk.Stack {
       authorizer,
     })
 
+    // Public surface for the embeddable widget and hosted chat page: no
+    // authorizer. The caller identifies a tenant with a publishable key or a
+    // workspace slug; spend stays bounded by the tenant's plan limits.
+    httpApi.addRoutes({
+      path: '/v1/public/assistant/{proxy+}',
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('PublicAssistantIntegration', assistantFn),
+    })
+
     // api.makerbay.app -> HTTP API
     const apiDomain = new apigwv2.DomainName(this, 'ApiDomain', {
       domainName: `api.${DOMAIN}`,
@@ -360,7 +373,42 @@ export class MakerbayStack extends cdk.Stack {
       target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(distribution)),
     })
 
+    // ── Embed surfaces: chat.makerbay.app + widget.makerbay.app ──────────
+    // One bucket and distribution serve both: /widget.js is the loader
+    // script, everything else falls through to the chat app.
+    const embedBucket = new s3.Bucket(this, 'EmbedBucket', {
+      bucketName: `makerbay-embed-${this.account}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+    const embedDistribution = new cloudfront.Distribution(this, 'EmbedDistribution', {
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(embedBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      defaultRootObject: 'index.html',
+      domainNames: [`chat.${DOMAIN}`, `widget.${DOMAIN}`],
+      certificate,
+      errorResponses: [
+        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
+        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' },
+      ],
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    })
+    for (const [id, recordName] of [['ChatAlias', 'chat'], ['WidgetAlias', 'widget']] as const) {
+      new route53.ARecord(this, id, {
+        zone,
+        recordName,
+        target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(embedDistribution)),
+      })
+    }
+
     // ── Outputs ──────────────────────────────────────────────────────────
+    new cdk.CfnOutput(this, 'EmbedBucketName', { value: embedBucket.bucketName })
+    new cdk.CfnOutput(this, 'EmbedDistributionId', { value: embedDistribution.distributionId })
     new cdk.CfnOutput(this, 'WebBucketName', { value: webBucket.bucketName })
     new cdk.CfnOutput(this, 'WebDistributionId', { value: distribution.distributionId })
     new cdk.CfnOutput(this, 'AppUrl', { value: `https://app.${DOMAIN}` })

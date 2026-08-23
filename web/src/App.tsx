@@ -38,7 +38,7 @@ export default function App() {
         <Route path="/assistant/knowledge" element={<Knowledge />} />
         <Route path="/assistant/behavior" element={<Behavior />} />
         <Route path="/assistant/playground" element={<Playground />} />
-        <Route path="/assistant/deploy" element={<DeployPage />} />
+        <Route path="/assistant/deploy" element={<DeployPage me={me} />} />
         <Route path="/usage" element={<UsagePage me={me} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

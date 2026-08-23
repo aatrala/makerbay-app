@@ -3,9 +3,13 @@ import { DeleteObjectsCommand, PutObjectCommand, S3Client } from '@aws-sdk/clien
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import {
   emitUsage,
+  findApiKeyByHash,
   getEntitlements,
   getMonthUsage,
+  getTenant,
+  getTenantBySlug,
   getUser,
+  hashApiKey,
   ulid,
   type CallerContext,
 } from '@makerbay/core'
@@ -37,11 +41,15 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
 })
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
-  const ctx = event.requestContext.authorizer.lambda
   const method = event.requestContext.http.method
   const path = event.rawPath
 
   try {
+    // Public widget/hosted-page surface runs without the authorizer, so it
+    // must not read authorizer context.
+    if (path.startsWith('/v1/public/assistant')) return await publicRoute(method, path, event)
+
+    const ctx = event.requestContext.authorizer.lambda
     // Entitlement gate — read fresh, not from the (up to 5 min stale)
     // authorizer cache, because limits depend on it.
     const tenantId = await resolveTenantId(ctx)
@@ -84,6 +92,66 @@ async function resolveTenantId(ctx: CallerContext): Promise<string> {
   if (ctx.keyId) return ctx.tenantId
   if (!ctx.userId) return ''
   return (await getUser(ctx.userId))?.tenantId ?? ''
+}
+
+// ── Public surface (widget + hosted page) ────────────────────────────────
+
+/**
+ * Identify a tenant from a publishable key or a workspace slug. Secret keys
+ * are rejected here: a public page must never be able to present one and
+ * gain more than chat access.
+ */
+async function resolvePublicTenant(
+  key?: string,
+  slug?: string,
+): Promise<{ tenantId: string; slug: string } | undefined> {
+  if (key) {
+    if (!key.startsWith('mb_pk_')) return undefined
+    const row = await findApiKeyByHash(hashApiKey(key))
+    if (!row || row.type !== 'publishable' || !row.scopes.includes('chat:invoke')) return undefined
+    const tenant = await getTenant(row.tenantId)
+    return { tenantId: row.tenantId, slug: tenant?.slug ?? '' }
+  }
+  if (slug) {
+    const tenant = await getTenantBySlug(slug)
+    if (!tenant || tenant.status !== 'active') return undefined
+    return { tenantId: tenant.tenantId, slug: tenant.slug }
+  }
+  return undefined
+}
+
+async function publicRoute(
+  method: string,
+  path: string,
+  event: Event,
+): Promise<APIGatewayProxyResultV2> {
+  const body = method === 'POST' ? JSON.parse(event.body ?? '{}') : {}
+  const key = String(event.queryStringParameters?.key ?? body.key ?? '') || undefined
+  const slug = String(event.queryStringParameters?.slug ?? body.slug ?? '') || undefined
+
+  const resolved = await resolvePublicTenant(key, slug)
+  if (!resolved) return json(404, { error: 'assistant_not_found' })
+
+  const entitlement = (await getEntitlements(resolved.tenantId)).modules.assistant
+  if (!entitlement?.enabled) return json(404, { error: 'assistant_not_found' })
+
+  // Display config only — instructions are the tenant's private prompt.
+  if (method === 'GET' && path === '/v1/public/assistant/config') {
+    const config = await getConfig(resolved.tenantId)
+    return json(200, {
+      assistant: {
+        name: config.name,
+        greeting: config.greeting,
+        brandColor: config.brandColor,
+        slug: resolved.slug,
+      },
+    })
+  }
+
+  if (method === 'POST' && path === '/v1/public/assistant/chat')
+    return await chat(resolved.tenantId, entitlement.limits, event)
+
+  return json(404, { error: 'not_found' })
 }
 
 // ── Chat ─────────────────────────────────────────────────────────────────

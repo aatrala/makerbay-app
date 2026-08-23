@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, API_BASE } from '../api'
+import { api, API_BASE, CHAT_BASE, WIDGET_BASE, type Me } from '../api'
 
 interface ApiKey {
   keyId: string
@@ -10,11 +10,15 @@ interface ApiKey {
 
 type Tab = 'api' | 'embed' | 'hosted'
 
-export default function DeployPage() {
-  const [tab, setTab] = useState<Tab>('api')
+export default function DeployPage({ me }: { me: Me }) {
+  const [tab, setTab] = useState<Tab>('embed')
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [newSecret, setNewSecret] = useState('')
   const [label, setLabel] = useState('')
+  const [widgetKey, setWidgetKey] = useState('')
+  const slug = me.tenant?.slug ?? ''
+  const hostedUrl = `${CHAT_BASE}/${slug}`
+  const snippet = `<script src="${WIDGET_BASE}/widget.js"\n  data-key="${widgetKey || 'mb_pk_YOUR_PUBLISHABLE_KEY'}"></script>`
 
   const load = async () => {
     const r = await api('GET', '/v1/core/keys')
@@ -25,9 +29,18 @@ export default function DeployPage() {
   const createKey = async (type: 'secret' | 'publishable') => {
     const r = await api('POST', '/v1/core/keys', { type, label: label || `${type} key` })
     setNewSecret(r.secret)
+    if (type === 'publishable') setWidgetKey(r.secret)
     setLabel('')
     await load()
   }
+
+  const createWidgetKey = async () => {
+    const r = await api('POST', '/v1/core/keys', { type: 'publishable', label: 'Website widget' })
+    setWidgetKey(r.secret)
+    await load()
+  }
+
+  const copy = (text: string) => void navigator.clipboard?.writeText(text)
 
   const revoke = async (keyId: string) => {
     await api('DELETE', `/v1/core/keys/${keyId}`)
@@ -44,9 +57,9 @@ export default function DeployPage() {
       <h1>Deploy</h1>
       <p>Put your assistant where your customers are.</p>
       <div className="tabs">
-        <button className={tab === 'api' ? 'on' : ''} onClick={() => setTab('api')}>API</button>
         <button className={tab === 'embed' ? 'on' : ''} onClick={() => setTab('embed')}>Embed widget</button>
         <button className={tab === 'hosted' ? 'on' : ''} onClick={() => setTab('hosted')}>Hosted page</button>
+        <button className={tab === 'api' ? 'on' : ''} onClick={() => setTab('api')}>API</button>
       </div>
 
       {tab === 'api' && (
@@ -90,15 +103,35 @@ export default function DeployPage() {
 
       {tab === 'embed' && (
         <div className="card">
-          <h2>Embeddable chat widget</h2>
-          <p>A copy-paste snippet that adds a chat bubble to any website. <strong>Coming in the next release</strong> — the publishable keys it will use are ready today under the API tab.</p>
+          <h2>Add a chat bubble to your website</h2>
+          <p>Paste this just before the closing <code>&lt;/body&gt;</code> tag on any page. Works on WordPress, Shopify, Wix, Squarespace or hand-written HTML.</p>
+          {!widgetKey && (
+            <p className="hint">Create a publishable key to generate your snippet — it's safe to put in public page source, and it can only chat.</p>
+          )}
+          <div className="row">
+            <button onClick={() => void createWidgetKey()}>
+              {widgetKey ? 'Generate another key' : 'Generate my snippet'}
+            </button>
+            {widgetKey && <button className="ghost" onClick={() => copy(snippet)}>Copy snippet</button>}
+          </div>
+          <pre className="code mt">{snippet}</pre>
+          {widgetKey && (
+            <p className="hint">This key is shown once. If you lose it, generate another — old keys keep working until you revoke them under the API tab.</p>
+          )}
+          <p className="hint mt">Options: <code>data-color="#0f6bff"</code> to match your brand, <code>data-position="left"</code> to move the bubble.</p>
         </div>
       )}
 
       {tab === 'hosted' && (
         <div className="card">
-          <h2>Hosted chat page</h2>
-          <p>A ready-made branded page at chat.makerbay.app/your-business — share it anywhere, no website needed. <strong>Coming in the next release.</strong></p>
+          <h2>Your ready-made chat page</h2>
+          <p>No website needed — share this link anywhere: email signatures, social bios, QR codes on printed material.</p>
+          <div className="row">
+            <input className="grow" readOnly value={hostedUrl} onFocus={(e) => e.target.select()} />
+            <button className="ghost" onClick={() => copy(hostedUrl)}>Copy link</button>
+            <a className="btn" href={hostedUrl} target="_blank" rel="noopener">Open</a>
+          </div>
+          <p className="hint mt">The page uses your assistant's name, greeting and brand color from the Behavior screen.</p>
         </div>
       )}
     </>

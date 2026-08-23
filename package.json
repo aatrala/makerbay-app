@@ -6,6 +6,7 @@
     "infra",
     "packages/*",
     "modules/*/api",
+    "modules/*/embed",
     "web"
   ],
   "engines": {

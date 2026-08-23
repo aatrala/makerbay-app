@@ -36,6 +36,19 @@ export async function getTenant(tenantId: string): Promise<TenantRow | undefined
   return r.Item as TenantRow | undefined
 }
 
+export async function getTenantBySlug(slug: string): Promise<TenantRow | undefined> {
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: Tables.tenants(),
+      IndexName: 'bySlug',
+      KeyConditionExpression: 'slug = :s',
+      ExpressionAttributeValues: { ':s': slug },
+      Limit: 1,
+    }),
+  )
+  return r.Items?.[0] as TenantRow | undefined
+}
+
 export async function createTenant(tenant: TenantRow, owner: UserRow): Promise<void> {
   await ddb.send(
     new PutCommand({
