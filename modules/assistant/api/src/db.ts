@@ -11,11 +11,16 @@ export interface SourceRow {
   tenantId: string
   sourceId: string
   name: string
-  type: 'file' | 'text'
+  type: 'file' | 'text' | 'url'
   s3Key: string
   status: 'awaiting_upload' | 'processing' | 'ready' | 'failed'
   sizeBytes?: number
   ingestionJobId?: string
+  /** url sources: the page fetched, when, and how much text it yielded. */
+  sourceUrl?: string
+  fetchedAt?: string
+  charCount?: number
+  warning?: string
   createdAt: string
   updatedAt: string
 }

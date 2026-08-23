@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
-import { DeleteObjectsCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import {
   emitUsage,
@@ -30,6 +30,7 @@ import {
   type SourceRow,
 } from './db'
 import { generateAnswer, getIngestionStatus, retrieveChunks, startIngestion } from './rag'
+import { discoverPages, scrapePage } from './scrape'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -73,6 +74,11 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'GET' && path === '/v1/assistant/sources') return await getSources(tenantId)
     const ingestMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)\/ingest$/)
     if (method === 'POST' && ingestMatch) return await ingestSource(tenantId, ingestMatch[1])
+    if (method === 'POST' && path === '/v1/assistant/sources/discover') return await discover(event)
+    const previewMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)\/preview$/)
+    if (method === 'GET' && previewMatch) return await preview(tenantId, previewMatch[1])
+    const refreshMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)\/refresh$/)
+    if (method === 'POST' && refreshMatch) return await refresh(tenantId, refreshMatch[1])
     const deleteMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)$/)
     if (method === 'DELETE' && deleteMatch) return await removeSource(tenantId, deleteMatch[1])
 
@@ -261,8 +267,9 @@ async function createSource(
   event: Event,
 ): Promise<APIGatewayProxyResultV2> {
   const body = JSON.parse(event.body ?? '{}')
-  const type = body.type === 'file' ? 'file' : 'text'
-  const name = String(body.name ?? '').trim().slice(0, 120)
+  const type: 'file' | 'text' | 'url' =
+    body.type === 'file' ? 'file' : body.type === 'url' ? 'url' : 'text'
+  const name = String(body.name ?? body.url ?? '').trim().slice(0, 120)
   if (!name) return json(400, { error: 'name_required' })
 
   const existing = await listSources(tenantId)
@@ -271,6 +278,51 @@ async function createSource(
   const sourceId = ulid()
   const key = objectKey(tenantId, sourceId, name)
   const now = new Date().toISOString()
+
+  if (type === 'url') {
+    // Fetch failures are the user's problem to fix (bad URL, blocked by
+    // robots, unreachable host), so return the reason rather than a 500.
+    let page
+    try {
+      page = await scrapePage(String(body.url ?? ''))
+    } catch (err) {
+      return json(400, {
+        error: 'fetch_failed',
+        message: err instanceof Error ? err.message : 'Could not fetch that page.',
+      })
+    }
+    // A page that yields almost nothing is usually JavaScript-rendered.
+    // Storing it would quietly pollute the knowledge base with noise the
+    // assistant then cites, so refuse by default and explain — but let the
+    // owner insist, because some legitimate pages really are short.
+    if (page.charCount < 200 && body.allowShort !== true) {
+      return json(422, {
+        error: page.charCount === 0 ? 'no_text_extracted' : 'too_little_text',
+        message:
+          page.warning === 'looks_javascript_rendered'
+            ? `Only ${page.charCount} characters of text came back, which usually means the page builds its content with JavaScript. Try a sitemap page, the site's /llms.txt, or paste the text instead.`
+            : `Only ${page.charCount} characters of text came back from that page.`,
+        charCount: page.charCount,
+        warning: page.warning,
+      })
+    }
+    const stored = `Source: ${page.url}
+
+${page.text}`
+    await s3.send(new PutObjectCommand({ Bucket: BUCKET(), Key: key, Body: stored, ContentType: 'text/plain' }))
+    await writeMetadataSidecar(key, tenantId, sourceId, page.title || name)
+    const row: SourceRow = {
+      tenantId, sourceId, name: page.title || name, type: 'url', s3Key: key,
+      status: 'processing', sizeBytes: stored.length, sourceUrl: page.url,
+      fetchedAt: now, charCount: page.charCount, warning: page.warning,
+      createdAt: now, updatedAt: now,
+    }
+    await putSource(row)
+    const jobId = await tryStartIngestion()
+    if (jobId) await updateSourceStatus(tenantId, sourceId, 'processing', jobId)
+    await emitUsage({ tenantId, moduleId: 'assistant', metric: 'ingest.documents', quantity: 1 })
+    return json(201, { source: { ...row, ingestionJobId: jobId } })
+  }
 
   if (type === 'text') {
     const text = String(body.text ?? '').trim()
@@ -469,4 +521,92 @@ async function insights(tenantId: string): Promise<APIGatewayProxyResultV2> {
     topUnanswered: topUnanswered.slice(-10).reverse(),
     windowMessages: recent.length,
   })
+}
+
+// ── Website knowledge and previews ───────────────────────────────────────
+
+async function discover(event: Event): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  try {
+    const { urls, source } = await discoverPages(String(body.url ?? ''))
+    return json(200, { urls, discoveredVia: source })
+  } catch (err) {
+    return json(400, { error: 'discover_failed', message: err instanceof Error ? err.message : 'Could not read that site.' })
+  }
+}
+
+/** Re-fetch a URL source in place, so refreshing never duplicates a page. */
+async function refresh(tenantId: string, sourceId: string): Promise<APIGatewayProxyResultV2> {
+  const source = await getSource(tenantId, sourceId)
+  if (!source) return json(404, { error: 'source_not_found' })
+  if (source.type !== 'url' || !source.sourceUrl) return json(400, { error: 'not_a_url_source' })
+
+  try {
+    const page = await scrapePage(source.sourceUrl)
+    if (page.charCount === 0) return json(422, { error: 'no_text_extracted', warning: page.warning })
+    const stored = `Source: ${page.url}
+
+${page.text}`
+    await s3.send(new PutObjectCommand({ Bucket: BUCKET(), Key: source.s3Key, Body: stored, ContentType: 'text/plain' }))
+    const now = new Date().toISOString()
+    await putSource({
+      ...source,
+      status: 'processing',
+      sizeBytes: stored.length,
+      charCount: page.charCount,
+      warning: page.warning,
+      fetchedAt: now,
+      updatedAt: now,
+    })
+    const jobId = await tryStartIngestion()
+    if (jobId) await updateSourceStatus(tenantId, sourceId, 'processing', jobId)
+    return json(200, { sourceId, charCount: page.charCount, warning: page.warning, fetchedAt: now })
+  } catch (err) {
+    return json(400, { error: 'refresh_failed', message: err instanceof Error ? err.message : 'Could not fetch that page.' })
+  }
+}
+
+/**
+ * What the assistant actually learned from a source. Businesses will not put
+ * an assistant in front of customers without being able to check this.
+ */
+async function preview(tenantId: string, sourceId: string): Promise<APIGatewayProxyResultV2> {
+  const source = await getSource(tenantId, sourceId)
+  if (!source) return json(404, { error: 'source_not_found' })
+
+  const meta = {
+    sourceId: source.sourceId,
+    name: source.name,
+    type: source.type,
+    status: source.status,
+    sizeBytes: source.sizeBytes ?? null,
+    charCount: source.charCount ?? null,
+    sourceUrl: source.sourceUrl ?? null,
+    fetchedAt: source.fetchedAt ?? null,
+    warning: source.warning ?? null,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+  }
+
+  // Text and scraped pages are stored as plain text, so show the real content.
+  if (source.type === 'text' || source.type === 'url') {
+    try {
+      const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET(), Key: source.s3Key }))
+      const full = (await obj.Body?.transformToString()) ?? ''
+      return json(200, {
+        ...meta,
+        excerpt: full.slice(0, 4000),
+        truncated: full.length > 4000,
+      })
+    } catch {
+      return json(200, { ...meta, excerpt: null, truncated: false })
+    }
+  }
+
+  // Uploaded files keep their original format; hand back a short-lived link
+  // rather than trying to render them server-side.
+  const viewUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET(), Key: source.s3Key }), {
+    expiresIn: 300,
+  })
+  return json(200, { ...meta, excerpt: null, truncated: false, viewUrl })
 }

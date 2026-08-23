@@ -1,6 +1,6 @@
 # MakerBay — Platform Core + Assistant Module Specification
 
-**Version:** 0.1 (draft for build)
+**Version:** 0.2 (draft for build; Module 4 reviews scope added 2026-08-23)
 **Date:** 2026-08-23
 **Domain:** makerbay.app
 **AWS account:** 953146692138 · profile `makerbay` · region `us-east-1`
@@ -15,11 +15,14 @@ plan and enable capability **modules** (AI assistant, booking, dashboards,
 messaging bots, compliance) as plugins. Every module is API-first: usable from
 the MakerBay dashboard, via REST API with tenant API keys, and later via MCP.
 
-**This spec covers two things:**
+**This spec covers three things:**
 
 1. **Platform core (thin):** tenancy, auth, entitlements, API keys, usage metering.
 2. **Module 1 — Assistant:** a RAG chatbot an SMB trains on its own documents and
    deploys as an embeddable widget, a hosted chat page, or an API.
+3. **Module 4 — Reviews (planned scope, not for immediate build):** review
+   requests, review monitoring, and AI reply drafting — scoped ahead of build
+   in §5 because it shapes the messaging module's requirements.
 
 ### Goals
 
@@ -31,7 +34,9 @@ the MakerBay dashboard, via REST API with tenant API keys, and later via MCP.
 
 - Stripe billing integration — stub entitlements manually until first paying customer.
 - MCP server — the week after the assistant API stabilizes.
-- Additional modules — after assistant ships.
+- Additional modules — after assistant ships. Order per market research
+  (2026-08-23): booking (Module 2), messaging (Module 3), reviews (Module 4,
+  scoped in §5). Booking and messaging get their own specs when scheduled.
 - Custom domain email (SES) — when escalation/lead-capture ships.
 - Multi-region, WAF, provisioned capacity — per stage triggers in architecture notes.
 
@@ -174,7 +179,64 @@ the MakerBay dashboard, via REST API with tenant API keys, and later via MCP.
 
 ---
 
-## 5. Milestones & acceptance criteria
+## 5. Module 4 — Reviews & Reputation (planned)
+
+Module order per market research (2026-08-23): Module 2 booking, Module 3
+messaging, Module 4 reviews. Build trigger: after booking and messaging ship —
+review requests ride the messaging module's SMS/WhatsApp rails. An email-only
+mode (SES) can ship earlier if demand warrants; SES is already planned for
+escalation/lead-capture.
+
+**Positioning:** $20-30/month flat vs. Podium/Birdeye at $300-600/month per
+location. Month-to-month, white-label, no contracts — the incumbents' loudest
+complaint clusters are annual contracts, per-location fees, and cancellation
+traps.
+
+### 5.1 Review requests
+
+- `POST /v1/reviews/requests` sends a review invite to a customer: SMS/WhatsApp
+  via the messaging module when enabled, email via SES otherwise.
+- MVP trigger: manual (dashboard button / API call). Later: automatic on
+  `booking.completed` events from Module 2 via the `makerbay` bus.
+- Hosted ask page at `reviews.makerbay.app/{slug}`: tenant branding, star
+  prompt, then the Google review link **and** a private-feedback box shown to
+  every respondent. No rating gating (routing only happy customers to Google
+  violates Google review policy); private feedback is captured alongside the
+  public option, never instead of it.
+- `ReviewRequests` table: requestId, tenantId, contact (name, phone/email),
+  channel, status (`queued` → `sent` → `clicked` → `completed`), sentAt.
+- Free plan limit: 20 requests/month. Metering event `reviews.request.sent`.
+
+### 5.2 Review monitoring & AI replies
+
+- Google Business Profile only at MVP (the review surface SMBs care about);
+  per-tenant Google OAuth connection. Facebook/Yelp later.
+- `Reviews` table: reviewId, tenantId, source, rating, author, text, postedAt,
+  replyStatus, draftReply.
+- AI reply drafting reuses the assistant's Bedrock pipeline and the tenant's
+  persona/tone config; the owner approves every reply (MVP: copy to clipboard;
+  auto-post via the Google API later).
+- Metering events: `reviews.review.received`, `reviews.reply.posted`.
+
+### 5.3 API surface (v1)
+
+| Method & path | Auth | Purpose |
+|---|---|---|
+| `POST /v1/reviews/requests` | Cognito / secret key | Send review request |
+| `GET /v1/reviews/requests` | Cognito | List requests + statuses |
+| `GET /v1/reviews` | Cognito | List monitored reviews |
+| `POST /v1/reviews/{id}/reply-draft` | Cognito | AI draft reply |
+| `PUT /v1/reviews/config` / `GET` | Cognito | Template, send delay, quiet hours, Google connection |
+
+### 5.4 Acceptance sketch
+
+Send a request → customer clicks through the hosted ask page → Google review
+posted → review appears in the dashboard with an AI-drafted reply awaiting
+approval → usage events land in the `Usage` table → tenant isolation holds.
+
+---
+
+## 6. Milestones & acceptance criteria
 
 **M0 — Skeleton (first deploy).** CDK stack: DNS + cert, Cognito, HTTP API +
 authorizer, DynamoDB tables, EventBridge, empty module Lambda. ✅ *Accept:*
@@ -202,7 +264,7 @@ free plan politely refuses.
 
 ---
 
-## 6. Testing plan
+## 7. Testing plan
 
 - **Unit:** shared packages (auth, tenancy guard, metering client) — Vitest.
 - **Integration:** against the deployed dev stack (single environment for now) —
@@ -215,7 +277,7 @@ free plan politely refuses.
 
 ---
 
-## 7. Open items (need from founder)
+## 8. Open items (need from founder)
 
 1. **GitHub repo** — URL + collaborator access (or empty repo; scaffold pushed).
 2. **Domain contact details** — for makerbay.app registration (see chat).
@@ -224,3 +286,7 @@ free plan politely refuses.
 4. **Sample knowledge docs** — 2–3 real PDFs/FAQs make demos meaningful;
    fixtures used otherwise.
 5. **Stripe** — not needed until post-M4.
+6. **Google Business Profile API access** — Module 4 (reviews) needs a Google
+   Cloud project approved for the Business Profile API plus per-tenant OAuth;
+   Google's approval lead time is unknown, so kick this off when the messaging
+   module is scheduled.
