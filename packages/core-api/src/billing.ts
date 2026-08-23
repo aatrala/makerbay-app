@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import {
   clearTenantBilling,
+  getEffectiveEntitlement,
   getEntitlements,
   getMonthUsage,
   getTenant,
@@ -57,7 +58,10 @@ interface TenantLike {
 }
 
 async function summary(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {
-  const plan = PLANS[tenant.plan] ?? PLANS.free
+  // The effective entitlement is the truth: it accounts for comps and trials
+  // that have no Stripe subscription behind them.
+  const effective = await getEffectiveEntitlement(tenant.tenantId, 'assistant')
+  const plan = PLANS[effective.planTier] ?? PLANS[tenant.plan] ?? PLANS.free
   const totals = await getMonthUsage(tenant.tenantId, new Date().toISOString().slice(0, 7))
   const messages = totals['assistant.message'] ?? 0
   const overage = Math.max(0, messages - plan.includedMessages)
@@ -91,6 +95,12 @@ async function summary(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {
       status: tenant.subscriptionStatus ?? 'none',
       currentPeriodEnd: tenant.currentPeriodEnd ?? null,
       hasCustomer: Boolean(tenant.stripeCustomerId),
+    },
+    entitlement: {
+      planTier: effective.planTier,
+      sources: effective.sources,
+      overage: effective.overage,
+      limits: effective.limits,
     },
     billingConfigured,
     testMode: billingConfigured ? await isTestMode() : null,

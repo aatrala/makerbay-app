@@ -1,4 +1,4 @@
-import { getDayUsage, listBillableTenants } from '@makerbay/core'
+import { getDayUsage, getEffectiveEntitlement, listBillableTenants } from '@makerbay/core'
 import { METER_EVENT_NAME, stripeClient } from './stripe-client'
 
 /**
@@ -31,6 +31,13 @@ export const handler = async (event: { date?: string } = {}): Promise<{ reported
       continue
     }
     try {
+      // A comped Pro tenant has no subscription item to bill against; metering
+      // them would either error or bill a subscription that does not exist.
+      const entitlement = await getEffectiveEntitlement(tenant.tenantId, 'assistant')
+      if (entitlement.overage !== 'billed') {
+        skipped++
+        continue
+      }
       const messages = await getDayUsage(tenant.tenantId, 'assistant', 'message', day)
       if (messages <= 0) {
         skipped++

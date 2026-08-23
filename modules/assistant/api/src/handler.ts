@@ -4,7 +4,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import {
   emitUsage,
   findApiKeyByHash,
-  getEntitlements,
+  getEffectiveEntitlement,
   getMonthUsage,
   getTenant,
   getTenantBySlug,
@@ -56,8 +56,8 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     // authorizer cache, because limits depend on it.
     const tenantId = await resolveTenantId(ctx)
     if (!tenantId) return json(404, { error: 'no_tenant' })
-    const entitlement = (await getEntitlements(tenantId)).modules.assistant
-    if (!entitlement?.enabled) return json(403, { error: 'module_not_enabled', moduleId: 'assistant' })
+    const entitlement = await getEffectiveEntitlement(tenantId, 'assistant')
+    if (!entitlement.enabled) return json(403, { error: 'module_not_enabled', moduleId: 'assistant' })
 
     const isAdminCaller = Boolean(ctx.userId) || ctx.scopes === '*'
 
@@ -140,8 +140,8 @@ async function publicRoute(
   const resolved = await resolvePublicTenant(key, slug)
   if (!resolved) return json(404, { error: 'assistant_not_found' })
 
-  const entitlement = (await getEntitlements(resolved.tenantId)).modules.assistant
-  if (!entitlement?.enabled) return json(404, { error: 'assistant_not_found' })
+  const entitlement = await getEffectiveEntitlement(resolved.tenantId, 'assistant')
+  if (!entitlement.enabled) return json(404, { error: 'assistant_not_found' })
 
   // Display config only — instructions are the tenant's private prompt.
   if (method === 'GET' && path === '/v1/public/assistant/config') {

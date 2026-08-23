@@ -2,7 +2,7 @@ import { CognitoJwtVerifier } from 'aws-jwt-verify'
 import {
   emitUsage,
   findApiKeyByHash,
-  getEntitlements,
+  getEffectiveEntitlement,
   getMonthUsage,
   getTenant,
   getTenantBySlug,
@@ -85,8 +85,8 @@ const streamingHandler = async (
     const tenantId = await resolveTenant(event, body)
     if (!tenantId) return fail('unauthorized')
 
-    const entitlement = (await getEntitlements(tenantId)).modules.assistant
-    if (!entitlement?.enabled) return fail('module_not_enabled')
+    const entitlement = await getEffectiveEntitlement(tenantId, 'assistant')
+    if (!entitlement.enabled) return fail('module_not_enabled')
 
     const limit = entitlement.limits.messagesPerMonth ?? 200
     const used = (await getMonthUsage(tenantId, new Date().toISOString().slice(0, 7)))['assistant.message'] ?? 0

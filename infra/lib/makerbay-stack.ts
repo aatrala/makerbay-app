@@ -63,6 +63,9 @@ export class MakerbayStack extends cdk.Stack {
       partitionKey: { name: 'keyHash', type: dynamodb.AttributeType.STRING },
     })
     const entitlements = table('Entitlements', 'tenantId')
+    // Grants: one item per entitlement grant, so the Stripe webhook writes a
+    // single fixed sort key and can never overwrite a manually granted comp.
+    const grants = table('Grants', 'tenantId', 'sk')
     const usage = table('Usage', 'pk', 'sk')
     const sources = table('Sources', 'tenantId', 'sourceId')
     const conversations = table('Conversations', 'pk', 'sk')
@@ -258,6 +261,7 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_APIKEYS: apiKeys.tableName,
       TABLE_ENTITLEMENTS: entitlements.tableName,
       TABLE_USAGE: usage.tableName,
+      TABLE_GRANTS: grants.tableName,
       EVENT_BUS: bus.eventBusName,
     }
 
@@ -340,12 +344,12 @@ export class MakerbayStack extends cdk.Stack {
     })
 
     // ── Grants ───────────────────────────────────────────────────────────
-    for (const t of [users, apiKeys, entitlements]) t.grantReadData(authorizerFn)
-    for (const t of [tenants, users, apiKeys, entitlements, usage]) t.grantReadWriteData(coreFn)
+    for (const t of [users, apiKeys, entitlements, grants]) t.grantReadData(authorizerFn)
+    for (const t of [tenants, users, apiKeys, entitlements, grants, usage]) t.grantReadWriteData(coreFn)
     bus.grantPutEventsTo(coreFn)
 
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
-    for (const t of [users, tenants, apiKeys, entitlements, usage]) t.grantReadData(assistantFn)
+    for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)
     bus.grantPutEventsTo(assistantFn)
     knowledgeBucket.grantReadWrite(assistantFn, 'knowledge/*')
     assistantFn.addToRolePolicy(
@@ -365,7 +369,7 @@ export class MakerbayStack extends cdk.Stack {
     )
 
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantStreamFn)
-    for (const t of [users, tenants, apiKeys, entitlements, usage]) t.grantReadData(assistantStreamFn)
+    for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantStreamFn)
     bus.grantPutEventsTo(assistantStreamFn)
     assistantStreamFn.addToRolePolicy(
       new iam.PolicyStatement({ actions: ['bedrock:Retrieve'], resources: [kb.attrKnowledgeBaseArn] }),
@@ -387,6 +391,7 @@ export class MakerbayStack extends cdk.Stack {
       secretsKey.grantDecrypt(f)
       tenants.grantReadWriteData(f)
       entitlements.grantReadWriteData(f)
+      grants.grantReadWriteData(f)
       usage.grantReadData(f)
     }
     users.grantReadData(billingFn)

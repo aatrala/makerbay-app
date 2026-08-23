@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 import type Stripe from 'stripe'
-import { setModuleEntitlement, setTenantBilling } from '@makerbay/core'
+import { putStripeGrant, setModuleEntitlement, setTenantBilling } from '@makerbay/core'
 import { PLANS, stripeClient, webhookSecret } from './stripe-client'
 
 /**
@@ -49,11 +49,29 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           subscriptionStatus: sub.status,
           currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : undefined,
         })
+        // Keep the module switched on, then write only the Stripe grant.
+        // Manual comps live under different sort keys and are untouched.
         await setModuleEntitlement(tenantId, 'assistant', {
           enabled: true,
           plan: plan.id,
           limits: plan.limits,
         })
+        try {
+          await putStripeGrant({
+            tenantId,
+            moduleId: 'assistant',
+            planTier: plan.id,
+            limits: plan.limits,
+            active: entitled,
+            stripeSubscriptionId: sub.id,
+            stripeEventCreated: stripeEvent.created,
+          })
+        } catch (err) {
+          // Condition failure means a newer event already landed. Stripe does
+          // not guarantee ordering, so this is expected, not an error.
+          if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') throw err
+          console.log('skipped out-of-order subscription event', { tenantId, id: sub.id })
+        }
         console.log('subscription applied', { tenantId, plan: plan.id, status: sub.status })
         break
       }
