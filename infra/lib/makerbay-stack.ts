@@ -493,7 +493,45 @@ export class MakerbayStack extends cdk.Stack {
       })
     }
 
+    // ── Marketing site: makerbay.app + www ───────────────────────────────
+    const siteBucket = new s3.Bucket(this, 'SiteBucket', {
+      bucketName: `makerbay-site-${this.account}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+    const siteDistribution = new cloudfront.Distribution(this, 'SiteDistribution', {
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      defaultRootObject: 'index.html',
+      domainNames: [DOMAIN, `www.${DOMAIN}`],
+      certificate,
+      // S3 with OAC answers 403 for a missing key, so map both to the 404 page.
+      errorResponses: [
+        { httpStatus: 403, responseHttpStatus: 404, responsePagePath: '/404.html' },
+        { httpStatus: 404, responseHttpStatus: 404, responsePagePath: '/404.html' },
+      ],
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    })
+    // Apex plus www both point at the marketing distribution.
+    new route53.ARecord(this, 'ApexAlias', {
+      zone,
+      target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(siteDistribution)),
+    })
+    new route53.ARecord(this, 'WwwAlias', {
+      zone,
+      recordName: 'www',
+      target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(siteDistribution)),
+    })
+
     // ── Outputs ──────────────────────────────────────────────────────────
+    new cdk.CfnOutput(this, 'SiteBucketName', { value: siteBucket.bucketName })
+    new cdk.CfnOutput(this, 'SiteDistributionId', { value: siteDistribution.distributionId })
+    new cdk.CfnOutput(this, 'SiteUrl', { value: `https://${DOMAIN}` })
     new cdk.CfnOutput(this, 'EmbedBucketName', { value: embedBucket.bucketName })
     new cdk.CfnOutput(this, 'EmbedDistributionId', { value: embedDistribution.distributionId })
     new cdk.CfnOutput(this, 'WebBucketName', { value: webBucket.bucketName })
