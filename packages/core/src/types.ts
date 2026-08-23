@@ -21,6 +21,11 @@ export interface TenantRow {
   stripeMeteredItemId?: string
   subscriptionStatus?: string
   currentPeriodEnd?: string
+  // Webhook health, so "is Stripe actually reaching us" is answerable from
+  // the dashboard rather than from CloudWatch.
+  lastWebhookAt?: string
+  lastWebhookType?: string
+  lastWebhookLive?: boolean
 }
 
 export interface UserRow {

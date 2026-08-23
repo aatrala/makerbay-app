@@ -1,0 +1,5 @@
+/* The staff console inherits the design system and adds only what marks it
+   as a different, more dangerous place than the customer dashboard. */
+.modebadge.staff { background: #450a0a; color: #fca5a5; }
+.side { background: #1c1917; box-shadow: inset -3px 0 0 #7f1d1d; }
+select { appearance: auto; }

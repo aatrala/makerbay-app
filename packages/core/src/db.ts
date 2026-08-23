@@ -69,7 +69,15 @@ export async function createTenant(tenant: TenantRow, owner: UserRow): Promise<v
 
 type BillingFields = Pick<
   TenantRow,
-  'plan' | 'stripeCustomerId' | 'stripeSubscriptionId' | 'stripeMeteredItemId' | 'subscriptionStatus' | 'currentPeriodEnd'
+  | 'plan'
+  | 'stripeCustomerId'
+  | 'stripeSubscriptionId'
+  | 'stripeMeteredItemId'
+  | 'subscriptionStatus'
+  | 'currentPeriodEnd'
+  | 'lastWebhookAt'
+  | 'lastWebhookType'
+  | 'lastWebhookLive'
 >
 
 export async function setTenantBilling(

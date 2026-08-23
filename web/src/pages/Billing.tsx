@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, api, explain, resetBilling, Notice, Skeleton } from '@makerbay/web-kit'
+import { ApiError, api, explain, resetBilling, Notice, Skeleton, when } from '@makerbay/web-kit'
 
 interface Plan {
   id: string
@@ -14,6 +14,7 @@ interface Summary {
   plans: Plan[]
   usage: { messages: number; includedMessages: number; overageMessages: number; estimatedOverageCents: number }
   subscription: { status: string; currentPeriodEnd: string | null; hasCustomer: boolean }
+  webhook: { lastAt: string | null; lastType: string | null; lastLive: boolean | null }
   billingConfigured: boolean
   testMode: boolean | null
 }
@@ -93,7 +94,10 @@ export default function Billing() {
     </>
   )
 
-  const { plan, plans, usage, subscription, testMode } = data
+  const { plan, plans, usage, subscription, webhook, testMode } = data
+  // A live workspace still hearing test-mode events has its webhook pointed
+  // at the wrong endpoint, which is silent until an invoice goes missing.
+  const modeMismatch = webhook.lastLive !== null && testMode !== null && webhook.lastLive === testMode
   const pro = plans.find((p) => p.id === 'pro')!
   const onPro = plan.id === 'pro'
   const pct = Math.min(100, Math.round((usage.messages / Math.max(1, usage.includedMessages)) * 100))
@@ -135,6 +139,35 @@ export default function Billing() {
           <p className="meta mt">
             Subscription <strong>{subscription.status}</strong>
             {subscription.currentPeriodEnd && ` · renews ${day(subscription.currentPeriodEnd)}`}
+          </p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Connection to Stripe</h2>
+        {webhook.lastAt ? (
+          <>
+            <p className="meta">
+              Last update received {when(webhook.lastAt)}
+              {webhook.lastType && ` · ${webhook.lastType}`}
+              {webhook.lastLive !== null && ` · ${webhook.lastLive ? 'live' : 'test'} mode`}
+            </p>
+            {modeMismatch && (
+              <Notice tone="warn">
+                <strong>Your webhook is pointed at the wrong mode.</strong> This workspace is billing
+                in {testMode ? 'test' : 'live'} mode, but the last event Stripe sent was
+                {' '}{webhook.lastLive ? 'live' : 'test'} mode. Add a
+                {' '}{testMode ? 'test' : 'live'}-mode endpoint in Stripe for
+                {' '}<code>api.makerbay.app/v1/billing/webhook</code> and put its signing secret in
+                the <code>makerbay/stripe</code> secret.
+              </Notice>
+            )}
+          </>
+        ) : (
+          <p className="meta">
+            Stripe has not sent a subscription event to this workspace yet. That is expected until
+            someone subscribes. If a subscription exists and this still says nothing, the webhook
+            endpoint is missing or its signing secret does not match.
           </p>
         )}
       </div>

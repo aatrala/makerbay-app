@@ -9,6 +9,17 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 1.7.0 - 2026-08-23
+
+- Added `platform` A staff console at admin.makerbay.app: workspace list,
+  effective entitlements, and granting or revoking a module without a payment.
+  Sign-in requires an authenticator code, and every grant needs a reason that
+  is written to an append-only audit log.
+- Added `platform` Billing now shows whether Stripe is actually reaching us -
+  when the last event arrived and in which mode - and warns when a live
+  workspace is still receiving test-mode events, which otherwise stays silent
+  until an invoice goes missing.
+
 ## 1.6.0 - 2026-08-23
 
 - Changed `platform` Module dashboards now live with their module rather than

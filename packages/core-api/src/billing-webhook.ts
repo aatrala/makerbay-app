@@ -48,6 +48,9 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           stripeMeteredItemId: item?.id,
           subscriptionStatus: sub.status,
           currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : undefined,
+          lastWebhookAt: new Date(stripeEvent.created * 1000).toISOString(),
+          lastWebhookType: stripeEvent.type,
+          lastWebhookLive: stripeEvent.livemode,
         })
         // Keep the module switched on, then write only the Stripe grant.
         // Manual comps live under different sort keys and are untouched.

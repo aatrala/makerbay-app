@@ -701,6 +701,42 @@ function handler(event) {
       target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(siteDistribution)),
     })
 
+    // ── Staff console: admin.makerbay.app ────────────────────────────────
+    // Separate origin from the customer dashboard so a bug there can never
+    // reach staff-only routes, and separate from the marketing site so it is
+    // never crawled.
+    const adminBucket = new s3.Bucket(this, 'AdminBucket', {
+      bucketName: `makerbay-admin-${this.account}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+    const adminDistribution = new cloudfront.Distribution(this, 'AdminDistribution', {
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(adminBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      defaultRootObject: 'index.html',
+      domainNames: [`admin.${DOMAIN}`],
+      certificate,
+      // A single-page app: every route is served by index.html.
+      errorResponses: [
+        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
+        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' },
+      ],
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    })
+    new route53.ARecord(this, 'AdminAlias', {
+      zone,
+      recordName: 'admin',
+      target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(adminDistribution)),
+    })
+    new cdk.CfnOutput(this, 'AdminBucketName', { value: adminBucket.bucketName })
+    new cdk.CfnOutput(this, 'AdminDistributionId', { value: adminDistribution.distributionId })
+    new cdk.CfnOutput(this, 'AdminUrl', { value: `https://admin.${DOMAIN}` })
+
     // ── Admin API on its own gateway ─────────────────────────────────────
     const adminApi = new apigwv2.HttpApi(this, 'AdminApi', {
       apiName: 'makerbay-admin',

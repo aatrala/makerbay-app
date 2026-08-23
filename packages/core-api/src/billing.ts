@@ -96,6 +96,14 @@ async function summary(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {
       currentPeriodEnd: tenant.currentPeriodEnd ?? null,
       hasCustomer: Boolean(tenant.stripeCustomerId),
     },
+    // Whether Stripe is reaching us, and in which mode the last event arrived.
+    // A live-mode workspace whose last event was test-mode has a webhook
+    // pointed at the wrong endpoint - worth saying out loud.
+    webhook: {
+      lastAt: tenant.lastWebhookAt ?? null,
+      lastType: tenant.lastWebhookType ?? null,
+      lastLive: tenant.lastWebhookLive ?? null,
+    },
     entitlement: {
       planTier: effective.planTier,
       sources: effective.sources,

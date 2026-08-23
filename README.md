@@ -18,12 +18,17 @@ packages/
   core-api/           Platform API: workspaces, keys, usage, billing
   admin-api/          Staff-only API: grants, audit (separate Cognito pool, MFA required)
   mcp-server/         Hosted MCP endpoint at mcp.makerbay.app
+  web-kit/            Everything a module's screens may import: API client,
+                      shared components, the stylesheet
 modules/
   <module>/
     module.json       The single description of a module - see below
     api/              Lambda handlers for /v1/<module>/*
+    web/              Dashboard screens, exported as one DashboardModule
     embed/            Customer-facing script, where the module has one
-web/                  Dashboard (React + Vite) at app.makerbay.app
+web/                  Customer dashboard (React + Vite) at app.makerbay.app
+admin/                Staff console at admin.makerbay.app - separate Cognito
+                      pool, MFA required, no self-signup
 site/                 Marketing site at makerbay.app - partly generated, see below
 docs/                 Design guidelines, specs, research
 ```
@@ -53,10 +58,13 @@ depend on something that might be switched off.
 3. `modules/<id>/api/` for the Lambda, routed under `/v1/<id>/*` with
    **explicit HTTP methods** - never `ANY`, which swallows the CORS preflight
    and breaks the browser client.
-4. Dashboard screens under `web/src/pages/`, built on
-   [docs/design-guidelines.md](docs/design-guidelines.md) and the shared
-   components in `web/src/ui.tsx`.
+4. `modules/<id>/web/` exporting one `DashboardModule` (nav plus routes),
+   built on [docs/design-guidelines.md](docs/design-guidelines.md) and
+   `@makerbay/web-kit`. Register it in `web/src/modules.ts`.
 5. A `CHANGELOG.md` entry tagged with the module id.
+
+A module must import only from `@makerbay/web-kit`. Reaching into the shell or
+another module couples them together and is what the layering exists to stop.
 
 Data access goes through `packages/core`. Never hand-roll a DynamoDB call in
 module code - the tenancy guard lives in one place on purpose.
@@ -92,7 +100,7 @@ npm -w infra run deploy
 ```
 
 ```bash
-npm -w web run build && npm -w site run build
+npm -w web run build && npm -w admin run build && npm -w site run build
 ```
 
 Deploys need the AWS profile `makerbay`. Publishing the built output:
@@ -105,8 +113,12 @@ aws s3 sync web/dist s3://makerbay-web-953146692138/ --delete --profile makerbay
 aws s3 sync site/dist s3://makerbay-site-953146692138/ --delete --profile makerbay
 ```
 
-Then invalidate the matching distribution (`E20XQRRSODE0FA` for the app,
-`ED2PETE8C9RT1` for the site).
+```bash
+aws s3 sync admin/dist s3://makerbay-admin-953146692138/ --delete --profile makerbay
+```
+
+Then invalidate the matching distribution: `E20XQRRSODE0FA` for the app,
+`ED2PETE8C9RT1` for the site, `EX8L5GXSR64D0` for the staff console.
 
 Note for Windows: pass JSON to the AWS CLI from a file (`file://payload.json`)
 rather than inline. PowerShell strips the double quotes out of an inline JSON
@@ -121,7 +133,8 @@ Never read a secret into a shell or a log. Stripe keys live in the
 
 ## Release checklist
 
-1. `npm -w web run build` and `npm -w site run build` both pass.
+1. `npm -w web run build`, `npm -w admin run build` and `npm -w site run build`
+   all pass.
 2. Bump `PLATFORM_VERSION` and/or the module's `version` map.
 3. Add the `CHANGELOG.md` entry, tagged `platform` or the module id.
 4. Deploy infra if it changed, then publish web and site and invalidate.
