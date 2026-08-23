@@ -190,7 +190,9 @@ async function resolveTenant(event: FunctionUrlEvent, body: Record<string, unkno
 async function keyTenant(key: string): Promise<string | undefined> {
   if (!key.startsWith('mb_pk_')) return undefined
   const row = await findApiKeyByHash(hashApiKey(key))
-  if (!row || row.type !== 'publishable' || !row.scopes.includes('chat:invoke')) return undefined
+  // Publishable keys authorise the workspace public surface; capabilities
+  // follow current entitlements, not the scopes frozen at creation time.
+  if (!row || row.type !== 'publishable') return undefined
   return (await getTenant(row.tenantId)) ? row.tenantId : undefined
 }
 

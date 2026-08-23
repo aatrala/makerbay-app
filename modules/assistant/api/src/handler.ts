@@ -111,7 +111,12 @@ async function resolvePublicTenant(
   if (key) {
     if (!key.startsWith('mb_pk_')) return undefined
     const row = await findApiKeyByHash(hashApiKey(key))
-    if (!row || row.type !== 'publishable' || !row.scopes.includes('chat:invoke')) return undefined
+    // A publishable key authorises the workspace's *public surface*, not one
+    // frozen capability. Keys are pasted into customers' own websites and can
+    // never be re-issued in practice, so what they may reach has to follow the
+    // workspace's current entitlements rather than the scope list captured at
+    // creation time. Secret-key rejection below is what actually matters here.
+    if (!row || row.type !== 'publishable') return undefined
     const tenant = await getTenant(row.tenantId)
     return { tenantId: row.tenantId, slug: tenant?.slug ?? '' }
   }
