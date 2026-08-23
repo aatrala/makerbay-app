@@ -9,7 +9,8 @@ import {
 } from '@aws-sdk/lib-dynamodb'
 import type { ApiKeyRow, Entitlements, ModuleEntitlement, TenantRow, UserRow } from './types'
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+/** Shared document client. Module data access must stay tenant-scoped. */
+export const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
 })
 
