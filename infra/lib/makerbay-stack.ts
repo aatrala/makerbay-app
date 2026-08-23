@@ -10,6 +10,8 @@ import * as eventsTargets from 'aws-cdk-lib/aws-events-targets'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import * as route53 from 'aws-cdk-lib/aws-route53'
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets'
 import * as s3 from 'aws-cdk-lib/aws-s3'
@@ -318,7 +320,41 @@ export class MakerbayStack extends cdk.Stack {
       ),
     })
 
+    // ── Dashboard hosting: app.makerbay.app ──────────────────────────────
+    const webBucket = new s3.Bucket(this, 'WebBucket', {
+      bucketName: `makerbay-web-${this.account}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+
+    const distribution = new cloudfront.Distribution(this, 'WebDistribution', {
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      defaultRootObject: 'index.html',
+      domainNames: [`app.${DOMAIN}`],
+      certificate,
+      // SPA routing: unknown paths fall through to index.html
+      errorResponses: [
+        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
+        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' },
+      ],
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    })
+    new route53.ARecord(this, 'AppAlias', {
+      zone,
+      recordName: 'app',
+      target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(distribution)),
+    })
+
     // ── Outputs ──────────────────────────────────────────────────────────
+    new cdk.CfnOutput(this, 'WebBucketName', { value: webBucket.bucketName })
+    new cdk.CfnOutput(this, 'WebDistributionId', { value: distribution.distributionId })
+    new cdk.CfnOutput(this, 'AppUrl', { value: `https://app.${DOMAIN}` })
     new cdk.CfnOutput(this, 'ApiUrl', { value: httpApi.apiEndpoint })
     new cdk.CfnOutput(this, 'ApiCustomUrl', { value: `https://api.${DOMAIN}` })
     new cdk.CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId })
