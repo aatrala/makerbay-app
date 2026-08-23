@@ -19,12 +19,14 @@ import {
   getConfig,
   getSessionMessages,
   getSource,
+  listRecentMessages,
   listSources,
   putConfig,
   putMessage,
   putSource,
   setMessageFeedback,
   updateSourceStatus,
+  type MessageRow,
   type SourceRow,
 } from './db'
 import { generateAnswer, getIngestionStatus, retrieveChunks, startIngestion } from './rag'
@@ -80,6 +82,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
 
     if (method === 'GET' && path === '/v1/assistant/conversations')
       return await conversations(tenantId, event)
+    if (method === 'GET' && path === '/v1/assistant/insights') return await insights(tenantId)
 
     return json(404, { error: 'not_found' })
   } catch (err) {
@@ -151,6 +154,11 @@ async function publicRoute(
   if (method === 'POST' && path === '/v1/public/assistant/chat')
     return await chat(resolved.tenantId, entitlement.limits, event)
 
+  // End-user thumbs from the widget and hosted page — the signal the SMB
+  // acts on in their inbox.
+  if (method === 'POST' && path === '/v1/public/assistant/feedback')
+    return await feedback(resolved.tenantId, event)
+
   return json(404, { error: 'not_found' })
 }
 
@@ -199,8 +207,9 @@ async function chat(
   const now = new Date().toISOString()
   const pk = `${tenantId}#${sessionId}`
   const assistantSk = `${now}#${ulid()}`
-  await putMessage({ pk, sk: `${now}#0${ulid()}`, role: 'user', text: message })
-  await putMessage({ pk, sk: assistantSk, role: 'assistant', text: answer, citations, fallback })
+  const common = { pk, tenantId, sessionId }
+  await putMessage({ ...common, sk: `${now}#0${ulid()}`, role: 'user', text: message })
+  await putMessage({ ...common, sk: assistantSk, role: 'assistant', text: answer, citations, fallback })
 
   await emitUsage({ tenantId, moduleId: 'assistant', metric: 'message', quantity: 1 })
   if (tokens > 0) await emitUsage({ tenantId, moduleId: 'assistant', metric: 'tokens', quantity: tokens })
@@ -370,7 +379,89 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
 
 async function conversations(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const sessionId = event.queryStringParameters?.sessionId
-  if (!sessionId) return json(400, { error: 'sessionId_required' })
-  const messages = await getSessionMessages(tenantId, String(sessionId), 50)
-  return json(200, { sessionId, messages })
+  if (sessionId) {
+    const messages = await getSessionMessages(tenantId, String(sessionId), 50)
+    return json(200, { sessionId, messages })
+  }
+
+  // Inbox: group the recent window into per-session summaries.
+  const recent = await listRecentMessages(tenantId)
+  const bySession = new Map<string, MessageRow[]>()
+  for (const m of recent) {
+    if (!bySession.has(m.sessionId)) bySession.set(m.sessionId, [])
+    bySession.get(m.sessionId)!.push(m)
+  }
+
+  const sessions = [...bySession.entries()].map(([id, msgs]) => {
+    const ordered = [...msgs].sort((a, b) => a.sk.localeCompare(b.sk))
+    const firstQuestion = ordered.find((m) => m.role === 'user')?.text ?? ''
+    const lastMessage = ordered[ordered.length - 1]
+    const answers = ordered.filter((m) => m.role === 'assistant')
+    return {
+      sessionId: id,
+      firstQuestion,
+      lastAt: lastMessage.sk.split('#')[0],
+      messageCount: ordered.length,
+      unansweredCount: answers.filter((m) => m.fallback).length,
+      thumbsDownCount: answers.filter((m) => m.feedback === 'down').length,
+      thumbsUpCount: answers.filter((m) => m.feedback === 'up').length,
+    }
+  })
+  sessions.sort((a, b) => b.lastAt.localeCompare(a.lastAt))
+
+  const filter = event.queryStringParameters?.filter
+  const filtered =
+    filter === 'attention'
+      ? sessions.filter((s) => s.unansweredCount > 0 || s.thumbsDownCount > 0)
+      : sessions
+  return json(200, { sessions: filtered, windowMessages: recent.length })
+}
+
+async function insights(tenantId: string): Promise<APIGatewayProxyResultV2> {
+  const recent = await listRecentMessages(tenantId)
+  const answers = recent.filter((m) => m.role === 'assistant')
+  const unanswered = answers.filter((m) => m.fallback)
+
+  const byDay = new Map<string, { conversations: Set<string>; answers: number; unanswered: number }>()
+  for (const m of recent) {
+    const day = m.sk.slice(0, 10)
+    if (!byDay.has(day)) byDay.set(day, { conversations: new Set(), answers: 0, unanswered: 0 })
+    const d = byDay.get(day)!
+    d.conversations.add(m.sessionId)
+    if (m.role === 'assistant') {
+      d.answers++
+      if (m.fallback) d.unanswered++
+    }
+  }
+
+  // The question that triggered each fallback is the user message just before it.
+  const ordered = [...recent].sort((a, b) => a.sk.localeCompare(b.sk))
+  const topUnanswered: string[] = []
+  for (let i = 0; i < ordered.length; i++) {
+    const m = ordered[i]
+    if (m.role !== 'assistant' || !m.fallback) continue
+    for (let j = i - 1; j >= 0; j--) {
+      if (ordered[j].sessionId === m.sessionId && ordered[j].role === 'user') {
+        topUnanswered.push(ordered[j].text)
+        break
+      }
+    }
+  }
+
+  return json(200, {
+    totals: {
+      conversations: new Set(recent.map((m) => m.sessionId)).size,
+      answers: answers.length,
+      unanswered: unanswered.length,
+      resolutionRate: answers.length ? Math.round(((answers.length - unanswered.length) / answers.length) * 100) : null,
+      thumbsUp: answers.filter((m) => m.feedback === 'up').length,
+      thumbsDown: answers.filter((m) => m.feedback === 'down').length,
+    },
+    daily: [...byDay.entries()]
+      .map(([day, d]) => ({ day, conversations: d.conversations.size, answers: d.answers, unanswered: d.unanswered }))
+      .sort((a, b) => a.day.localeCompare(b.day))
+      .slice(-14),
+    topUnanswered: topUnanswered.slice(-10).reverse(),
+    windowMessages: recent.length,
+  })
 }

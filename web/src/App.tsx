@@ -8,6 +8,9 @@ import Knowledge from './pages/Knowledge'
 import Behavior from './pages/Behavior'
 import Playground from './pages/Playground'
 import DeployPage from './pages/DeployPage'
+import Conversations from './pages/Conversations'
+import Insights from './pages/Insights'
+import Billing from './pages/Billing'
 import UsagePage from './pages/UsagePage'
 
 export default function App() {
@@ -39,7 +42,10 @@ export default function App() {
         <Route path="/assistant/behavior" element={<Behavior />} />
         <Route path="/assistant/playground" element={<Playground />} />
         <Route path="/assistant/deploy" element={<DeployPage me={me} />} />
+        <Route path="/assistant/conversations" element={<Conversations />} />
+        <Route path="/assistant/insights" element={<Insights />} />
         <Route path="/usage" element={<UsagePage me={me} />} />
+        <Route path="/billing" element={<Billing />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

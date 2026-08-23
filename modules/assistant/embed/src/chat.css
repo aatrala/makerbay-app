@@ -42,6 +42,11 @@ body.hosted header .close { display: none; }
 .msg.me { align-self: flex-end; background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }
 .msg .src { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(0,0,0,.09); font-size: 11.5px; color: var(--muted); }
 .typing { align-self: flex-start; color: var(--muted); font-size: 13px; padding: 4px 2px; }
+.msg .rate button {
+  background: none; border: none; cursor: pointer; font-size: 14px; padding: 0 3px;
+  opacity: 0.75; line-height: 1;
+}
+.msg .rate button:hover { opacity: 1; }
 
 form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
 input {

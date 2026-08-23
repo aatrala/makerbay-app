@@ -15,10 +15,13 @@ export default function Shell({ me }: { me: Me }) {
               <NavLink to="/assistant/knowledge">Knowledge</NavLink>
               <NavLink to="/assistant/behavior">Behavior</NavLink>
               <NavLink to="/assistant/deploy">Deploy</NavLink>
+              <NavLink to="/assistant/conversations">Conversations</NavLink>
+              <NavLink to="/assistant/insights">Insights</NavLink>
             </>
           )}
           <div className="navlabel">Workspace</div>
           <NavLink to="/usage">Usage</NavLink>
+          <NavLink to="/billing">Billing</NavLink>
         </nav>
         <div className="spacer" />
         <div className="whoami">

@@ -64,7 +64,7 @@
     if (!embedded) app.querySelector('#input').focus()
   }
 
-  function add(role, text, sources) {
+  function add(role, text, sources, messageId) {
     var log = document.getElementById('log')
     var el = document.createElement('div')
     el.className = 'msg ' + (role === 'me' ? 'me' : 'bot')
@@ -73,6 +73,29 @@
       (sources && sources.length
         ? '<div class="src">Sources: ' + esc(sources.map(function (s) { return s.name }).join(', ')) + '</div>'
         : '')
+
+    if (messageId) {
+      var rate = document.createElement('div')
+      rate.className = 'src rate'
+      rate.innerHTML =
+        'Was this helpful? <button type="button" data-v="up" aria-label="Helpful">&#128077;</button>' +
+        ' <button type="button" data-v="down" aria-label="Not helpful">&#128078;</button>'
+      rate.addEventListener('click', function (e) {
+        var v = e.target && e.target.getAttribute && e.target.getAttribute('data-v')
+        if (!v) return
+        rate.textContent = 'Thanks for the feedback.'
+        var payload = { sessionId: sessionId, messageId: messageId, feedback: v }
+        if (key) payload.key = key
+        else payload.slug = slug
+        fetch(API + '/v1/public/assistant/feedback', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(function () {})
+      })
+      el.appendChild(rate)
+    }
+
     log.appendChild(el)
     log.scrollTop = log.scrollHeight
     return el
@@ -109,7 +132,7 @@
         typing.remove()
         if (res.status === 200) {
           sessionId = res.data.sessionId
-          add('bot', res.data.answer, res.data.citations)
+          add('bot', res.data.answer, res.data.citations, res.data.messageId)
         } else if (res.status === 429) {
           add('bot', 'This assistant has reached its message limit for the month.')
         } else {

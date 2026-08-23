@@ -15,6 +15,12 @@ export interface TenantRow {
   plan: string
   status: 'active' | 'suspended'
   createdAt: string
+  // Billing state, written only by the billing handlers.
+  stripeCustomerId?: string
+  stripeSubscriptionId?: string
+  stripeMeteredItemId?: string
+  subscriptionStatus?: string
+  currentPeriodEnd?: string
 }
 
 export interface UserRow {

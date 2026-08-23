@@ -5,6 +5,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 import type { ApiKeyRow, Entitlements, ModuleEntitlement, TenantRow, UserRow } from './types'
@@ -64,6 +65,40 @@ export async function createTenant(tenant: TenantRow, owner: UserRow): Promise<v
       Item: { tenantId: tenant.tenantId, modules: {} },
     }),
   )
+}
+
+type BillingFields = Pick<
+  TenantRow,
+  'plan' | 'stripeCustomerId' | 'stripeSubscriptionId' | 'stripeMeteredItemId' | 'subscriptionStatus' | 'currentPeriodEnd'
+>
+
+export async function setTenantBilling(
+  tenantId: string,
+  fields: Partial<BillingFields>,
+): Promise<void> {
+  const entries = Object.entries(fields).filter(([, v]) => v !== undefined)
+  if (entries.length === 0) return
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.tenants(),
+      Key: { tenantId },
+      UpdateExpression: `SET ${entries.map(([k], i) => `#k${i} = :v${i}`).join(', ')}`,
+      ExpressionAttributeNames: Object.fromEntries(entries.map(([k], i) => [`#k${i}`, k])),
+      ExpressionAttributeValues: Object.fromEntries(entries.map(([, v], i) => [`:v${i}`, v])),
+      ConditionExpression: 'attribute_exists(tenantId)',
+    }),
+  )
+}
+
+/** Tenants with a Stripe subscription — the daily metered-usage report set. */
+export async function listBillableTenants(): Promise<TenantRow[]> {
+  const r = await ddb.send(
+    new ScanCommand({
+      TableName: Tables.tenants(),
+      FilterExpression: 'attribute_exists(stripeSubscriptionId)',
+    }),
+  )
+  return (r.Items ?? []) as TenantRow[]
 }
 
 // ── Entitlements ─────────────────────────────────────────────────────────

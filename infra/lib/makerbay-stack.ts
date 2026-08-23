@@ -8,7 +8,9 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as events from 'aws-cdk-lib/aws-events'
 import * as eventsTargets from 'aws-cdk-lib/aws-events-targets'
 import * as iam from 'aws-cdk-lib/aws-iam'
+import * as kms from 'aws-cdk-lib/aws-kms'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
@@ -64,6 +66,12 @@ export class MakerbayStack extends cdk.Stack {
     const usage = table('Usage', 'pk', 'sk')
     const sources = table('Sources', 'tenantId', 'sourceId')
     const conversations = table('Conversations', 'pk', 'sk')
+    // Inbox and insights read across every session for a tenant.
+    conversations.addGlobalSecondaryIndex({
+      indexName: 'byTenant',
+      partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+    })
     const assistantConfig = table('AssistantConfig', 'tenantId')
 
     // ── DNS + TLS ────────────────────────────────────────────────────────
@@ -180,6 +188,40 @@ export class MakerbayStack extends cdk.Stack {
     })
     dataSource.addDependency(kb)
 
+    // ── Billing credentials ──────────────────────────────────────────────
+    // Dedicated KMS key, usable only through Secrets Manager.
+    const secretsKey = new kms.Key(this, 'SecretsKey', {
+      alias: 'alias/makerbay-secrets',
+      description: 'Encrypts MakerBay platform secrets',
+      enableKeyRotation: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+    secretsKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        principals: [new iam.AccountRootPrincipal()],
+        actions: ['kms:GenerateDataKey', 'kms:Decrypt', 'kms:DescribeKey'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` },
+        },
+      }),
+    )
+
+    // Created with generated placeholders — the real Stripe values are set
+    // out of band and never pass through this template or any log.
+    // Rotation is intentionally off: Stripe keys are rolled in the Stripe
+    // dashboard, which no AWS rotation function can drive.
+    const stripeSecret = new secretsmanager.Secret(this, 'StripeSecret', {
+      secretName: 'makerbay/stripe',
+      description: 'Stripe secret key and webhook signing secret for MakerBay billing',
+      encryptionKey: secretsKey,
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({ apiKey: 'REPLACE_ME', webhookSecret: 'REPLACE_ME' }),
+        generateStringKey: 'placeholder',
+      },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+
     // ── Identity ─────────────────────────────────────────────────────────
     const userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: 'makerbay',
@@ -244,6 +286,27 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_USAGE: usage.tableName,
     })
 
+    const billingEnv = {
+      ...tableEnv,
+      STRIPE_SECRET_ARN: stripeSecret.secretArn,
+      APP_URL: `https://app.${DOMAIN}`,
+    }
+    const billingFn = fn('BillingApiFn', 'packages/core-api/src/billing.ts', billingEnv, {
+      timeoutSeconds: 25,
+    })
+    const billingWebhookFn = fn('BillingWebhookFn', 'packages/core-api/src/billing-webhook.ts', billingEnv, {
+      timeoutSeconds: 25,
+    })
+    const billingReporterFn = fn('BillingReporterFn', 'packages/core-api/src/billing-reporter.ts', billingEnv, {
+      timeoutSeconds: 120,
+    })
+
+    // Report metered usage to Stripe once a day.
+    new events.Rule(this, 'BillingReportSchedule', {
+      schedule: events.Schedule.cron({ minute: '20', hour: '3' }),
+      targets: [new eventsTargets.LambdaFunction(billingReporterFn)],
+    })
+
     // Metering pipeline: module usage events -> aggregator -> Usage table
     new events.Rule(this, 'UsageRule', {
       eventBus: bus,
@@ -277,6 +340,15 @@ export class MakerbayStack extends cdk.Stack {
     )
 
     usage.grantReadWriteData(usageAggregatorFn)
+
+    for (const f of [billingFn, billingWebhookFn, billingReporterFn]) {
+      stripeSecret.grantRead(f)
+      secretsKey.grantDecrypt(f)
+      tenants.grantReadWriteData(f)
+      entitlements.grantReadWriteData(f)
+      usage.grantReadData(f)
+    }
+    users.grantReadData(billingFn)
 
     // ── API ──────────────────────────────────────────────────────────────
     const httpApi = new apigwv2.HttpApi(this, 'Api', {
@@ -314,6 +386,21 @@ export class MakerbayStack extends cdk.Stack {
       methods: routeMethods,
       integration: new HttpLambdaIntegration('AssistantIntegration', assistantFn),
       authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/core/billing/{proxy+}',
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('BillingIntegration', billingFn),
+      authorizer,
+    })
+
+    // Stripe posts here. No authorizer: the request is authenticated by its
+    // signature, verified against the webhook signing secret.
+    httpApi.addRoutes({
+      path: '/v1/billing/webhook',
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('BillingWebhookIntegration', billingWebhookFn),
     })
 
     // Public surface for the embeddable widget and hosted chat page: no
@@ -417,6 +504,8 @@ export class MakerbayStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId })
     new cdk.CfnOutput(this, 'UserPoolClientId', { value: userPoolClient.userPoolClientId })
     new cdk.CfnOutput(this, 'KnowledgeBaseId', { value: kb.attrKnowledgeBaseId })
+    new cdk.CfnOutput(this, 'StripeSecretArn', { value: stripeSecret.secretArn })
+    new cdk.CfnOutput(this, 'WebhookUrl', { value: `https://api.${DOMAIN}/v1/billing/webhook` })
     new cdk.CfnOutput(this, 'DataSourceId', { value: dataSource.attrDataSourceId })
   }
 }

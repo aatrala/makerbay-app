@@ -23,6 +23,8 @@ export interface SourceRow {
 export interface MessageRow {
   pk: string // tenantId#sessionId
   sk: string // sortable timestamp id
+  tenantId: string // byTenant GSI partition key
+  sessionId: string
   role: 'user' | 'assistant'
   text: string
   citations?: Array<{ sourceId: string; name: string; excerpt: string }>
@@ -117,6 +119,25 @@ export async function getSessionMessages(
     }),
   )
   return ((r.Items ?? []) as MessageRow[]).reverse()
+}
+
+/**
+ * Recent messages across every session for a tenant, newest first. Bounded:
+ * the inbox and insights summarise a recent window, not all history. When
+ * tenants outgrow this, move session summaries into their own table.
+ */
+export async function listRecentMessages(tenantId: string, limit = 400): Promise<MessageRow[]> {
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: Tables.conversations(),
+      IndexName: 'byTenant',
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+      ScanIndexForward: false,
+      Limit: limit,
+    }),
+  )
+  return (r.Items ?? []) as MessageRow[]
 }
 
 export async function setMessageFeedback(
