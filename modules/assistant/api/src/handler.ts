@@ -191,8 +191,8 @@ async function chat(
     fallback = true
   } else {
     const generated = await generateAnswer(config, chunks, history, message)
-    answer = generated.text || config.fallbackMessage
-    fallback = answer === config.fallbackMessage
+    answer = generated.text
+    fallback = generated.fallback
     tokens = generated.inputTokens + generated.outputTokens
   }
 

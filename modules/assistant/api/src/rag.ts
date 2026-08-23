@@ -45,8 +45,24 @@ export async function retrieveChunks(tenantId: string, query: string): Promise<R
 
 export interface GeneratedAnswer {
   text: string
+  fallback: boolean
   inputTokens: number
   outputTokens: number
+}
+
+/**
+ * Decide whether a reply is really a fallback. The model occasionally leads
+ * with the fallback sentence and then answers anyway; when there is a real
+ * answer behind it we keep the answer and drop the disclaimer, and only treat
+ * it as unanswered when nothing substantial follows.
+ */
+export function classifyAnswer(raw: string, fallbackMessage: string): { text: string; fallback: boolean } {
+  const text = raw.trim()
+  const fb = fallbackMessage.trim()
+  if (!text) return { text: fb, fallback: true }
+  if (!fb || !text.startsWith(fb)) return { text, fallback: false }
+  const rest = text.slice(fb.length).replace(/^[\s—–\-:,.]+/, '').trim()
+  return rest.length > 40 ? { text: rest, fallback: false } : { text: fb, fallback: true }
 }
 
 export async function generateAnswer(
@@ -59,10 +75,21 @@ export async function generateAnswer(
     .map((c, i) => `[${i + 1}] (source: ${c.sourceName})\n${c.text}`)
     .join('\n\n')
 
+  // The decision procedure is spelled out because a vaguer "reply with the
+  // fallback if you can't answer" gets applied halfway: the model leads with
+  // the fallback sentence and then answers anyway.
   const system = [
-    `You are "${config.name}", a helpful assistant for this business. Answer customer questions using ONLY the provided context.`,
-    config.instructions ? `Follow these instructions from the business: ${config.instructions}` : '',
-    `Rules: Be concise and friendly. If the context does not contain the answer, reply exactly with: ${config.fallbackMessage}`,
+    `You are "${config.name}", answering customers on behalf of this business.`,
+    config.instructions ? `The business asks you to: ${config.instructions}` : '',
+    [
+      'How to answer:',
+      '1. If the context below contains the answer, give it directly and concisely. Never preface it with a disclaimer.',
+      '2. If the context covers only part of the question, answer that part and say plainly which part you do not have. Do not use the exact fallback sentence in this case.',
+      `3. Only if the context contains nothing relevant at all, reply with exactly this sentence and nothing else: ${config.fallbackMessage}`,
+      'Never combine rule 3 with an actual answer — either you can help or you cannot.',
+      'Never invent facts, figures, policies or availability that are not in the context.',
+      'Write in plain language, a few sentences at most, as a helpful colleague would.',
+    ].join('\n'),
     `Context:\n${context}`,
   ]
     .filter(Boolean)
@@ -85,13 +112,15 @@ export async function generateAnswer(
     }),
   )
 
-  const text =
+  const raw =
     r.output?.message?.content
       ?.map((c) => c.text ?? '')
       .join('')
       .trim() ?? ''
+  const { text, fallback } = classifyAnswer(raw, config.fallbackMessage)
   return {
     text,
+    fallback,
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
   }
