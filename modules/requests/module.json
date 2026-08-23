@@ -1,0 +1,44 @@
+{
+  "id": "requests",
+  "name": "Requests",
+  "tagline": "Catches every question the assistant could not close",
+  "status": "in-development",
+  "version": { "api": "0.1.0", "web": "0.1.0" },
+  "routes": ["/v1/requests/*", "/v1/public/requests/*"],
+  "meteredMetrics": ["request.created", "notification.sent"],
+  "entitlementKey": "requests",
+  "dependsOn": ["contacts"],
+  "roadmap": { "order": 2, "note": "Next after Contacts. Shares the assistant widget rather than adding a second one." },
+  "marketing": {
+    "summary": "When the assistant cannot answer, the conversation should not end there. Requests turns that moment into a captured lead or a ticket: the customer leaves their details in the same chat window, you get an email, and the thread is waiting in your dashboard.",
+    "audience": "Businesses where an unanswered question is a lost sale, and anyone who currently loses enquiries in a shared inbox.",
+    "features": [
+      {
+        "title": "One widget, not two",
+        "body": "Lead capture, feedback and support requests all happen inside the assistant bubble your customers already use. No second popup fighting for attention."
+      },
+      {
+        "title": "Handoff when it matters",
+        "body": "You decide when the assistant offers a handoff: after a failed answer, on specific topics, or whenever the customer asks for a person."
+      },
+      {
+        "title": "Forms without a form builder",
+        "body": "Choose which details to collect - name, email, phone, a note - and the assistant asks for them conversationally."
+      },
+      {
+        "title": "Everything lands in Contacts",
+        "body": "Each request creates or updates a contact, so the same person's history stays together across modules."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Is this a full helpdesk?",
+        "a": "No, and deliberately so. It is a capture-and-reply inbox. If you already run a helpdesk, forward to it instead."
+      },
+      {
+        "q": "Do I need the assistant to use this?",
+        "a": "Yes. Requests lives inside the assistant widget rather than shipping a second script for your site."
+      }
+    ]
+  }
+}

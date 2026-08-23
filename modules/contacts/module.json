@@ -1,0 +1,45 @@
+{
+  "id": "contacts",
+  "name": "Contacts",
+  "tagline": "The customer list every other module writes to",
+  "status": "in-development",
+  "core": true,
+  "version": { "api": "0.1.0", "web": "0.1.0" },
+  "routes": ["/v1/contacts/*"],
+  "meteredMetrics": [],
+  "entitlementKey": null,
+  "dependsOn": [],
+  "roadmap": { "order": 1, "note": "Built first and included with every workspace. Modules that own their own separate customer list can never be joined up later." },
+  "marketing": {
+    "summary": "A light customer list - name, contact details, a status, a note, and the history of everything that person has done with you. It is not a CRM you have to feed by hand: your other modules fill it in as customers arrive.",
+    "audience": "Every workspace. Included at no extra cost on every plan, because the modules above it are far less useful without it.",
+    "features": [
+      {
+        "title": "Filled in for you",
+        "body": "A captured lead, a booking, an accepted quote - each creates or updates a contact automatically. You are not doing data entry."
+      },
+      {
+        "title": "One history per person",
+        "body": "Every conversation, request, appointment and quote for that customer sits on one screen, in order."
+      },
+      {
+        "title": "A status you choose",
+        "body": "New, quoted, booked, won, lost, or whatever your work actually looks like. Simple enough to keep accurate."
+      },
+      {
+        "title": "Yours to take",
+        "body": "Export the whole list as CSV whenever you want. A customer list you cannot get out is not really yours."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Is this a replacement for HubSpot or Pipedrive?",
+        "a": "No. If you need pipelines, forecasting and sequences, use a real CRM. This exists so the other modules have somewhere sensible to put a customer, and so you can see one person's whole history."
+      },
+      {
+        "q": "Does it cost extra?",
+        "a": "No. It is part of the platform, on every plan including Free."
+      }
+    ]
+  }
+}

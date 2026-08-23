@@ -1,0 +1,44 @@
+{
+  "id": "quotes",
+  "name": "Quotes",
+  "tagline": "Turn a job enquiry into a priced quote the same day",
+  "status": "planned",
+  "version": { "api": "0.0.0", "web": "0.0.0" },
+  "routes": ["/v1/quotes/*", "/v1/public/quotes/*"],
+  "meteredMetrics": ["quote.sent", "quote.accepted"],
+  "entitlementKey": "quotes",
+  "dependsOn": ["contacts"],
+  "roadmap": { "order": 4, "note": "Quoting only. Invoicing, tax handling and bookkeeping are deliberately out of scope - see the roadmap notes." },
+  "marketing": {
+    "summary": "A work order comes in through the assistant. You open it, pick line items from your price list, and send a quote the customer can accept and pay a deposit on from their phone. No accounting software, no PDF wrangling.",
+    "audience": "Trades and service businesses that quote per job: electricians, plumbers, builders, landscapers, mobile mechanics, cleaners.",
+    "features": [
+      {
+        "title": "Starts from the enquiry",
+        "body": "The job details a customer gave the assistant are already in the request. You are pricing, not re-typing."
+      },
+      {
+        "title": "Your price list, reused",
+        "body": "Saved line items with rates and units, so the second quote for the same kind of job takes under a minute."
+      },
+      {
+        "title": "Accepted with one tap",
+        "body": "The customer opens a link, sees the quote, and accepts. You get told immediately and the quote is locked."
+      },
+      {
+        "title": "Deposit at acceptance",
+        "body": "Optionally take a deposit when they accept, through the platform's existing Stripe connection."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Does this replace my accounting software?",
+        "a": "No. This is quoting, not bookkeeping. Tax handling, invoice numbering and reconciliation belong in Xero, MYOB or QuickBooks, and we would rather export to them than compete with them badly."
+      },
+      {
+        "q": "Can I send an invoice from it?",
+        "a": "Not at launch. An accepted quote plus a paid deposit covers most of the value; a proper compliant invoice is a much larger commitment and is not on the near roadmap."
+      }
+    ]
+  }
+}

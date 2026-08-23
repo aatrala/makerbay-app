@@ -652,11 +652,33 @@ export class MakerbayStack extends cdk.Stack {
       enforceSSL: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
+    // S3 with OAC serves keys literally, so /roadmap must be rewritten to
+    // /roadmap/index.html. Without this every page except the apex 404s.
+    const directoryIndex = new cloudfront.Function(this, 'SiteDirectoryIndex', {
+      functionName: `makerbay-site-directory-index-${this.account}`,
+      comment: 'Rewrites extensionless paths to their index.html',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request
+  var uri = request.uri
+  if (uri.endsWith('/')) {
+    request.uri = uri + 'index.html'
+  } else if (!uri.split('/').pop().includes('.')) {
+    request.uri = uri + '/index.html'
+  }
+  return request
+}
+`),
+    })
     const siteDistribution = new cloudfront.Distribution(this, 'SiteDistribution', {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        functionAssociations: [
+          { function: directoryIndex, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
+        ],
       },
       defaultRootObject: 'index.html',
       domainNames: [DOMAIN, `www.${DOMAIN}`],

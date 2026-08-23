@@ -1,0 +1,73 @@
+# Changelog
+
+Every customer-visible change to MakerBay. The public version of this page is
+at [makerbay.app/changelog](https://makerbay.app/changelog) and is generated
+from this file, so this is the only place an entry gets written.
+
+Format: one `##` heading per release, dated, with entries tagged by area.
+Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
+`booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
+`Security`.
+
+## 1.5.0 - 2026-08-23
+
+- Added `platform` Module manifests now carry their own marketing copy, so
+  every module page, the homepage grid and the roadmap are generated from one
+  source instead of being written out three times.
+- Added `platform` A public changelog at makerbay.app/changelog.
+- Added `platform` A public roadmap at makerbay.app/roadmap, ordered by what
+  each module depends on rather than by guesswork.
+- Added `contacts` Contacts enters development as part of the platform rather
+  than as a paid module. Every other module writes customer records to it, so
+  gating it behind an entitlement would let modules drift into keeping
+  separate, unjoinable customer lists.
+
+## 1.4.0 - 2026-08-23
+
+- Added `platform` A written design system at `docs/design-guidelines.md`
+  that every future module inherits.
+- Changed `assistant` The dashboard was rebuilt on it: empty states that name
+  the next action, loading skeletons instead of blank screens, and error
+  messages written as sentences rather than machine codes.
+- Added `assistant` A new workspace now lands on Knowledge rather than an
+  empty Playground, because an assistant with nothing to read cannot answer
+  anything.
+- Fixed `assistant` The dashboard is usable on a phone: the sidebar collapses
+  to a menu and wide tables scroll inside their card instead of pushing the
+  page sideways.
+- Changed `platform` The marketing site and the dashboard now share one set of
+  design tokens, differing only in density.
+
+## 1.3.0 - 2026-08-22
+
+- Added `assistant` Knowledge sources can be previewed: the extracted text,
+  the original file, the size and when it was added.
+- Added `assistant` Web pages can be refreshed in place when your site
+  changes, without removing and re-adding the source.
+- Added `platform` Staff grant endpoint, so entitlements can be granted
+  without a payment - for pilots, comps and support fixes.
+- Security `platform` Grants are stored as items rather than overwritten
+  fields, so a Stripe webhook can no longer wipe a manually granted plan.
+
+## 1.2.0 - 2026-08-22
+
+- Added `assistant` Learn from your website: point it at a domain and it finds
+  the pages worth reading through sitemap.xml, llms.txt or page links.
+- Security `assistant` URL fetching allows only public web addresses. Private
+  network ranges are refused, and the check runs again on every redirect hop.
+- Added `assistant` Pages that come back nearly empty are refused with an
+  explanation rather than silently stored.
+
+## 1.1.0 - 2026-08-21
+
+- Added `platform` A hosted MCP server at mcp.makerbay.app, so Claude, Cursor
+  and other agent tools can query your knowledge directly.
+- Added `assistant` Streaming answers. First words now appear in under a
+  second instead of after the whole answer is written.
+
+## 1.0.0 - 2026-08-20
+
+- Added `assistant` The AI assistant: answers customer questions from your own
+  documents, as a website widget, a shareable page or an API.
+- Added `platform` Workspaces, sign-in, per-module entitlements, usage
+  metering and Stripe billing with a free plan and pay-as-you-go overage.

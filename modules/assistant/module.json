@@ -6,5 +6,47 @@
   "version": { "api": "1.2.0", "web": "1.3.0", "embed": "1.1.0" },
   "routes": ["/v1/assistant/*", "/v1/public/assistant/*"],
   "meteredMetrics": ["message", "tokens", "search", "ingest.documents"],
-  "entitlementKey": "assistant"
+  "entitlementKey": "assistant",
+  "dependsOn": [],
+  "roadmap": { "order": 1, "note": "Shipped. Help centre and richer citations still to come." },
+  "marketing": {
+    "summary": "Upload your FAQ, price list or policies. MakerBay reads them and answers customer questions in your own words, with the source shown. When the answer is not in your documents it says so instead of inventing one.",
+    "audience": "Any business that answers the same questions over and over: opening hours, pricing, returns, what you do and do not cover.",
+    "features": [
+      {
+        "title": "Answers only from your documents",
+        "body": "Every reply is grounded in what you uploaded, with sources shown. No invented opening hours or made-up refund policies."
+      },
+      {
+        "title": "Learns from your website",
+        "body": "Point it at your site and it finds the pages worth reading. Add PDFs, Word files or pasted text alongside them."
+      },
+      {
+        "title": "Three ways to use it",
+        "body": "A chat bubble on your site, a shareable page that needs no website at all, or an API for your own software."
+      },
+      {
+        "title": "Gets better as you use it",
+        "body": "Questions it could not answer are collected for you. Answer one and it handles that question from then on."
+      },
+      {
+        "title": "Works with AI agents",
+        "body": "A hosted MCP server lets Claude, Cursor and other agent tools query your knowledge directly."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Will it make things up?",
+        "a": "No. It answers from your documents and nothing else. When the answer is not there it uses the fallback message you write, which is a good place to point people at a human."
+      },
+      {
+        "q": "How long does setup take?",
+        "a": "About ten minutes. Name your workspace, point it at your website, then paste one line of HTML into your site."
+      },
+      {
+        "q": "What happens when I hit the message limit?",
+        "a": "Nothing breaks. You are told in the dashboard, and you can upgrade or wait for the monthly reset."
+      }
+    ]
+  }
 }

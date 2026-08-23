@@ -1,0 +1,36 @@
+{
+  "id": "reviews",
+  "name": "Reviews",
+  "tagline": "Ask happy customers for a review at the right moment",
+  "status": "planned",
+  "version": { "api": "0.0.0", "web": "0.0.0" },
+  "routes": ["/v1/reviews/*", "/v1/public/reviews/*"],
+  "meteredMetrics": ["review.requested", "review.published"],
+  "entitlementKey": "reviews",
+  "dependsOn": ["contacts"],
+  "roadmap": { "order": 5, "note": "Needs a completed job or appointment to trigger from, so it follows Bookings and Quotes." },
+  "marketing": {
+    "summary": "The best time to ask for a review is just after the work is done and the customer is pleased. Reviews watches for that moment - a completed booking, an accepted quote - and asks, then shows the results on your site.",
+    "audience": "Local businesses that live or die by their star rating and never remember to ask.",
+    "features": [
+      {
+        "title": "Triggered by real events",
+        "body": "Asks after a completed appointment or finished job, not on an arbitrary schedule."
+      },
+      {
+        "title": "Ask once, politely",
+        "body": "One reminder, then it stops. Nagging costs you the review and the customer."
+      },
+      {
+        "title": "Show them on your site",
+        "body": "An embeddable wall of reviews using the same one-line snippet as the assistant."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Will it gate bad reviews?",
+        "a": "No. Filtering unhappy customers away from public review sites breaks Google's policies and is not something we will build."
+      }
+    ]
+  }
+}

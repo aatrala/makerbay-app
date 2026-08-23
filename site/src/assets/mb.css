@@ -129,7 +129,69 @@ footer nav { margin-left: auto; display: flex; gap: 20px; }
 .faq h3 { margin-top: 26px; }
 .center { text-align: center; }
 
+
+/* Cards that are entirely a link. The whole card is the target, not the title. */
+.linkcard { display: block; color: inherit; transition: border-color 140ms ease, transform 140ms ease; }
+.linkcard:hover { text-decoration: none; border-color: var(--accent); transform: translateY(-2px); }
+.linkcard h3 { color: var(--ink); }
+
+/* Status tag sitting on the dark hero needs its own contrast. */
+.hero .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; padding: 4px 11px; border-radius: 20px; margin-bottom: 18px; }
+.hero .tag.live { background: #14532d; color: #86efac; }
+.hero .tag.soon { background: #422006; color: #fcd34d; }
+.dep { font-size: 15px; margin-top: 8px; }
+
+/* --- Roadmap --- */
+.road { list-style: none; counter-reset: r; max-width: 74ch; }
+.road-item { position: relative; padding: 0 0 30px 34px; border-left: 2px solid var(--line); margin-left: 8px; }
+.road-item:last-child { border-left-color: transparent; padding-bottom: 0; }
+.road-item::before {
+  counter-increment: r; content: counter(r);
+  position: absolute; left: -15px; top: 0; width: 28px; height: 28px; border-radius: 50%;
+  background: #fff; box-shadow: inset 0 0 0 2px var(--line);
+  color: var(--body); font-size: 13px; font-weight: 700; display: grid; place-items: center;
+}
+.road-item h3 { margin: 8px 0 4px; }
+.road-item h3 a { color: var(--ink); }
+.road-item h3 a:hover { color: var(--accent); }
+.road-item p { font-size: 16px; }
+.road-item .note { font-size: 14.5px; color: var(--muted); margin-top: 4px; }
+
+/* --- Changelog --- */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; }
+.chip-btn {
+  border: 1px solid var(--line); background: #fff; color: var(--body);
+  padding: 7px 14px; border-radius: 20px; font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.chip-btn:hover { border-color: var(--accent); color: var(--ink); }
+.chip-btn.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.changelog { max-width: 74ch; }
+.release { margin-bottom: 40px; }
+.release h2 { font-size: 24px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+.release .when { font-size: 15px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.release ul { list-style: none; margin-top: 14px; }
+.release li { padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 16px; color: var(--body); }
+.release li:last-child { border-bottom: none; }
+.kind {
+  display: inline-block; min-width: 68px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-right: 4px;
+}
+.kind.added { background: var(--ok-sub); color: var(--ok); }
+.kind.changed { background: var(--accent-sub); color: var(--accent-dark); }
+.kind.fixed { background: #e0f2fe; color: #075985; }
+.kind.security { background: #fee2e2; color: #b91c1c; }
+.area { color: var(--ink); font-weight: 650; margin-right: 4px; }
+.empty-note { color: var(--muted); }
+
+@media (max-width: 640px) {
+  .kind { min-width: 0; }
+  .release li { font-size: 15.5px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .linkcard:hover { transform: none; }
   html { scroll-behavior: auto; }
 }
 @media (max-width: 640px) {
