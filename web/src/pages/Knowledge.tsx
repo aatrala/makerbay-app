@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { api } from '../api'
+import { api, explain } from '../api'
+import { Empty, Notice, Skeleton, bytes, when } from '../ui'
 
 interface Source {
   sourceId: string
@@ -28,12 +29,12 @@ interface Preview {
   viewUrl?: string
 }
 
-const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '—')
-const bytes = (n?: number | null) =>
-  n == null ? '—' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`
+type Tab = 'website' | 'file' | 'text'
 
 export default function Knowledge() {
   const [sources, setSources] = useState<Source[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [tab, setTab] = useState<Tab>('website')
   const [text, setText] = useState('')
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
@@ -47,12 +48,17 @@ export default function Knowledge() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
-    const r = await api('GET', '/v1/assistant/sources')
-    setSources(r.sources ?? [])
+    try {
+      const r = await api('GET', '/v1/assistant/sources')
+      setSources(r.sources ?? [])
+    } finally {
+      setLoaded(true)
+    }
   }, [])
 
   useEffect(() => {
     void load()
+    // Ingestion is asynchronous, so status chips need to catch up on their own.
     const t = setInterval(() => { void load() }, 12000)
     return () => clearInterval(t)
   }, [load])
@@ -60,7 +66,7 @@ export default function Knowledge() {
   const run = async (fn: () => Promise<void>) => {
     setError(''); setNote(''); setBusy(true)
     try { await fn(); await load() } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(explain(e))
     } finally { setBusy(false) }
   }
 
@@ -69,6 +75,7 @@ export default function Knowledge() {
     void run(async () => {
       await api('POST', '/v1/assistant/sources', { type: 'text', name: name || 'Pasted text', text })
       setText(''); setName('')
+      setNote('Added. It will be ready to answer from in a minute or two.')
     })
   }
 
@@ -77,6 +84,7 @@ export default function Knowledge() {
     void run(async () => {
       await api('POST', '/v1/assistant/sources', { type: 'url', url })
       setUrl('')
+      setNote('Page added. It will be ready to answer from in a minute or two.')
     })
   }
 
@@ -90,9 +98,10 @@ export default function Knowledge() {
         headers: { 'content-type': file.type || 'application/octet-stream' },
         body: file,
       })
-      if (!put.ok) throw new Error('Upload failed')
+      if (!put.ok) throw new Error('upload_failed')
       await api('POST', `/v1/assistant/sources/${r.source.sourceId}/ingest`, {})
       if (fileRef.current) fileRef.current.value = ''
+      setNote(`Uploaded ${file.name}. It will be ready to answer from in a minute or two.`)
     })
 
   const discover = (e: FormEvent) => {
@@ -101,7 +110,9 @@ export default function Knowledge() {
       const r = await api('POST', '/v1/assistant/sources/discover', { url: siteUrl })
       setFound(r.urls ?? [])
       setPicked(new Set())
-      setNote(`Found ${r.urls?.length ?? 0} pages via ${r.discoveredVia}. Tick the ones to add.`)
+      setNote(r.urls?.length
+        ? `Found ${r.urls.length} pages on your site. Tick the ones customers ask about.`
+        : 'No pages found automatically. Add them one at a time above.')
     })
   }
 
@@ -111,10 +122,10 @@ export default function Knowledge() {
       const failures: string[] = []
       for (const u of picked) {
         try { await api('POST', '/v1/assistant/sources', { type: 'url', url: u }); added++ }
-        catch (e) { failures.push(`${u.replace(/^https?:\/\/[^/]+/, '')} — ${e instanceof Error ? e.message : 'failed'}`) }
+        catch (e) { failures.push(`${u.replace(/^https?:\/\/[^/]+/, '')} — ${explain(e, 'could not be read')}`) }
       }
       setFound(null); setPicked(new Set())
-      setNote(`Added ${added} page${added === 1 ? '' : 's'}.${failures.length ? ` Skipped ${failures.length}: ${failures[0]}` : ''}`)
+      setNote(`Added ${added} page${added === 1 ? '' : 's'}.${failures.length ? ` ${failures.length} skipped: ${failures[0]}` : ''}`)
     })
 
   const openPreview = (id: string) =>
@@ -123,37 +134,58 @@ export default function Knowledge() {
   const refresh = (id: string) =>
     void run(async () => {
       const r = await api('POST', `/v1/assistant/sources/${id}/refresh`, {})
-      setNote(`Re-fetched — ${r.charCount.toLocaleString()} characters.`)
+      setNote(`Re-fetched — ${r.charCount.toLocaleString()} characters of text.`)
     })
 
-  const remove = (id: string) => void run(async () => { await api('DELETE', `/v1/assistant/sources/${id}`) })
+  const remove = (id: string, label: string) => {
+    if (!confirm(`Remove "${label}"? Your assistant will stop answering from it.`)) return
+    void run(async () => {
+      await api('DELETE', `/v1/assistant/sources/${id}`)
+      setNote('Removed.')
+    })
+  }
+
+  const ready = sources.filter((s) => s.status === 'ready').length
+  const working = sources.filter((s) => s.status === 'processing' || s.status === 'awaiting_upload').length
 
   return (
     <>
       <h1>Knowledge</h1>
-      <p>Everything your assistant knows comes from these sources. Point it at your website, upload documents, or paste text.</p>
+      <p>
+        Everything your assistant knows comes from these sources. It will never invent an answer —
+        if something is not here, it says so.
+      </p>
 
-      {note && <div className="card" style={{ background: '#f0fdf7', borderColor: '#b5e5cf' }}>{note}</div>}
-      {error && <div className="card" style={{ background: '#fde8ea', borderColor: '#f3bcc3' }}>{error}</div>}
+      {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
       <div className="card">
-        <h2>Learn from your website</h2>
-        <p>We read the page and keep the text. Pages that build their content with JavaScript may come back empty — we'll tell you if that happens.</p>
-        <form onSubmit={addUrl} className="row">
-          <input className="grow" value={url} onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://your-business.com/about" required />
-          <button disabled={busy}>Add page</button>
-        </form>
-        <form onSubmit={discover} className="row mt">
-          <input className="grow" value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)}
-            placeholder="https://your-business.com — find pages for me" required />
-          <button className="ghost" disabled={busy}>Find pages</button>
-        </form>
+        <h2>Add knowledge</h2>
+        <div className="tabs">
+          <button className={tab === 'website' ? 'on' : ''} onClick={() => setTab('website')}>From your website</button>
+          <button className={tab === 'file' ? 'on' : ''} onClick={() => setTab('file')}>Upload a document</button>
+          <button className={tab === 'text' ? 'on' : ''} onClick={() => setTab('text')}>Paste text</button>
+        </div>
 
-        {found && (
-          <div className="mt">
-            {found.length === 0 ? <p className="hint">No pages found automatically. Add them one at a time above.</p> : (
-              <>
+        {tab === 'website' && (
+          <>
+            <p className="hint">
+              Point us at your site and we will list its pages, or add one page at a time.
+              Pages that build their content with JavaScript may come back empty — we will tell you if that happens.
+            </p>
+            <form onSubmit={discover} className="row mt">
+              <input className="grow" value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)}
+                placeholder="https://your-business.com" required aria-label="Website address" />
+              <button disabled={busy}>{busy ? 'Looking…' : 'Find pages'}</button>
+            </form>
+            <form onSubmit={addUrl} className="row mt">
+              <input className="grow" value={url} onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://your-business.com/faq — add a single page" required aria-label="Page address" />
+              <button className="ghost" disabled={busy}>Add page</button>
+            </form>
+
+            {found && found.length > 0 && (
+              <div className="mt">
                 <div className="row">
                   <button className="ghost" onClick={() => setPicked(new Set(found))}>Select all</button>
                   <button className="ghost" onClick={() => setPicked(new Set())}>Clear</button>
@@ -162,72 +194,94 @@ export default function Knowledge() {
                     Add {picked.size} page{picked.size === 1 ? '' : 's'}
                   </button>
                 </div>
-                <div style={{ maxHeight: 240, overflowY: 'auto', marginTop: 10 }}>
+                <div className="picklist">
                   {found.map((u) => (
-                    <label key={u} style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0', fontWeight: 400 }}>
-                      <input type="checkbox" style={{ width: 'auto' }} checked={picked.has(u)}
+                    <label key={u} className="pick">
+                      <input type="checkbox" checked={picked.has(u)}
                         onChange={(e) => {
                           const next = new Set(picked)
-                          e.target.checked ? next.add(u) : next.delete(u)
+                          if (e.target.checked) next.add(u); else next.delete(u)
                           setPicked(next)
                         }} />
-                      <span style={{ fontSize: 13 }}>{u.replace(/^https?:\/\/[^/]+/, '') || '/'}</span>
+                      <span>{u.replace(/^https?:\/\/[^/]+/, '') || '/'}</span>
                     </label>
                   ))}
                 </div>
-              </>
+              </div>
             )}
+          </>
+        )}
+
+        {tab === 'file' && (
+          <>
+            <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx,.html,.csv"
+              onChange={(e) => e.target.files?.[0] && addFile(e.target.files[0])} disabled={busy}
+              aria-label="Choose a document" />
+            <p className="hint mt">
+              PDF, Word, Markdown, HTML, plain text or CSV. Price lists, service menus and policy
+              documents work well.
+            </p>
+          </>
+        )}
+
+        {tab === 'text' && (
+          <form onSubmit={addText}>
+            <label htmlFor="k-name">Name</label>
+            <input id="k-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Opening hours and location" />
+            <label htmlFor="k-text">Content</label>
+            <textarea id="k-text" rows={5} value={text} onChange={(e) => setText(e.target.value)} required
+              placeholder="We are open Mon–Fri 9am–6pm, Saturday 10am–4pm, closed Sunday…" />
+            <div className="mt"><button disabled={busy}>Add to knowledge</button></div>
+          </form>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <h2 className="grow">Sources</h2>
+          {loaded && sources.length > 0 && (
+            <span className="meta">
+              {ready} ready{working > 0 ? `, ${working} still processing` : ''}
+            </span>
+          )}
+        </div>
+
+        {!loaded ? <Skeleton rows={4} /> : sources.length === 0 ? (
+          <Empty title="Your assistant has nothing to answer from yet">
+            Add your website above and it will be answering customer questions in a couple of minutes.
+            Most businesses start with their FAQ, pricing and opening hours.
+          </Empty>
+        ) : (
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr><th>Name</th><th>Type</th><th>Status</th><th>Added</th><th><span className="visually-hidden">Actions</span></th></tr>
+              </thead>
+              <tbody>
+                {sources.map((s) => (
+                  <tr key={s.sourceId}>
+                    <td>
+                      {s.name}
+                      {s.sourceUrl && <div className="meta trunc">{s.sourceUrl}</div>}
+                      {s.warning && <div className="meta warn-text">{s.warning}</div>}
+                    </td>
+                    <td>{s.type === 'url' ? 'web page' : s.type}</td>
+                    <td><span className={`chip ${s.status}`}>{s.status.replace('_', ' ')}</span></td>
+                    <td className="nowrap">{when(s.createdAt)}</td>
+                    <td className="nowrap">
+                      <button className="ghost" onClick={() => openPreview(s.sourceId)}>Preview</button>{' '}
+                      {s.type === 'url' && <><button className="ghost" onClick={() => refresh(s.sourceId)}>Refresh</button>{' '}</>}
+                      <button className="danger" onClick={() => remove(s.sourceId, s.name)}>Remove</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
-
-      <div className="card">
-        <h2>Upload a document</h2>
-        <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx,.html,.csv"
-          onChange={(e) => e.target.files?.[0] && addFile(e.target.files[0])} disabled={busy} />
-        <p className="hint mt">PDF, Word, Markdown, HTML, text or CSV.</p>
-      </div>
-
-      <div className="card">
-        <h2>Or paste text</h2>
-        <form onSubmit={addText}>
-          <label>Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Store FAQ" />
-          <label>Content</label>
-          <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} required
-            placeholder="Paste your FAQ, opening hours, return policy…" />
-          <div className="mt"><button disabled={busy}>Add to knowledge</button></div>
-        </form>
-      </div>
-
-      <div className="card">
-        <h2>Sources</h2>
-        {sources.length === 0 ? (
-          <p>No sources yet — the assistant will answer with its fallback message until you add some.</p>
-        ) : (
-          <table>
-            <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Added</th><th /></tr></thead>
-            <tbody>
-              {sources.map((s) => (
-                <tr key={s.sourceId}>
-                  <td>
-                    {s.name}
-                    {s.sourceUrl && <div className="hint" style={{ fontSize: 12 }}>{s.sourceUrl}</div>}
-                  </td>
-                  <td>{s.type}</td>
-                  <td><span className={`chip ${s.status}`}>{s.status.replace('_', ' ')}</span></td>
-                  <td style={{ fontSize: 13 }}>{when(s.createdAt)}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="ghost" onClick={() => openPreview(s.sourceId)}>Preview</button>{' '}
-                    {s.type === 'url' && <><button className="ghost" onClick={() => refresh(s.sourceId)}>Refresh</button>{' '}</>}
-                    <button className="danger" onClick={() => remove(s.sourceId)}>Remove</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {loaded && sources.length > 0 && (
+          <p className="meta mt">Processing usually takes a minute or two. This list updates itself.</p>
         )}
-        <p className="hint mt">Processing usually takes a minute or two. The list refreshes automatically.</p>
       </div>
 
       {preview && (
@@ -236,23 +290,25 @@ export default function Knowledge() {
             <h2 className="grow">{preview.name}</h2>
             <button className="ghost" onClick={() => setPreview(null)}>Close</button>
           </div>
-          <table>
-            <tbody>
-              <tr><td>Type</td><td>{preview.type}</td></tr>
-              {preview.sourceUrl && <tr><td>Address</td><td><a href={preview.sourceUrl} target="_blank" rel="noopener">{preview.sourceUrl}</a></td></tr>}
-              <tr><td>Added</td><td>{when(preview.createdAt)}</td></tr>
-              {preview.fetchedAt && <tr><td>Last fetched</td><td>{when(preview.fetchedAt)}</td></tr>}
-              <tr><td>Size</td><td>{bytes(preview.sizeBytes)}</td></tr>
-              {preview.charCount != null && <tr><td>Text the assistant learned</td><td>{preview.charCount.toLocaleString()} characters</td></tr>}
-            </tbody>
-          </table>
+          <dl className="facts">
+            <dt>Type</dt><dd>{preview.type === 'url' ? 'web page' : preview.type}</dd>
+            {preview.sourceUrl && (
+              <><dt>Address</dt><dd><a href={preview.sourceUrl} target="_blank" rel="noopener">{preview.sourceUrl}</a></dd></>
+            )}
+            <dt>Added</dt><dd>{when(preview.createdAt)}</dd>
+            {preview.fetchedAt && <><dt>Last fetched</dt><dd>{when(preview.fetchedAt)}</dd></>}
+            <dt>Size</dt><dd>{bytes(preview.sizeBytes)}</dd>
+            {preview.charCount != null && (
+              <><dt>Text learned</dt><dd>{preview.charCount.toLocaleString()} characters</dd></>
+            )}
+          </dl>
           {preview.viewUrl && (
             <p className="mt"><a className="btn ghost" href={preview.viewUrl} target="_blank" rel="noopener">Open original file</a></p>
           )}
           {preview.excerpt && (
             <>
               <label>Extracted text{preview.truncated ? ' (first part)' : ''}</label>
-              <pre className="code" style={{ maxHeight: 320, whiteSpace: 'pre-wrap' }}>{preview.excerpt}</pre>
+              <pre className="code excerpt">{preview.excerpt}</pre>
             </>
           )}
         </div>

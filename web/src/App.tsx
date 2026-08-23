@@ -39,10 +39,15 @@ export default function App() {
 
   if (!me?.tenant) return <Onboarding onDone={() => { setLoading(true); void reload() }} />
 
+  // A workspace created moments ago has no knowledge, so an empty Playground
+  // would be the worst possible first screen. Send new owners to Knowledge.
+  const fresh = sessionStorage.getItem('mb.justOnboarded') === '1'
+  if (fresh) sessionStorage.removeItem('mb.justOnboarded')
+
   return (
     <Routes>
       <Route element={<Shell me={me} stripeMode={stripeMode} />}>
-        <Route path="/" element={<Navigate to="/assistant/playground" replace />} />
+        <Route path="/" element={<Navigate to={fresh ? '/assistant/knowledge' : '/assistant/playground'} replace />} />
         <Route path="/assistant/knowledge" element={<Knowledge />} />
         <Route path="/assistant/behavior" element={<Behavior />} />
         <Route path="/assistant/playground" element={<Playground />} />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, resetBilling } from '../api'
+import { ApiError, api, explain, resetBilling } from '../api'
+import { Notice, Skeleton } from '../ui'
 
 interface Plan {
   id: string
@@ -19,17 +20,23 @@ interface Summary {
 }
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
+const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
 
 export default function Billing() {
   const [data, setData] = useState<Summary | null>(null)
+  const [notConfigured, setNotConfigured] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [resetMsg, setResetMsg] = useState('')
+  const [resetTone, setResetTone] = useState<'ok' | 'err'>('ok')
 
   useEffect(() => {
     api('GET', '/v1/core/billing/summary')
       .then(setData)
-      .catch((e) => setError(e?.message === 'billing_not_configured' ? 'not_configured' : 'error'))
+      .catch((e) => {
+        if (e instanceof ApiError && e.code === 'billing_not_configured') setNotConfigured(true)
+        else setError(explain(e))
+      })
   }, [])
 
   const go = async (path: string) => {
@@ -39,23 +46,53 @@ export default function Billing() {
       const r = await api('POST', path, {})
       window.location.href = r.url
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'error')
+      setError(explain(e))
       setBusy(false)
     }
   }
 
-  if (error === 'not_configured' || (data && !data.billingConfigured)) {
+  const reset = async () => {
+    if (!confirm('Return this workspace to the Free plan and detach it from Stripe?')) return
+    setResetMsg('')
+    try {
+      const r = await resetBilling()
+      setResetTone('ok')
+      setResetMsg(`Back on the ${r.plan} plan. Modules updated: ${r.modulesReset.join(', ') || 'none'}. Reloading…`)
+      setTimeout(() => window.location.reload(), 1400)
+    } catch (e) {
+      setResetTone('err')
+      setResetMsg(
+        e instanceof ApiError && e.code === 'subscription_active'
+          ? 'This workspace has an active subscription. Cancel it in the billing portal first, then reset.'
+          : explain(e),
+      )
+    }
+  }
+
+  if (notConfigured || (data && !data.billingConfigured)) {
     return (
       <>
         <h1>Billing</h1>
         <div className="card">
-          <h2>Billing isn't connected yet</h2>
-          <p>Add your Stripe keys to the <code>makerbay/stripe</code> secret in AWS Secrets Manager, then reload this page. Until then everyone stays on the Free plan and nothing is charged.</p>
+          <h2>Billing is not connected yet</h2>
+          <p>
+            Everyone stays on the Free plan and nothing is charged. To switch it on, add your Stripe
+            keys to the <code>makerbay/stripe</code> secret in AWS Secrets Manager and reload this page.
+          </p>
         </div>
       </>
     )
   }
-  if (!data) return <p>{error ? 'Could not load billing.' : 'Loading…'}</p>
+
+  if (error && !data) return (<><h1>Billing</h1><Notice tone="err">{error}</Notice></>)
+
+  if (!data) return (
+    <>
+      <h1>Billing</h1>
+      <p>Your plan, what you have used this month, and what it will cost.</p>
+      <div className="card"><Skeleton rows={4} /></div>
+    </>
+  )
 
   const { plan, plans, usage, subscription, testMode } = data
   const pro = plans.find((p) => p.id === 'pro')!
@@ -65,37 +102,40 @@ export default function Billing() {
   return (
     <>
       <h1>Billing</h1>
-      <p>Your plan, what you've used this month, and what it will cost.</p>
+      <p>Your plan, what you have used this month, and what it will cost.</p>
+
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
       {testMode === false && (
-        <div className="card" style={{ background: '#e9f9f1', borderColor: '#b5e5cf' }}>
-          <strong>Live mode.</strong> Real cards are charged and real money moves.
-        </div>
+        <Notice tone="ok"><strong>Live mode.</strong> Real cards are charged and real money moves.</Notice>
       )}
-
       {testMode && (
-        <div className="card" style={{ background: '#fdf1d7', borderColor: '#eed9a5' }}>
-          <strong>Stripe test mode.</strong> Checkout uses test cards — no real money moves. Use card 4242 4242 4242 4242 with any future expiry and CVC.
-        </div>
+        <Notice tone="warn">
+          <strong>Stripe test mode.</strong> Checkout uses test cards — no real money moves.
+          Use card 4242 4242 4242 4242 with any future expiry and CVC.
+        </Notice>
       )}
 
       <div className="card">
         <h2>Current plan: {plan.name}</h2>
-        <div className="row">
-          <span className="grow">{usage.messages.toLocaleString()} of {usage.includedMessages.toLocaleString()} included messages</span>
-          <span className="hint">{pct}%</span>
+        <div className="row baseline">
+          <span className="stat grow">
+            {usage.messages.toLocaleString()}
+            <span className="stat-of"> of {usage.includedMessages.toLocaleString()} included messages</span>
+          </span>
+          <span className="meta">{pct}% used</span>
         </div>
-        <div className="bar"><div style={{ width: `${pct}%` }} /></div>
+        <div className="bar"><div className={pct >= 90 ? 'over' : ''} style={{ width: `${pct}%` }} /></div>
         {usage.overageMessages > 0 && (
           <p className="hint mt">
-            {usage.overageMessages.toLocaleString()} messages beyond your plan ·
-            estimated additional charge <strong>{money(usage.estimatedOverageCents)}</strong>
+            {usage.overageMessages.toLocaleString()} messages beyond your plan — estimated additional
+            charge <strong>{money(usage.estimatedOverageCents)}</strong> on your next invoice.
           </p>
         )}
         {subscription.status !== 'none' && (
-          <p className="hint mt">
+          <p className="meta mt">
             Subscription <strong>{subscription.status}</strong>
-            {subscription.currentPeriodEnd && ` · renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`}
+            {subscription.currentPeriodEnd && ` · renews ${day(subscription.currentPeriodEnd)}`}
           </p>
         )}
       </div>
@@ -126,33 +166,13 @@ export default function Billing() {
       <div className="card">
         <h2>Reset billing link</h2>
         <p>
-          Detaches this workspace from Stripe and returns it to the Free plan. Use it to clear
-          stale test-mode details after switching keys. It does <strong>not</strong> cancel
-          anything at Stripe — cancel in the billing portal first.
+          Detaches this workspace from Stripe and returns it to the Free plan. Use it to clear stale
+          test-mode details after switching keys. It does <strong>not</strong> cancel anything at
+          Stripe — cancel in the billing portal first.
         </p>
-        <button
-          className="danger"
-          onClick={async () => {
-            setResetMsg('')
-            try {
-              const r = await resetBilling()
-              setResetMsg(`Reset to ${r.plan}. Modules updated: ${r.modulesReset.join(', ') || 'none'}.`)
-              setTimeout(() => window.location.reload(), 1200)
-            } catch (e) {
-              setResetMsg(
-                e instanceof Error && e.message === 'subscription_active'
-                  ? 'This workspace has an active subscription — cancel it in the billing portal first.'
-                  : 'Reset failed.',
-              )
-            }
-          }}
-        >
-          Reset billing link
-        </button>
-        {resetMsg && <p className="hint mt">{resetMsg}</p>}
+        <button className="danger" onClick={() => void reset()}>Reset billing link</button>
+        {resetMsg && <p className={resetTone === 'err' ? 'error' : 'hint mt'}>{resetMsg}</p>}
       </div>
-
-      {error && error !== 'not_configured' && <div className="error">Something went wrong: {error}</div>}
     </>
   )
 }

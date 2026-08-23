@@ -164,3 +164,35 @@ export const CHAT_BASE = 'https://chat.makerbay.app'
 export const WIDGET_BASE = 'https://widget.makerbay.app'
 export const createTenant = (name: string) => api('POST', '/v1/core/tenants', { name })
 export const enableModule = (id: string) => api('POST', `/v1/core/modules/${id}/enable`, {})
+
+// ── Human error messages ─────────────────────────────────────────────────
+// The API returns machine codes. Screens must never show those raw: each one
+// gets a sentence that says what happened and, where possible, what to do.
+
+const MESSAGES: Record<string, string> = {
+  limit_exceeded: "You've used every message included in this plan for the month. Upgrade under Billing to keep going.",
+  source_limit_exceeded: 'This plan has room for a limited number of knowledge sources. Remove one, or upgrade under Billing.',
+  module_not_enabled: 'This module is not switched on for your workspace.',
+  forbidden: "You don't have permission to do that. Ask the workspace owner.",
+  unauthorized: 'Your session expired. Sign in again.',
+  not_found: "We couldn't find that — it may have been removed.",
+  invalid_url: "That doesn't look like a web address we can reach. Use a full https:// link to a public page.",
+  blocked_host: "We can't fetch that address. Only public websites can be added.",
+  robots_disallowed: "That site's robots.txt asks us not to read this page.",
+  fetch_failed: "We couldn't reach that page. Check the address, or try again in a minute.",
+  too_short: 'That page returned almost no text — it probably builds its content with JavaScript. Paste the text instead.',
+  unsupported_type: "We can't read that file type yet. Try PDF, Word, Markdown, HTML, text or CSV.",
+  too_large: 'That file is larger than we can process. Split it into smaller documents.',
+  upload_failed: 'The upload did not finish. Check your connection and try again.',
+  billing_not_configured: 'Billing is not set up for this workspace yet.',
+  rate_limited: "That's a lot of requests at once — wait a moment and try again.",
+}
+
+/** Turn any thrown value into a sentence worth showing a customer. */
+export function explain(err: unknown, fallback = 'Something went wrong. Try again, and tell us if it keeps happening.'): string {
+  const code = err instanceof ApiError ? err.code : err instanceof Error ? err.message : ''
+  if (MESSAGES[code]) return MESSAGES[code]
+  if (err instanceof ApiError && err.status >= 500) return 'Our side had a problem with that. Try again in a moment.'
+  // An unmapped code is still better than nothing, but never show a bare slug.
+  return code && !/^(http_\d+|[a-z_]+)$/.test(code) ? code : fallback
+}

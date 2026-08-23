@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { api, streamChat } from '../api'
+import { Link } from 'react-router-dom'
+import { api, explain, streamChat } from '../api'
 
 interface ChatMsg {
   role: 'user' | 'bot'
@@ -7,14 +8,29 @@ interface ChatMsg {
   citations?: Array<{ sourceId: string; name: string }>
   messageId?: string
   feedback?: 'up' | 'down'
+  failed?: boolean
 }
+
+const STARTERS = [
+  'What are your opening hours?',
+  'How much does it cost?',
+  'Where are you located?',
+]
 
 export default function Playground() {
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
   const [sessionId, setSessionId] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
+  // null while we are still finding out whether this workspace has knowledge.
+  const [hasKnowledge, setHasKnowledge] = useState<boolean | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    api('GET', '/v1/assistant/sources')
+      .then((r) => setHasKnowledge((r.sources ?? []).length > 0))
+      .catch(() => setHasKnowledge(true)) // never block the screen on this check
+  }, [])
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' })
@@ -31,9 +47,7 @@ export default function Playground() {
     }
   }
 
-  const send = async (e: FormEvent) => {
-    e.preventDefault()
-    const message = input.trim()
+  const ask = async (message: string) => {
     if (!message || busy) return
     setInput('')
     setMessages((m) => [...m, { role: 'user', text: message }])
@@ -66,34 +80,53 @@ export default function Playground() {
           return
         }
       } catch {
-        if (streamed) return // partial answer is on screen; don't duplicate it
+        if (streamed) return // partial answer is on screen; do not duplicate it
       }
 
       const r = await api('POST', '/v1/assistant/chat', { sessionId, message })
       setSessionId(r.sessionId)
       setMessages((m) => [...m, { role: 'bot', text: r.answer, citations: r.citations, messageId: r.messageId }])
     } catch (err) {
-      const code = err instanceof Error ? err.message : 'error'
-      setMessages((m) => [...m, {
-        role: 'bot',
-        text: code === 'limit_exceeded'
-          ? 'Monthly message limit reached for this plan.'
-          : 'Something went wrong — try again.',
-      }])
+      setMessages((m) => [...m, { role: 'bot', text: explain(err), failed: true }])
     } finally {
       setBusy(false)
     }
   }
 
+  const send = (e: FormEvent) => {
+    e.preventDefault()
+    void ask(input.trim())
+  }
+
   return (
     <>
       <h1>Playground</h1>
-      <p>Test your assistant exactly as your customers will experience it. Answers come only from your knowledge sources.</p>
+      <p>Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources.</p>
+
+      {hasKnowledge === false && (
+        <div className="card tint-warn notice">
+          <span className="grow">
+            <strong>No knowledge yet.</strong> Your assistant will decline every question until you give it
+            something to read.
+          </span>
+          <Link className="btn" to="/assistant/knowledge">Add knowledge</Link>
+        </div>
+      )}
+
       <div className="card chat">
         <div className="chat-log" ref={logRef}>
-          {messages.length === 0 && <p className="hint">Ask something answerable from your documents…</p>}
+          {messages.length === 0 && (
+            <div className="starters">
+              <p className="hint">Try one of these, or ask anything answerable from your sources.</p>
+              <div className="row">
+                {STARTERS.map((s) => (
+                  <button key={s} className="ghost" onClick={() => void ask(s)} disabled={busy}>{s}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {messages.map((m, i) => (
-            <div key={i} className={`msg ${m.role}`}>
+            <div key={i} className={`msg ${m.role}${m.failed ? ' failed' : ''}`}>
               {m.text}
               {m.citations && m.citations.length > 0 && (
                 <div className="cites">Sources: {m.citations.map((c) => c.name).join(', ')}</div>
@@ -105,8 +138,8 @@ export default function Playground() {
                   ) : (
                     <>
                       Was this helpful?{' '}
-                      <a href="#" onClick={(e) => { e.preventDefault(); void rate(i, 'up') }}>👍</a>{' '}
-                      <a href="#" onClick={(e) => { e.preventDefault(); void rate(i, 'down') }}>👎</a>
+                      <button className="linkish" onClick={() => void rate(i, 'up')} aria-label="Helpful">👍</button>{' '}
+                      <button className="linkish" onClick={() => void rate(i, 'down')} aria-label="Not helpful">👎</button>
                     </>
                   )}
                 </div>
@@ -114,14 +147,24 @@ export default function Playground() {
             </div>
           ))}
           {busy && messages[messages.length - 1]?.role === 'user' && (
-            <div className="msg bot">Thinking…</div>
+            <div className="msg bot typing" aria-live="polite">
+              <span /><span /><span />
+            </div>
           )}
         </div>
         <form className="chat-input" onSubmit={send}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type a question…" autoFocus />
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type a question…"
+            autoFocus aria-label="Your question" />
           <button disabled={busy || !input.trim()}>Send</button>
         </form>
       </div>
+
+      {messages.length > 0 && (
+        <p className="meta">
+          Got an answer that was wrong or missing? Add the right information under{' '}
+          <Link to="/assistant/knowledge">Knowledge</Link> and ask again.
+        </p>
+      )}
     </>
   )
 }

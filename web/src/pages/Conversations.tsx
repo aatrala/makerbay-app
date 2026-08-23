@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { api } from '../api'
+import { Link } from 'react-router-dom'
+import { api, explain } from '../api'
+import { Empty, Notice, Skeleton, when } from '../ui'
 
 interface SessionRow {
   sessionId: string
@@ -27,13 +29,19 @@ export default function Conversations() {
   const [messages, setMessages] = useState<Message[]>([])
   const [teach, setTeach] = useState<{ question: string; answer: string } | null>(null)
   const [saved, setSaved] = useState('')
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const r = await api('GET', `/v1/assistant/conversations${filter === 'attention' ? '?filter=attention' : ''}`)
-    setSessions(r.sessions ?? [])
-    setLoading(false)
+    try {
+      const r = await api('GET', `/v1/assistant/conversations${filter === 'attention' ? '?filter=attention' : ''}`)
+      setSessions(r.sessions ?? [])
+    } catch (e) {
+      setError(explain(e))
+    } finally {
+      setLoading(false)
+    }
   }, [filter])
 
   useEffect(() => { void load() }, [load])
@@ -41,22 +49,27 @@ export default function Conversations() {
   const open = async (sessionId: string) => {
     if (openId === sessionId) { setOpenId(null); return }
     setOpenId(sessionId)
+    setMessages([])
     const r = await api('GET', `/v1/assistant/conversations?sessionId=${encodeURIComponent(sessionId)}`)
     setMessages(r.messages ?? [])
   }
 
-  // Turn a question the bot couldn't answer into knowledge it will use next time.
-  const startTeaching = (question: string) => { setTeach({ question, answer: '' }); setSaved('') }
+  // Turn a question the bot could not answer into knowledge it will use next time.
+  const startTeaching = (question: string) => { setTeach({ question, answer: '' }); setSaved(''); setError('') }
 
   const saveAnswer = async () => {
     if (!teach || !teach.answer.trim()) return
-    await api('POST', '/v1/assistant/sources', {
-      type: 'text',
-      name: `Q&A: ${teach.question.slice(0, 60)}`,
-      text: `Question: ${teach.question}\n\nAnswer: ${teach.answer.trim()}`,
-    })
-    setSaved('Added to knowledge — it will be used once processing finishes.')
-    setTeach(null)
+    try {
+      await api('POST', '/v1/assistant/sources', {
+        type: 'text',
+        name: `Q&A: ${teach.question.slice(0, 60)}`,
+        text: `Question: ${teach.question}\n\nAnswer: ${teach.answer.trim()}`,
+      })
+      setSaved('Added to knowledge. Your assistant will use it once processing finishes, usually a minute or two.')
+      setTeach(null)
+    } catch (e) {
+      setError(explain(e))
+    }
   }
 
   return (
@@ -69,16 +82,17 @@ export default function Conversations() {
         <button className={filter === 'all' ? 'on' : ''} onClick={() => setFilter('all')}>All conversations</button>
       </div>
 
-      {saved && <div className="card" style={{ background: '#f0fdf7', borderColor: '#b5e5cf' }}>{saved}</div>}
+      {saved && <Notice tone="ok" onClose={() => setSaved('')}>{saved}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
       {teach && (
         <div className="card">
           <h2>Teach your assistant</h2>
-          <p><strong>Question:</strong> {teach.question}</p>
-          <label>Your answer</label>
-          <textarea rows={4} autoFocus value={teach.answer}
+          <p className="quoted">{teach.question}</p>
+          <label htmlFor="answer">Your answer</label>
+          <textarea id="answer" rows={4} autoFocus value={teach.answer}
             onChange={(e) => setTeach({ ...teach, answer: e.target.value })}
-            placeholder="Write the answer you'd want a customer to receive…" />
+            placeholder="Write the answer you would want a customer to receive…" />
           <div className="mt row">
             <button onClick={() => void saveAnswer()} disabled={!teach.answer.trim()}>Add to knowledge</button>
             <button className="ghost" onClick={() => setTeach(null)}>Cancel</button>
@@ -87,52 +101,65 @@ export default function Conversations() {
       )}
 
       <div className="card">
-        {loading ? <p>Loading…</p> : sessions.length === 0 ? (
-          <p>{filter === 'attention'
-            ? 'Nothing needs attention — every question was answered from your knowledge.'
-            : 'No conversations yet. Share your assistant from the Deploy screen.'}</p>
+        {loading ? <Skeleton rows={5} /> : sessions.length === 0 ? (
+          filter === 'attention' ? (
+            <Empty title="Nothing needs attention"
+              action={<button className="ghost" onClick={() => setFilter('all')}>See all conversations</button>}>
+              Every question was answered from your knowledge. Come back after your assistant has been
+              busy for a while.
+            </Empty>
+          ) : (
+            <Empty title="No conversations yet"
+              action={<Link className="btn" to="/assistant/deploy">Put it on your website</Link>}>
+              Once your assistant is live on your site or shared as a link, every question customers
+              ask will appear here.
+            </Empty>
+          )
         ) : (
-          <table>
-            <thead><tr><th>First question</th><th>Messages</th><th>Signals</th><th>Last activity</th></tr></thead>
-            <tbody>
-              {sessions.map((s) => (
-                <Fragment key={s.sessionId}>
-                  <tr onClick={() => void open(s.sessionId)} style={{ cursor: 'pointer' }}>
-                    <td>{s.firstQuestion || <span className="hint">(no question)</span>}</td>
-                    <td>{s.messageCount}</td>
-                    <td>
-                      {s.unansweredCount > 0 && <span className="chip failed">{s.unansweredCount} unanswered</span>}{' '}
-                      {s.thumbsDownCount > 0 && <span className="chip processing">{s.thumbsDownCount} 👎</span>}{' '}
-                      {s.thumbsUpCount > 0 && <span className="chip ready">{s.thumbsUpCount} 👍</span>}
-                    </td>
-                    <td>{new Date(s.lastAt).toLocaleString()}</td>
-                  </tr>
-                  {openId === s.sessionId && (
-                    <tr>
-                      <td colSpan={4} style={{ background: '#fafbfd' }}>
-                        {messages.map((m, i) => (
-                          <div key={m.sk} style={{ marginBottom: 10 }}>
-                            <div className={`msg ${m.role === 'user' ? 'user' : 'bot'}`} style={{ maxWidth: '100%' }}>
-                              {m.text}
-                              {m.citations && m.citations.length > 0 && (
-                                <div className="cites">Sources: {m.citations.map((c) => c.name).join(', ')}</div>
+          <div className="scroll-x">
+            <table>
+              <thead><tr><th>First question</th><th>Messages</th><th>Signals</th><th>Last activity</th></tr></thead>
+              <tbody>
+                {sessions.map((s) => (
+                  <Fragment key={s.sessionId}>
+                    <tr onClick={() => void open(s.sessionId)} className="clickable"
+                      aria-expanded={openId === s.sessionId}>
+                      <td>{s.firstQuestion || <span className="meta">(no question)</span>}</td>
+                      <td>{s.messageCount}</td>
+                      <td className="nowrap">
+                        {s.unansweredCount > 0 && <span className="chip failed">{s.unansweredCount} unanswered</span>}{' '}
+                        {s.thumbsDownCount > 0 && <span className="chip processing">{s.thumbsDownCount} 👎</span>}{' '}
+                        {s.thumbsUpCount > 0 && <span className="chip ready">{s.thumbsUpCount} 👍</span>}
+                      </td>
+                      <td className="nowrap">{when(s.lastAt)}</td>
+                    </tr>
+                    {openId === s.sessionId && (
+                      <tr className="expanded">
+                        <td colSpan={4}>
+                          {messages.length === 0 ? <Skeleton rows={2} /> : messages.map((m, i) => (
+                            <div key={m.sk} className="transcript-turn">
+                              <div className={`msg ${m.role === 'user' ? 'user' : 'bot'}`}>
+                                {m.text}
+                                {m.citations && m.citations.length > 0 && (
+                                  <div className="cites">Sources: {m.citations.map((c) => c.name).join(', ')}</div>
+                                )}
+                              </div>
+                              {m.role === 'assistant' && (m.fallback || m.feedback === 'down') && (
+                                <button className="ghost mt-sm"
+                                  onClick={() => startTeaching(messages[i - 1]?.text ?? s.firstQuestion)}>
+                                  Add answer to knowledge
+                                </button>
                               )}
                             </div>
-                            {m.role === 'assistant' && (m.fallback || m.feedback === 'down') && (
-                              <button className="ghost" style={{ marginTop: 6 }}
-                                onClick={() => startTeaching(messages[i - 1]?.text ?? s.firstQuestion)}>
-                                Add answer to knowledge
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                          ))}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { createTenant, enableModule, logout } from '../api'
+import { createTenant, enableModule, explain, logout } from '../api'
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('')
@@ -13,9 +13,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     try {
       await createTenant(name)
       await enableModule('assistant')
+      // A brand-new workspace has nothing to answer from, so send the owner
+      // to Knowledge rather than an empty Playground. App.tsx reads this.
+      sessionStorage.setItem('mb.justOnboarded', '1')
       onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(explain(err))
       setBusy(false)
     }
   }
@@ -26,17 +29,23 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         <div className="logo">Maker<span>Bay</span></div>
         <div className="card">
           <h2>Name your workspace</h2>
-          <p>Usually your business name. Your AI assistant will be set up right away.</p>
+          <p>
+            Usually your business name. We will switch on your AI assistant straight away —
+            the next step is showing it your website so it can start answering.
+          </p>
           <form onSubmit={submit}>
-            <label>Business name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus placeholder="Acme Studio" />
+            <label htmlFor="biz">Business name</label>
+            <input id="biz" value={name} onChange={(e) => setName(e.target.value)} required autoFocus
+              placeholder="Acme Studio" />
             {error && <div className="error">{error}</div>}
             <div className="mt">
               <button disabled={busy}>{busy ? 'Setting up…' : 'Create workspace'}</button>
             </div>
           </form>
         </div>
-        <p className="hint"><a href="#" onClick={(e) => { e.preventDefault(); logout() }}>Sign out</a></p>
+        <p className="meta center">
+          <a href="#" onClick={(e) => { e.preventDefault(); logout() }}>Sign out</a>
+        </p>
       </div>
     </div>
   )
