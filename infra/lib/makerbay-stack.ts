@@ -251,7 +251,7 @@ export class MakerbayStack extends cdk.Stack {
     bus.grantPutEventsTo(coreFn)
 
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
-    for (const t of [entitlements, usage]) t.grantReadData(assistantFn)
+    for (const t of [users, entitlements, usage]) t.grantReadData(assistantFn)
     bus.grantPutEventsTo(assistantFn)
     knowledgeBucket.grantReadWrite(assistantFn, 'knowledge/*')
     assistantFn.addToRolePolicy(
