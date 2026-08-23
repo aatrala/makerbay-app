@@ -290,15 +290,24 @@ export class MakerbayStack extends cdk.Stack {
       resultsCacheTtl: cdk.Duration.minutes(5),
     })
 
+    // Explicit methods only: an ANY route would also capture the OPTIONS
+    // preflight and send it through the authorizer (401), breaking CORS.
+    const routeMethods = [
+      apigwv2.HttpMethod.GET,
+      apigwv2.HttpMethod.POST,
+      apigwv2.HttpMethod.PUT,
+      apigwv2.HttpMethod.DELETE,
+      apigwv2.HttpMethod.PATCH,
+    ]
     httpApi.addRoutes({
       path: '/v1/core/{proxy+}',
-      methods: [apigwv2.HttpMethod.ANY],
+      methods: routeMethods,
       integration: new HttpLambdaIntegration('CoreIntegration', coreFn),
       authorizer,
     })
     httpApi.addRoutes({
       path: '/v1/assistant/{proxy+}',
-      methods: [apigwv2.HttpMethod.ANY],
+      methods: routeMethods,
       integration: new HttpLambdaIntegration('AssistantIntegration', assistantFn),
       authorizer,
     })
