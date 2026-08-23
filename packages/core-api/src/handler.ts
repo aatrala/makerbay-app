@@ -9,6 +9,8 @@ import {
   getUser,
   listApiKeys,
   putApiKey,
+  MODULES,
+  PLATFORM_VERSION,
   SCOPES_BY_KEY_TYPE,
   setModuleEntitlement,
   slugify,
@@ -55,6 +57,14 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     const enableMatch = path.match(/^\/v1\/core\/modules\/([a-z0-9-]+)\/enable$/)
     if (method === 'POST' && enableMatch) return await enableModule(ctx, enableMatch[1])
     if (method === 'GET' && path === '/v1/core/usage') return await usage(ctx)
+    if (method === 'GET' && path === '/v1/core/version') {
+      return json(200, {
+        platform: PLATFORM_VERSION,
+        modules: MODULES.map((m) => ({
+          id: m.id, name: m.name, status: m.status, version: m.version,
+        })),
+      })
+    }
 
     return json(404, { error: 'not_found' })
   } catch (err) {

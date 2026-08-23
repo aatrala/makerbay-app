@@ -56,15 +56,93 @@ r/msp reseller threads, demand-side review-management threads, per-product
 complaint depth in live chat/SMS, disputed figures (Acuity + Podium current
 G2 ratings).
 
-## Pass 2 — Bright Data + Apify deep-dive (2026-08-23, in progress)
+## Pass 2 — Bright Data + Apify deep-dive (2026-08-23, complete)
 
-Now that Bright Data (unblocked G2/Reddit scraping) and Apify (structured
-Capterra/Trustpilot review pulls) are connected, pass 2 targets exactly the
-gaps above. Results will be appended here when the runs complete:
+Primary-source pass over the gaps pass 1 flagged: G2 pages scraped directly
+(Bright Data unlock), structured Capterra + Trustpilot reviews (Apify actors,
+~180 reviews, ~$0.15 total), Reddit via SERP snippets with real permalinks
+(full thread scraping blocked pending Bright Data KYC — see tooling notes).
 
-- [ ] Reddit deep-dive: vertical subs, agency/reseller, review-mgmt demand,
-      missed-call threads — real permalinks + verbatim quotes
-- [ ] G2 actual review text: Podium, Calendly, NiceJob, Tidio, Intercom,
-      Manychat critical reviews; settle Acuity/Podium rating disputes
-- [ ] Apify structured reviews: Capterra/Trustpilot pros/cons for Podium,
-      Calendly, Tidio, Fresha; star-distribution skew across platforms
+### Confirmed ratings (settles pass-1 disputes)
+
+| Product | G2 | Capterra | Trustpilot | Note |
+|---|---|---|---|---|
+| Podium | 4.5 / 2,110 | 4.3 / 526 | ~4.0 / ~274 | Cons tags: Expensive (70), Poor Support (63) |
+| Acuity | 4.6 / 410 | 4.8 / 5,756 | — | 90% of G2 reviewers small-business |
+| Calendly | 4.7 / 2,647 | 4.7 / 4,139 | 4.0 / 639 | Trustpilot 1-stars: post-pause billing |
+| Tidio | 4.6 / 1,961 | 4.7 / 590 | 3.8 / 224 | Widest platform skew of any product |
+| NiceJob | 4.8 / 419 | — | — | Zero 1-stars; markets "no contracts, $75/mo flat" |
+| Intercom/Fin | 4.5 / 3,904 | — | — | Cons tags: Missing Features (135), AI Limitations (117) |
+| ManyChat | 4.5 / 165 | — | — | "Active contact" billing-trap complaints |
+| Fresha | — | 4.8 / 1,447 | 4.8 / 6,752 | Trustpilot score manufactured via solicited support reviews |
+
+### The three universal complaint clusters
+
+Every incumbent's critical reviews repeat the same three themes:
+
+1. **Opaque / usage-trap billing** — ManyChat's fine-print "active contact"
+   definition; Fin's per-resolution fear ("I'm scared of the costs"); Tidio's
+   unnotified plan doubling (€11.25→€50, twice) and per-operator + paid
+   branding-removal stacking; Fresha's 20% "new client" fee charged on the
+   business's own QR-code and Google-ad clients.
+2. **Contract / cancellation friction** — Podium auto-renew traps, collections,
+   "cancel only after a meeting"; Intercom 12-month contracts; ManyChat phantom
+   cancellations; Calendly billing after pause.
+3. **Unreachable support** — weeks-long waits at Podium; Tidio/ManyChat
+   submit-into-the-void; Fresha months-long bank-account changes.
+
+### New wedges surfaced by pass 2
+
+- **Data portability as a trust feature.** Export complaints at five products:
+  Podium ("YOU CANNOT EXPORT YOUR OWN DATA"), Acuity (export crashes),
+  NiceJob (can't export reviews), Fin (no data export/dashboards), ManyChat
+  ("no access to OUR contacts"). One-click export of contacts, bookings, and
+  conversations is cheap, directly answers the top betrayal theme, and doubles
+  as a competitor-import onboarding wedge.
+- **White-label confirmed verbatim** — Calendly: "you can't mask the fact that
+  you're using calendly", "sticks out like a sore thumb"; plus its API is
+  read-only, so an API-first bookable platform is a real differentiator.
+- **Keep primitives in every module's base tier.** Bundle resentment ignites
+  when basics (texting, payments, branding removal) turn out to be paid
+  add-ons inside a bundle the buyer thought they owned.
+- **Incumbent AI is a complaint source, not a moat** — Fin "overhyped… replies
+  aren't helpful" + hallucination trust damage; Lyro "can barely answer";
+  Podium's voice AI detectably robotic. Grounded, cited answers + human
+  handoff is the counter-position for Module 1.
+- **Vertical churn is live right now:** Fresha ended "free forever" (base now
+  $20/mo + billed reminder texts); SimplePractice doubled its starter plan
+  $29→$49 (r/therapists revolt threads); Vagaro add-on fatigue; salon
+  practitioners literally urging a developer to "build a new Fresha/Vagaro"
+  (reddit.com/r/hairstylist/comments/1lha567).
+- **Agency white-label demand is direct, not inferred:** r/agency threads
+  request white-label review platforms (1f3zqi8) and white-label AI inbound
+  call assistants (1ljjijx); GHL users resell it while hating it; GHL's
+  missing WhatsApp conversational AI is a named defection reason (1h5jpup).
+
+### Verdict changes after pass 2
+
+- Booking = build next: **reinforced** (two-sided wedge: Calendly
+  white-label/paywalled basics/seats + Fresha commission/fee creep; verticals
+  churning).
+- Messaging = channels: **confirmed, WhatsApp emphasized** (Tidio's most-cited
+  functional gap; GHL defection reason; Mexico/LatAm quote: clients live on
+  WhatsApp, not the widget).
+- Reviews = add: **upgraded**. Podium's loop is loved and churn is purely
+  commercial — defectors are harvestable; NiceJob proves flat/no-contract
+  wins at $75/mo and MakerBay can undercut it. Mind the CRM-integration gap
+  (Jobber/QuickBooks/HubSpot named).
+- AI receptionist = later: **unchanged** (real pain, astroturf-heavy space,
+  wrong-booking risk is a stated adoption blocker).
+
+### Operational notes (for the next sweep)
+
+- Bright Data: Reddit (and mirrors) refuse scraping without account KYC —
+  complete brightdata.com/cp/kyc to unlock full threads. `scrape_batch` was
+  flaky against G2 (timeouts/502s); single `scrape_as_markdown` calls
+  succeeded 7/7. G2's `filters[nps_score][]=N` URL filter works for
+  low-star-only pages.
+- Apify: `automation-lab/trustpilot` good ($0.005 start + ~$0.0006/review;
+  returned 0 rows for podium.com though); `memo23/capterra-scraper` good
+  ($0.01 start + $0.0009/row; sort order not strictly respected);
+  `azzouzana/capterra-reviews-scraper` silently caps free accounts at ~5
+  results — avoid.

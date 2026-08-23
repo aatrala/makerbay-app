@@ -225,6 +225,28 @@ export class MakerbayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
 
+    // ── Staff identity (separate from customers on purpose) ──────────────
+    // A customer token fails signature validation against this pool, so admin
+    // access cannot be reached by a claims check somebody forgot to add.
+    const staffPool = new cognito.UserPool(this, 'StaffPool', {
+      userPoolName: 'makerbay-staff',
+      selfSignUpEnabled: false,
+      signInAliases: { email: true },
+      mfa: cognito.Mfa.REQUIRED,
+      mfaSecondFactor: { otp: true, sms: false },
+      passwordPolicy: { minLength: 14, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: true },
+      accountRecovery: cognito.AccountRecovery.NONE,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+    const staffClient = staffPool.addClient('AdminPortal', {
+      authFlows: { userPassword: true, userSrp: true },
+      accessTokenValidity: cdk.Duration.minutes(60),
+      idTokenValidity: cdk.Duration.minutes(60),
+      refreshTokenValidity: cdk.Duration.hours(8),
+    })
+    const staffDirectory = table('Staff', 'staffSub')
+    const adminAudit = table('AdminAudit', 'pk', 'sk')
+
     // ── Identity ─────────────────────────────────────────────────────────
     const userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: 'makerbay',
@@ -328,6 +350,16 @@ export class MakerbayStack extends cdk.Stack {
       { timeoutSeconds: 29, memorySize: 512 },
     )
 
+    const adminEnv = {
+      ...tableEnv,
+      TABLE_STAFF: staffDirectory.tableName,
+      TABLE_ADMINAUDIT: adminAudit.tableName,
+      STAFF_POOL_ID: staffPool.userPoolId,
+      STAFF_CLIENT_ID: staffClient.userPoolClientId,
+    }
+    const adminAuthorizerFn = fn('AdminAuthorizerFn', 'packages/admin-api/src/authorizer.ts', adminEnv)
+    const adminApiFn = fn('AdminApiFn', 'packages/admin-api/src/handler.ts', adminEnv)
+
     const usageAggregatorFn = fn('UsageAggregatorFn', 'packages/core-api/src/usage-aggregator.ts', {
       TABLE_USAGE: usage.tableName,
     })
@@ -420,6 +452,14 @@ export class MakerbayStack extends cdk.Stack {
         ],
       }),
     )
+
+    for (const t of [tenants, users, apiKeys, entitlements, grants, usage, sources, conversations]) {
+      t.grantReadData(adminApiFn)
+    }
+    grants.grantReadWriteData(adminApiFn)
+    staffDirectory.grantReadData(adminAuthorizerFn)
+    // PutItem only: this Lambda cannot rewrite or delete its own audit trail.
+    adminAudit.grant(adminApiFn, 'dynamodb:PutItem')
 
     usage.grantReadWriteData(usageAggregatorFn)
 
@@ -639,6 +679,41 @@ export class MakerbayStack extends cdk.Stack {
       target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(siteDistribution)),
     })
 
+    // ── Admin API on its own gateway ─────────────────────────────────────
+    const adminApi = new apigwv2.HttpApi(this, 'AdminApi', {
+      apiName: 'makerbay-admin',
+      corsPreflight: {
+        allowOrigins: [`https://admin.${DOMAIN}`],
+        allowMethods: [apigwv2.CorsHttpMethod.GET, apigwv2.CorsHttpMethod.POST],
+        allowHeaders: ['authorization', 'content-type'],
+      },
+    })
+    adminApi.addRoutes({
+      path: '/admin/v1/{proxy+}',
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('AdminIntegration', adminApiFn),
+      authorizer: new HttpLambdaAuthorizer('StaffAuthorizer', adminAuthorizerFn, {
+        responseTypes: [HttpLambdaResponseType.SIMPLE],
+        identitySource: ['$request.header.Authorization'],
+        resultsCacheTtl: cdk.Duration.minutes(1),
+      }),
+    })
+    const adminDomain = new apigwv2.DomainName(this, 'AdminApiDomain', {
+      domainName: `admin-api.${DOMAIN}`,
+      certificate,
+    })
+    new apigwv2.ApiMapping(this, 'AdminApiMapping', { api: adminApi, domainName: adminDomain })
+    new route53.ARecord(this, 'AdminApiAlias', {
+      zone,
+      recordName: 'admin-api',
+      target: route53.RecordTarget.fromAlias(
+        new route53Targets.ApiGatewayv2DomainProperties(
+          adminDomain.regionalDomainName,
+          adminDomain.regionalHostedZoneId,
+        ),
+      ),
+    })
+
     // mcp.makerbay.app -> the same HTTP API
     const mcpDomain = new apigwv2.DomainName(this, 'McpDomain', {
       domainName: `mcp.${DOMAIN}`,
@@ -657,6 +732,9 @@ export class MakerbayStack extends cdk.Stack {
     })
 
     // ── Outputs ──────────────────────────────────────────────────────────
+    new cdk.CfnOutput(this, 'AdminApiUrl', { value: `https://admin-api.${DOMAIN}/admin/v1` })
+    new cdk.CfnOutput(this, 'StaffPoolId', { value: staffPool.userPoolId })
+    new cdk.CfnOutput(this, 'StaffClientId', { value: staffClient.userPoolClientId })
     new cdk.CfnOutput(this, 'McpUrl', { value: `https://mcp.${DOMAIN}/mcp` })
     new cdk.CfnOutput(this, 'StreamUrl', { value: `https://stream.${DOMAIN}` })
     new cdk.CfnOutput(this, 'StreamFunctionUrl', { value: streamUrl.url })

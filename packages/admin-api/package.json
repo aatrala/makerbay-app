@@ -1,0 +1,11 @@
+{
+  "name": "@makerbay/admin-api",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "@makerbay/core": "0.1.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "aws-jwt-verify": "^4.0.1"
+  },
+  "devDependencies": { "@types/aws-lambda": "^8.10.145" }
+}
