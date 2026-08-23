@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, explain } from '../api'
-import { Notice, Skeleton } from '../ui'
+import { api, explain, Notice, Skeleton } from '@makerbay/web-kit'
 
 interface Config {
   name: string

@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, explain } from '../api'
-import { Empty, Notice, Skeleton, when } from '../ui'
+import { api, explain, Empty, Notice, Skeleton, when } from '@makerbay/web-kit'
 
 interface SessionRow {
   sessionId: string

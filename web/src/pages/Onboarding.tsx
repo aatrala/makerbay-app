@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { createTenant, enableModule, explain, logout } from '../api'
+import { createTenant, enableModule, explain, logout } from '@makerbay/web-kit'
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('')

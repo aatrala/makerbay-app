@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { confirmSignUp, login, signUp } from '../api'
+import { confirmSignUp, login, signUp } from '@makerbay/web-kit'
 
 type Mode = 'login' | 'signup' | 'confirm'
 

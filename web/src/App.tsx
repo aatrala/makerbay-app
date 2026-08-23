@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { getBillingSummary, getMe, isLoggedIn, type Me } from './api'
+import { getBillingSummary, getMe, isLoggedIn, type Me } from '@makerbay/web-kit'
+import { enabledModules, landingPath } from './modules'
 import Login from './pages/Login'
 import Onboarding from './pages/Onboarding'
 import Shell from './pages/Shell'
-import Knowledge from './pages/Knowledge'
-import Behavior from './pages/Behavior'
-import Playground from './pages/Playground'
-import DeployPage from './pages/DeployPage'
-import Conversations from './pages/Conversations'
-import Insights from './pages/Insights'
 import Billing from './pages/Billing'
 import UsagePage from './pages/UsagePage'
 
@@ -39,21 +34,19 @@ export default function App() {
 
   if (!me?.tenant) return <Onboarding onDone={() => { setLoading(true); void reload() }} />
 
-  // A workspace created moments ago has no knowledge, so an empty Playground
-  // would be the worst possible first screen. Send new owners to Knowledge.
-  const fresh = sessionStorage.getItem('mb.justOnboarded') === '1'
-  if (fresh) sessionStorage.removeItem('mb.justOnboarded')
+  // A workspace created moments ago has nothing set up, so the module decides
+  // where its owner should start. Onboarding.tsx sets this flag.
+  const firstRun = sessionStorage.getItem('mb.justOnboarded') === '1'
+  if (firstRun) sessionStorage.removeItem('mb.justOnboarded')
+  const landing = landingPath(me, firstRun)
+
+  const modules = enabledModules(me)
 
   return (
     <Routes>
-      <Route element={<Shell me={me} stripeMode={stripeMode} />}>
-        <Route path="/" element={<Navigate to={fresh ? '/assistant/knowledge' : '/assistant/playground'} replace />} />
-        <Route path="/assistant/knowledge" element={<Knowledge />} />
-        <Route path="/assistant/behavior" element={<Behavior />} />
-        <Route path="/assistant/playground" element={<Playground />} />
-        <Route path="/assistant/deploy" element={<DeployPage me={me} />} />
-        <Route path="/assistant/conversations" element={<Conversations />} />
-        <Route path="/assistant/insights" element={<Insights />} />
+      <Route element={<Shell me={me} modules={modules} stripeMode={stripeMode} />}>
+        <Route path="/" element={<Navigate to={landing} replace />} />
+        {modules.map((m) => m.routes({ me }))}
         <Route path="/usage" element={<UsagePage me={me} />} />
         <Route path="/billing" element={<Billing />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, explain, type Me } from '../api'
-import { Notice, Skeleton } from '../ui'
+import { api, explain, type Me, Notice, Skeleton } from '@makerbay/web-kit'
 
 // Metric keys are a stable API contract; these are the names people use.
 // An unmapped key falls back to a readable form of the key itself.

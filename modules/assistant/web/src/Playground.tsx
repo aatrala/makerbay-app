@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { api, explain, streamChat } from '../api'
+import { api, explain, streamChat } from '@makerbay/web-kit'
 
 interface ChatMsg {
   role: 'user' | 'bot'

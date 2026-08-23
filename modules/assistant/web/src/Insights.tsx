@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, explain } from '../api'
-import { Empty, Notice, Skeleton } from '../ui'
+import { api, explain, Empty, Notice, Skeleton } from '@makerbay/web-kit'
 
 interface InsightsData {
   totals: {

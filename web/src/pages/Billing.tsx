@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, api, explain, resetBilling } from '../api'
-import { Notice, Skeleton } from '../ui'
+import { ApiError, api, explain, resetBilling, Notice, Skeleton } from '@makerbay/web-kit'
 
 interface Plan {
   id: string

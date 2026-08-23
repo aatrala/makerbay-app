@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { logout, type Me } from '../api'
+import { logout, type DashboardModule, type Me } from '@makerbay/web-kit'
 
-export default function Shell({ me, stripeMode }: { me: Me; stripeMode?: 'test' | 'live' | null }) {
-  const modules = me.entitlements?.modules ?? {}
+export default function Shell({ me, modules, stripeMode }: {
+  me: Me
+  modules: DashboardModule[]
+  stripeMode?: 'test' | 'live' | null
+}) {
   const [open, setOpen] = useState(false)
   const location = useLocation()
 
@@ -22,17 +25,14 @@ export default function Shell({ me, stripeMode }: { me: Me; stripeMode?: 'test' 
 
         <div className="side-body">
           <nav>
-            {modules.assistant?.enabled && (
-              <>
-                <div className="navlabel">Assistant</div>
-                <NavLink to="/assistant/playground">Playground</NavLink>
-                <NavLink to="/assistant/knowledge">Knowledge</NavLink>
-                <NavLink to="/assistant/behavior">Behavior</NavLink>
-                <NavLink to="/assistant/deploy">Deploy</NavLink>
-                <NavLink to="/assistant/conversations">Conversations</NavLink>
-                <NavLink to="/assistant/insights">Insights</NavLink>
-              </>
-            )}
+            {modules.map((m) => (
+              <Fragment key={m.id}>
+                <div className="navlabel">{m.label}</div>
+                {m.nav.map((item) => (
+                  <NavLink key={item.to} to={item.to}>{item.label}</NavLink>
+                ))}
+              </Fragment>
+            ))}
             <div className="navlabel">Workspace</div>
             <NavLink to="/usage">Usage</NavLink>
             <NavLink to="/billing">Billing</NavLink>

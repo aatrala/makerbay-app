@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, API_BASE, CHAT_BASE, WIDGET_BASE, explain, type Me } from '../api'
-import { Empty, Notice, Skeleton, when } from '../ui'
+import { api, API_BASE, CHAT_BASE, WIDGET_BASE, explain, type Me, Empty, Notice, Skeleton, when } from '@makerbay/web-kit'
 
 interface ApiKey {
   keyId: string

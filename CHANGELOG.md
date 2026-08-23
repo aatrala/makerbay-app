@@ -9,6 +9,14 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 1.6.0 - 2026-08-23
+
+- Changed `platform` Module dashboards now live with their module rather than
+  in the shell. Adding a module is an import and an array entry; the shell
+  knows nothing about what any module does.
+- Added `platform` A shared UI kit that module screens build on, so the second
+  module inherits the design system instead of re-implementing it.
+
 ## 1.5.0 - 2026-08-23
 
 - Added `platform` Module manifests now carry their own marketing copy, so

@@ -62,3 +62,24 @@ export const bytes = (n?: number | null): string =>
     : n < 1024 ? `${n} B`
       : n < 1048576 ? `${(n / 1024).toFixed(0)} KB`
         : `${(n / 1048576).toFixed(1)} MB`
+
+// ── Module registration ──────────────────────────────────────────────────
+// A module hands the shell a nav group and its routes. The shell knows
+// nothing about what a module does, and a module never edits the shell.
+
+import type { Me } from './api'
+
+export interface ModuleNavItem {
+  to: string
+  label: string
+}
+
+export interface DashboardModule {
+  /** Must match the manifest id, so entitlements line up. */
+  id: string
+  /** Heading above this module's nav group. */
+  label: string
+  nav: ModuleNavItem[]
+  /** Rendered inside the shell's <Routes>. Given the signed-in context. */
+  routes: (ctx: { me: Me }) => ReactNode
+}
