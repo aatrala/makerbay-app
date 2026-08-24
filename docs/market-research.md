@@ -5,6 +5,14 @@ report (evidence tables, signal matrix): the "The Next Module" artifact —
 https://claude.ai/code/artifact/94eb952a-31bf-4fe9-bf7e-ac9fc3daeb3c
 Tooling used to gather this: [research-tooling.md](research-tooling.md).
 
+> **Superseded note (2026-08-24):** the recommendations below fed the decision
+> but are not the final plan. The settled portfolio lives in
+> `modules/*/module.json` (drives makerbay.app/roadmap): Contacts (core) →
+> Requests → Bookings → Quotes → Reviews. Messaging was dropped as a module;
+> help centre and lead-capture became features; the customer voice digest
+> became an Insights feature (SPEC.md §4.6). This file stays as the evidence
+> record.
+
 ## Pass 1 — four-platform sweep (2026-08-23)
 
 Sources: Product Hunt launches 2021-2026, G2 (via search snippets;
