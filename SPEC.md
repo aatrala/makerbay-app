@@ -157,7 +157,8 @@ the MakerBay dashboard, via REST API with tenant API keys, and later via MCP.
 - **Conversations:** transcript list, filters (`fallback`, `thumbs-down`), per-item
   **"Add answer to knowledge"** action (creates a text source).
 - **Insights:** conversations/day, resolution rate (1 − fallback rate), top
-  questions (MVP: most recent fallback questions; clustering later).
+  questions (MVP: most recent fallback questions; clustering later), and the
+  monthly **customer voice digest** (§4.6).
 - **Usage:** month-to-date metrics vs plan limits.
 
 ### 4.5 API surface (v1)
@@ -176,6 +177,38 @@ the MakerBay dashboard, via REST API with tenant API keys, and later via MCP.
 | `POST /v1/assistant/chat` | any key/JWT (scope `chat:invoke`) | The product |
 | `POST /v1/assistant/feedback` | same | 👍/👎 on a message |
 | `GET /v1/assistant/conversations` | Cognito | Transcripts |
+| `GET /v1/assistant/insights/digest` | Cognito | Customer voice digest (§4.6) |
+
+### 4.6 Customer voice digest (Insights feature)
+
+A monthly, AI-clustered summary of what customers actually said. This is a
+**feature of Insights, free on every plan** — no entitlement, no separate
+price. It shares other modules' data and surfaces, which is the
+module-vs-feature test. Rationale: the job Canny-style feedback tools sell to
+SaaS product teams, reshaped for SMBs — "what are customers asking, what
+couldn't the bot answer, what changed since last month" (see
+docs/market-research.md, 2026-08).
+
+- **Inputs (grow as modules ship):** assistant conversations — fallback
+  questions, thumbs-down exchanges, question themes. Once the Reviews module
+  ships (§5): review text and private feedback. Later modules add their own
+  signals.
+- **Pipeline:** monthly EventBridge Scheduler rule → digest Lambda → pull the
+  month's tenant-scoped records → one batched Bedrock call per tenant
+  (cheapest adequate Claude tier) for clustering + summarisation → store in
+  `Digests` table (PK `tenantId`, SK `yyyy-mm`).
+- **Digest contents:** 3-7 themes, each with a label, count, trend vs. prior
+  month, 2-3 verbatim examples, and a suggested action — fallback themes
+  deep-link to the existing "Add answer to knowledge" flow.
+- **Cost guardrails:** tenants under an activity floor (fewer than 20
+  conversations and no reviews that month) get a counts-only digest with no
+  model call; input tokens capped per tenant per run. Emits metering event
+  `assistant.digest.generated` (standard usage envelope).
+- **Surface:** Insights screen shows the latest digest plus history;
+  `GET /v1/assistant/insights/digest?month=yyyy-mm`. Email delivery deferred
+  until SES ships (same trigger as escalation/lead-capture).
+- **Privacy:** derived only from the tenant's own data; the standard tenant
+  isolation tests apply to `Digests` like any other table.
 
 ---
 
