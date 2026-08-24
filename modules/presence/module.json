@@ -4,8 +4,8 @@
   "tagline": "A page that gets you found, answers questions and takes bookings",
   "status": "live",
   "version": {
-    "api": "1.1.0",
-    "web": "1.1.0"
+    "api": "1.2.0",
+    "web": "1.2.0"
   },
   "routes": [
     "/v1/presence/*",

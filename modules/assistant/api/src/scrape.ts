@@ -188,6 +188,54 @@ export function extractText(html: string): { title: string; text: string } {
   return { title, text }
 }
 
+const looksLikeHtml = (body: string) => /<!doctype html|<html[\s>]/i.test(body.slice(0, 300))
+
+/**
+ * Docs sites often serve a markdown twin of each page (page.md, or content
+ * negotiation on Accept: text/markdown). Worth one cheap try before telling
+ * the owner their page is unreadable.
+ */
+async function markdownFallback(finalUrl: string): Promise<ScrapedPage | undefined> {
+  const base = finalUrl.replace(/\/$/, '')
+  for (const candidate of [`${base}.md`, `${base}/index.md`]) {
+    try {
+      const { url, body } = await safeFetch(candidate, 'text/markdown,text/plain;q=0.9')
+      const text = body.trim()
+      if (!looksLikeHtml(text) && text.length >= 200) {
+        const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim()
+        return { url, title: title || url, text, charCount: text.length }
+      }
+    } catch {
+      // next candidate
+    }
+  }
+  return undefined
+}
+
+/**
+ * Next.js embeds the rendered page's data as JSON in __NEXT_DATA__. When the
+ * visible HTML is an empty shell, the words are often all in there - pull out
+ * the human-sized strings rather than declaring the page unreadable.
+ */
+export function nextDataText(html: string): string {
+  const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i)
+  if (!m) return ''
+  try {
+    const strings: string[] = []
+    const walk = (v: unknown): void => {
+      if (typeof v === 'string') {
+        const s = v.trim()
+        if (s.split(/\s+/).length >= 4 && !/^(https?:|\/|\{|\[)/.test(s)) strings.push(s)
+      } else if (Array.isArray(v)) v.forEach(walk)
+      else if (v && typeof v === 'object') Object.values(v).forEach(walk)
+    }
+    walk(JSON.parse(m[1]))
+    return [...new Set(strings)].join('\n')
+  } catch {
+    return ''
+  }
+}
+
 export async function scrapePage(rawUrl: string): Promise<ScrapedPage> {
   const url = await assertPublicUrl(rawUrl)
   if (!(await robotsAllows(url))) {
@@ -196,23 +244,36 @@ export async function scrapePage(rawUrl: string): Promise<ScrapedPage> {
 
   const { url: finalUrl, body, contentType } = await safeFetch(url.toString(), 'text/html,text/plain;q=0.9,*/*;q=0.8')
 
-  if (contentType.includes('text/plain') || finalUrl.endsWith('.txt')) {
+  if ((contentType.includes('text/plain') || finalUrl.endsWith('.txt')) && !looksLikeHtml(body)) {
     const text = body.trim()
     return { url: finalUrl, title: finalUrl.split('/').pop() || finalUrl, text, charCount: text.length }
   }
-  if (!contentType.includes('html') && contentType) {
+  if (!contentType.includes('html') && !contentType.includes('text/plain') && contentType) {
     throw new Error(`That URL returned ${contentType.split(';')[0]}, which cannot be read as a web page yet.`)
   }
 
   const { title, text } = extractText(body)
+  if (text.length >= 200) {
+    return { url: finalUrl, title: title || finalUrl, text, charCount: text.length }
+  }
+
+  // The visible HTML is nearly empty - almost always a JavaScript-drawn page.
+  // Two honest rescues before giving up: a markdown twin, then Next.js data.
+  const md = await markdownFallback(finalUrl)
+  if (md) return md
+
+  const fromNextData = nextDataText(body)
+  if (fromNextData.length >= 200) {
+    return { url: finalUrl, title: title || finalUrl, text: fromNextData, charCount: fromNextData.length }
+  }
+
   return {
     url: finalUrl,
     title: title || finalUrl,
     text,
     charCount: text.length,
-    // A near-empty page almost always means the content is drawn by
-    // JavaScript. Saying so beats storing an empty document silently.
-    warning: text.length < 200 ? 'looks_javascript_rendered' : undefined,
+    // Saying so beats storing an empty document silently.
+    warning: 'looks_javascript_rendered',
   }
 }
 
@@ -239,7 +300,11 @@ export async function discoverPages(rawUrl: string, limit = 60): Promise<{ urls:
     const { body } = await safeFetch(`${origin}/llms.txt`, 'text/plain')
     const links = [...body.matchAll(/\((https?:\/\/[^)\s]+)\)/g)].map((m) => m[1])
     const pages = links.filter((u) => u.startsWith(origin))
-    if (pages.length > 0) return { urls: [...new Set(pages)].slice(0, limit), source: '/llms.txt' }
+    if (pages.length > 0) {
+      // llms.txt itself is written for machine readers and is often the best
+      // single document on the site - offer it first, ahead of its links.
+      return { urls: [...new Set([`${origin}/llms.txt`, ...pages])].slice(0, limit), source: '/llms.txt' }
+    }
   } catch {
     // fall through
   }

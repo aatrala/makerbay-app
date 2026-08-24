@@ -29,6 +29,10 @@ export interface PresenceConfigRow {
    * brand, and we never cross-domain canonical.
    */
   websiteUrl?: string
+  /** Page look: accent colour (falls back to the assistant brand colour). */
+  accentColor?: string
+  /** Page look: one of the named styles in render.ts THEMES. */
+  themeStyle?: 'fresh' | 'warm' | 'bold'
   /** Presence Pro: the page on the tenant's own domain. See domain.ts. */
   customDomain?: string
   domainCertArn?: string

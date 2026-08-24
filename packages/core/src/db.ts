@@ -50,6 +50,36 @@ export async function getTenantBySlug(slug: string): Promise<TenantRow | undefin
   return r.Items?.[0] as TenantRow | undefined
 }
 
+/**
+ * Rename a workspace's public address. The bySlug index follows the
+ * attribute, so old links die the moment this lands - the caller owns
+ * warning the user about that.
+ */
+export async function updateTenantSlug(tenantId: string, slug: string): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.tenants(),
+      Key: { tenantId },
+      UpdateExpression: 'SET slug = :s',
+      ExpressionAttributeValues: { ':s': slug },
+      ConditionExpression: 'attribute_exists(tenantId)',
+    }),
+  )
+}
+
+export async function updateTenantName(tenantId: string, name: string): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.tenants(),
+      Key: { tenantId },
+      UpdateExpression: 'SET #n = :n',
+      ExpressionAttributeNames: { '#n': 'name' },
+      ExpressionAttributeValues: { ':n': name },
+      ConditionExpression: 'attribute_exists(tenantId)',
+    }),
+  )
+}
+
 export async function createTenant(tenant: TenantRow, owner: UserRow): Promise<void> {
   await ddb.send(
     new PutCommand({

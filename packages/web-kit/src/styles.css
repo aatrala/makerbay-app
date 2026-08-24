@@ -323,3 +323,14 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
   .facts dd { margin-bottom: 8px; }
   .trunc { max-width: 22ch; }
 }
+
+/* ── Checklist (Your page, and any module with a setup path) ─────────── */
+.checklist { list-style: none; margin: 0; padding: 0; }
+.checklist li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.checklist li:last-child { border-bottom: none; }
+.checklist li > span:first-child {
+  display: inline-block; width: 22px; text-align: center; font-weight: 700;
+}
+.checklist li.done { color: var(--muted); }
+.checklist li.done > span:first-child { color: var(--ok); }
+.checklist li.soon > span:first-child { color: var(--muted); }

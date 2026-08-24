@@ -448,6 +448,8 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_BOOKINGCONFIG: bookingConfig.tableName,
       TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
       TABLE_REVIEWS: reviews.tableName,
+      TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
+      TABLE_QUOTESCONFIG: quotesConfig.tableName,
     })
     const visibilityFn = fn('VisibilityApiFn', 'modules/visibility/api/src/handler.ts', {
       ...moduleEnv,
@@ -714,7 +716,7 @@ export class MakerbayStack extends cdk.Stack {
     bus.grantPutEventsTo(rescueProcessorFn)
     rescueProcessorFn.addToRolePolicy(sesSendPolicy)
     // Read-only views: presence renders what other modules own, never writes it.
-    for (const t of [bookingServices, bookingConfig, assistantConfig, reviews, tenants, users, entitlements, grants]) {
+    for (const t of [bookingServices, bookingConfig, assistantConfig, reviews, visibilityConfig, quotesConfig, tenants, users, entitlements, grants]) {
       t.grantReadData(presenceFn)
     }
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)

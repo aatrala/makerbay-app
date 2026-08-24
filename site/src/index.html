@@ -18,10 +18,9 @@
   <div class="wrap">
     <a class="brand" href="/">Maker<span>Bay</span></a>
     <nav>
-      <a href="/modules/assistant">Assistant</a>
-      <a href="/#modules">Modules</a>
-      <a href="/roadmap">Roadmap</a>
+      <a href="#journey">How it works</a>
       <a href="/pricing">Pricing</a>
+      <a class="signin" href="https://app.makerbay.app">Sign in</a>
       <a class="btn" href="https://app.makerbay.app">Get started</a>
     </nav>
   </div>
@@ -40,7 +39,7 @@
       </p>
       <div class="cta">
         <a class="btn lg" href="https://app.makerbay.app">Start free</a>
-        <a class="btn lg ghost" href="#journey">See how it works</a>
+        <a class="btn lg ghost" href="https://demo.makerbay.app" rel="noopener">See a live example page</a>
       </div>
       <small>Free plan, no card required · Live in about ten minutes</small>
     </div>
@@ -135,6 +134,29 @@
         <p>No website, no time to build one. Your MakerBay page exists the moment your workspace does — services, hours, a booking button and an assistant answering questions while you are at your day job.</p>
         <p class="p-start">Start with: <a href="/modules/presence">Your page</a> and <a href="/modules/assistant">the assistant</a></p>
       </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>See it for real</h2>
+      <p>Not mockups — the actual product. The example page is live; open it, book a slot, ask it something.</p>
+    </div>
+    <div class="shots">
+      <figure>
+        <a href="https://demo.makerbay.app" rel="noopener"><img src="/assets/shots/page.png" alt="A live MakerBay business page with services, reviews and a booking button" loading="lazy" /></a>
+        <figcaption>Your page — <a href="https://demo.makerbay.app" rel="noopener">this one is live</a></figcaption>
+      </figure>
+      <figure>
+        <img src="/assets/shots/booking.png" alt="The booking flow where a customer picks a real free time slot" loading="lazy" />
+        <figcaption>Customers pick a real free slot</figcaption>
+      </figure>
+      <figure>
+        <img src="/assets/shots/invoice.png" alt="A printable invoice generated from an accepted quote" loading="lazy" />
+        <figcaption>An accepted quote becomes an invoice</figcaption>
+      </figure>
     </div>
   </div>
 </section>
@@ -285,16 +307,40 @@
 <section class="soft">
   <div class="wrap faq">
     <h2>Questions</h2>
-    <h3>Do I need a website?</h3>
-    <p>No. Every workspace gets a real page at makerbay.app with your services, hours and a booking button, plus a hosted chat page you can share as a link or QR code. If you do have a site, adding the chat bubble is one line of HTML.</p>
-    <h3>I'm not technical. How hard is this?</h3>
-    <p>If you can attach a file to an email, you can set this up. Nothing needs code except the optional chat bubble, which is one line your web person pastes once.</p>
-    <h3>What happens when the assistant doesn't know something?</h3>
-    <p>It says so, in wording you choose, rather than guessing. Those questions are collected for you so you can answer them once and have it handled from then on.</p>
-    <h3>Is my information kept separate from other businesses?</h3>
-    <p>Yes. Every document, contact and conversation is tied to your workspace, and answers are only ever drawn from your own documents.</p>
-    <h3>Can my developer use it directly?</h3>
-    <p>Yes. Everything the dashboard does is available over a REST API with your own keys.</p>
+    <div class="faq-cats">
+      <details open>
+        <summary>Getting started</summary>
+        <h3>Do I need a website?</h3>
+        <p>No. Every workspace gets a real page at makerbay.app with your services, hours and a booking button, plus a hosted chat page you can share as a link or QR code. If you do have a site, adding the chat bubble is one line of HTML.</p>
+        <h3>I'm not technical. How hard is this?</h3>
+        <p>If you can attach a file to an email, you can set this up. Nothing needs code except the optional chat bubble, which is one line your web person pastes once.</p>
+        <h3>How long until it's working?</h3>
+        <p>About ten minutes: create the workspace, add your FAQ or price list, try it in the playground, share the link.</p>
+      </details>
+      <details>
+        <summary>The assistant</summary>
+        <h3>What happens when it doesn't know something?</h3>
+        <p>It says so, in wording you choose, rather than guessing. Those questions are collected for you so you can answer them once and have it handled from then on.</p>
+        <h3>Will it invent prices or policies?</h3>
+        <p>No. Every reply is grounded in the documents you uploaded, with sources shown.</p>
+      </details>
+      <details>
+        <summary>Pricing and plans</summary>
+        <h3>What's actually free?</h3>
+        <p>Your page, Contacts, Requests, Quotes with invoices, Get found and the help centre — free, with no trial clock. You pay for the assistant, Bookings and Reviews, and only once you switch them on.</p>
+        <h3>What happens when I hit a limit?</h3>
+        <p>You are told in the dashboard, plainly, before anything stops. The caps exist to bound our costs, not to push you into upgrading.</p>
+      </details>
+      <details>
+        <summary>Your data</summary>
+        <h3>Is my information kept separate from other businesses?</h3>
+        <p>Yes. Every document, contact and conversation is tied to your workspace, and answers are only ever drawn from your own documents.</p>
+        <h3>Can I get my data out?</h3>
+        <p>Yes. Contacts exports to CSV whenever you like, on every plan. A customer list you cannot take with you is not really yours.</p>
+        <h3>Can my developer use it directly?</h3>
+        <p>Yes. Everything the dashboard does is available over a REST API with your own keys.</p>
+      </details>
+    </div>
   </div>
 </section>
 
@@ -307,15 +353,30 @@
 </section>
 
 <footer>
-  <div class="wrap">
-    <p>© 2026 Appa Technologies Pty Ltd</p>
-    <nav>
-      <a href="/modules/assistant">Assistant</a>
-      <a href="/roadmap">Roadmap</a>
-      <a href="/changelog">Changelog</a>
+  <div class="wrap foot-grid">
+    <div class="foot-col foot-brand">
+      <a class="brand" href="/">Maker<span>Bay</span></a>
+      <p>Modular software for trades and service businesses. Be found, answered and booked — without lifting a finger.</p>
+    </div>
+    <div class="foot-col">
+      <h4>Product</h4>
+      <a href="#modules">Modules</a>
       <a href="/pricing">Pricing</a>
+      <a href="https://demo.makerbay.app" rel="noopener">Live example page</a>
+    </div>
+    <div class="foot-col">
+      <h4>What's new</h4>
+      <a href="/changelog">Changelog</a>
+      <a href="/roadmap">Roadmap</a>
+    </div>
+    <div class="foot-col">
+      <h4>Account</h4>
       <a href="https://app.makerbay.app">Sign in</a>
-    </nav>
+      <a href="https://app.makerbay.app">Create a workspace</a>
+    </div>
+  </div>
+  <div class="wrap foot-legal">
+    <p>© 2026 Appa Technologies Pty Ltd</p>
   </div>
 </footer>
 

@@ -1,7 +1,9 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import {
+  ddb,
   getEffectiveEntitlement,
   getTenant,
   getTenantBySlug,
@@ -119,13 +121,18 @@ async function renderFor(
   config: PresenceConfigRow,
   canonicalUrl?: string,
 ): Promise<APIGatewayProxyResultV2> {
-  const [services, hours, assistant, assistantEnt, bookingEnt, reviewsEnt] = await Promise.all([
+  const [services, hours, assistant, assistantEnt, bookingEnt, reviewsEnt, currency] = await Promise.all([
     activeServices(tenant.tenantId),
     bookingHours(tenant.tenantId),
     assistantView(tenant.tenantId),
     getEffectiveEntitlement(tenant.tenantId, 'assistant'),
     getEffectiveEntitlement(tenant.tenantId, 'booking'),
     getEffectiveEntitlement(tenant.tenantId, 'reviews'),
+    // The workspace currency lives in Quotes settings; prices on the page
+    // must match what a quote would say.
+    ddb.send(new GetCommand({ TableName: process.env.TABLE_QUOTESCONFIG!, Key: { tenantId: tenant.tenantId } }))
+      .then((r) => (r.Item?.currency ? String(r.Item.currency) : undefined))
+      .catch(() => undefined),
   ])
   const reviews = reviewsEnt.enabled ? await publishedReviews(tenant.tenantId) : undefined
 
@@ -142,6 +149,7 @@ async function renderFor(
     hasKnowledge: assistantEnt.enabled,
     bookingEnabled: bookingEnt.enabled,
     reviews,
+    currency,
     canonicalUrl,
     now: new Date(),
   })
@@ -151,15 +159,41 @@ async function renderFor(
 // ── Owner routes ─────────────────────────────────────────────────────────
 
 async function readConfig(tenantId: string): Promise<APIGatewayProxyResultV2> {
-  const [config, services, tenant] = await Promise.all([
+  const [config, services, tenant, hours, bookingEnt, reviewsEnt, reviews, visibilityCfg] = await Promise.all([
     getPresenceConfig(tenantId),
     activeServices(tenantId),
     getTenant(tenantId),
+    bookingHours(tenantId),
+    getEffectiveEntitlement(tenantId, 'booking'),
+    getEffectiveEntitlement(tenantId, 'reviews'),
+    publishedReviews(tenantId),
+    // The review link lives under Get found; the checklist points there.
+    ddb.send(new GetCommand({ TableName: process.env.TABLE_VISIBILITYCONFIG!, Key: { tenantId } }))
+      .then((r) => r.Item)
+      .catch(() => undefined),
   ])
   const complete = isComplete({ config, services })
+  const hasHours = Boolean(hours && Object.values(hours.hours).some((w) => w?.length))
+  const priced = services.some((s) => s.priceCents != null && s.priceCents > 0)
+
+  // The full path from "page exists" to "page earns work", each step
+  // deep-linked to where it is done. done/todo/soon - soon items are things
+  // the platform itself has not shipped, said plainly rather than hidden.
+  const checklist = [
+    { key: 'intro', label: 'Write an intro of a few sentences', done: config.intro.trim().length >= 40, to: '/page' },
+    { key: 'photo', label: 'Add a photo', done: Boolean(config.photoKey), to: '/page' },
+    { key: 'service', label: 'Add at least one priced service', done: priced, to: '/booking/services' },
+    { key: 'hours', label: 'Set your opening hours', done: hasHours, to: '/booking/settings' },
+    { key: 'booking', label: 'Let customers book from the page', done: bookingEnt.enabled && config.showBooking && services.length > 0, to: '/booking/services' },
+    { key: 'reviews', label: 'Show customer reviews on the page', done: Boolean(reviewsEnt.enabled && reviews && reviews.count > 0), to: '/reviews' },
+    { key: 'reviewLink', label: 'Add your Google review link (under Get found)', done: Boolean(visibilityCfg?.reviewLink), to: '/visibility' },
+    { key: 'payments', label: 'Take payments on the page', done: false, soon: true, to: '' },
+  ]
+
   return json(200, {
     config,
     pageUrl: `https://makerbay.app/p/${tenant?.slug ?? ''}`,
+    checklist,
     // The dashboard explains indexing state rather than leaving it a mystery.
     indexing: {
       directive: indexDirective({ config, services }),
@@ -167,7 +201,7 @@ async function readConfig(tenantId: string): Promise<APIGatewayProxyResultV2> {
       missing: [
         config.intro.trim().length < 40 ? 'an intro of a few sentences' : null,
         !config.photoKey ? 'a photo' : null,
-        !services.some((s) => s.priceCents != null && s.priceCents > 0) ? 'at least one priced service' : null,
+        !priced ? 'at least one priced service' : null,
       ].filter(Boolean),
       ownSite: Boolean(config.websiteUrl?.trim()),
     },
@@ -208,6 +242,12 @@ async function writeConfig(tenantId: string, event: Event): Promise<APIGatewayPr
     showAssistant: b.showAssistant === undefined ? existing.showAssistant : b.showAssistant === true,
     published: b.published === undefined ? existing.published : b.published === true,
     websiteUrl: websiteUrl || undefined,
+    accentColor: b.accentColor === undefined
+      ? existing.accentColor
+      : /^#[0-9a-fA-F]{6}$/.test(String(b.accentColor)) ? String(b.accentColor) : undefined,
+    themeStyle: b.themeStyle === undefined
+      ? existing.themeStyle
+      : (['fresh', 'warm', 'bold'] as const).find((t) => t === b.themeStyle),
     updatedAt: new Date().toISOString(),
   }
   await putPresenceConfig(config)

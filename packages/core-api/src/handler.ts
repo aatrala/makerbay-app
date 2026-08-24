@@ -8,15 +8,19 @@ import {
   getEntitlements,
   getMonthUsage,
   getTenant,
+  getTenantBySlug,
   getUser,
+  isValidSlug,
   listApiKeys,
   putApiKey,
   MODULES,
   PLATFORM_VERSION,
   SCOPES_BY_KEY_TYPE,
   setModuleEntitlement,
-  slugify,
+  slugCandidates,
   ulid,
+  updateTenantName,
+  updateTenantSlug,
   type ApiKeyRow,
   type CallerContext,
   type ModuleEntitlement,
@@ -74,6 +78,8 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     }
     const enableMatch = path.match(/^\/v1\/core\/modules\/([a-z0-9-]+)\/enable$/)
     if (method === 'POST' && enableMatch) return await enableModule(ctx, enableMatch[1])
+    if (method === 'GET' && path === '/v1/core/workspace/slug') return await checkSlug(event)
+    if (method === 'PATCH' && path === '/v1/core/workspace') return await patchWorkspace(ctx, event)
     if (method === 'GET' && path === '/v1/core/usage') return await usage(ctx)
     if (method === 'GET' && path === '/v1/core/version') {
       return json(200, {
@@ -117,7 +123,7 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
   const tenant = {
     tenantId: ulid(),
     name,
-    slug: slugify(name),
+    slug: await pickSlug(name),
     plan: 'free',
     status: 'active' as const,
     createdAt: now,
@@ -130,6 +136,65 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
     createdAt: now,
   })
   return json(201, { tenant })
+}
+
+/**
+ * The first free candidate: the clean business name, then readable suffixes.
+ * A slug appears in every link a customer sees, so it has to be something the
+ * owner can say out loud - never three random characters.
+ */
+async function pickSlug(name: string): Promise<string> {
+  for (const candidate of slugCandidates(name)) {
+    if (!isValidSlug(candidate)) continue
+    if (!(await getTenantBySlug(candidate))) return candidate
+  }
+  return `w-${ulid().slice(-8).toLowerCase()}`
+}
+
+async function checkSlug(event: Event): Promise<APIGatewayProxyResultV2> {
+  const slug = String(event.queryStringParameters?.check ?? '').trim().toLowerCase()
+  if (!isValidSlug(slug)) {
+    return json(200, {
+      slug,
+      available: false,
+      reason: 'invalid',
+      message: 'Use 3-40 lowercase letters, numbers and single hyphens. Some names are reserved.',
+    })
+  }
+  const taken = await getTenantBySlug(slug)
+  return json(200, { slug, available: !taken, reason: taken ? 'taken' : undefined })
+}
+
+async function patchWorkspace(ctx: CallerContext, event: Event): Promise<APIGatewayProxyResultV2> {
+  const tenantId = await requireOwner(ctx)
+  if (!tenantId) return json(403, { error: 'owner_required' })
+  const body = JSON.parse(event.body ?? '{}')
+
+  if (body.name !== undefined) {
+    const name = String(body.name).trim().slice(0, 80)
+    if (name.length < 2) return json(400, { error: 'name_too_short' })
+    await updateTenantName(tenantId, name)
+  }
+
+  if (body.slug !== undefined) {
+    const slug = String(body.slug).trim().toLowerCase()
+    const current = await getTenant(tenantId)
+    if (current?.slug !== slug) {
+      if (!isValidSlug(slug)) {
+        return json(400, {
+          error: 'invalid_slug',
+          message: 'Use 3-40 lowercase letters, numbers and single hyphens. Some names are reserved.',
+        })
+      }
+      const taken = await getTenantBySlug(slug)
+      if (taken && taken.tenantId !== tenantId) {
+        return json(409, { error: 'slug_taken', message: 'That address is already in use.' })
+      }
+      await updateTenantSlug(tenantId, slug)
+    }
+  }
+
+  return json(200, { tenant: await getTenant(tenantId) })
 }
 
 async function me(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {

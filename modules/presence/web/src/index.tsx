@@ -19,6 +19,8 @@ interface PresenceConfig {
   showAssistant: boolean
   published: boolean
   websiteUrl?: string
+  accentColor?: string
+  themeStyle?: 'fresh' | 'warm' | 'bold'
 }
 
 interface Indexing {
@@ -28,14 +30,31 @@ interface Indexing {
   ownSite: boolean
 }
 
+interface ChecklistItem {
+  key: string
+  label: string
+  done: boolean
+  soon?: boolean
+  to: string
+}
+
+const THEME_LABELS: Record<string, string> = {
+  fresh: 'Fresh — clean and light',
+  warm: 'Warm — cream paper, serif headings',
+  bold: 'Bold — dark header, strong type',
+}
+
 function PagePage() {
   const [config, setConfig] = useState<PresenceConfig | null>(null)
   const [indexing, setIndexing] = useState<Indexing | null>(null)
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [pageUrl, setPageUrl] = useState('')
   const [areas, setAreas] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
+  const [previewNonce, setPreviewNonce] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -43,6 +62,7 @@ function PagePage() {
       const r = await api('GET', '/v1/presence/config')
       setConfig(r.config)
       setIndexing(r.indexing)
+      setChecklist(r.checklist ?? [])
       setPageUrl(r.pageUrl)
       setAreas((r.config.serviceAreas ?? []).join(', '))
     } catch (e) {
@@ -67,6 +87,8 @@ function PagePage() {
       })
       setConfig(r.config)
       setIndexing(r.indexing)
+      setChecklist(r.checklist ?? [])
+      setPreviewNonce((n) => n + 1)
       setNote('Saved. The live page updates within a few minutes.')
     })
   }
@@ -139,6 +161,30 @@ function PagePage() {
         </Notice>
       )}
 
+      {checklist.length > 0 && (
+        <div className="card">
+          <h2>Page checklist</h2>
+          <p className="meta">
+            The path from "page exists" to "page earns work". {checklist.filter((c) => c.done).length} of{' '}
+            {checklist.filter((c) => !c.soon).length} done.
+          </p>
+          <ul className="checklist">
+            {checklist.map((c) => (
+              <li key={c.key} className={c.done ? 'done' : c.soon ? 'soon' : ''}>
+                <span aria-hidden="true">{c.done ? '✓' : c.soon ? '·' : '○'}</span>{' '}
+                {c.soon ? (
+                  <span className="meta">{c.label} — coming with payments setup</span>
+                ) : c.done || !c.to ? (
+                  c.label
+                ) : (
+                  <Link to={c.to}>{c.label}</Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {config && (
         <>
           <div className="card">
@@ -195,6 +241,26 @@ function PagePage() {
                 so the two never compete.
               </p>
 
+              <h2 className="mt">Look</h2>
+              <div className="row">
+                <div className="grow">
+                  <label htmlFor="p-theme">Style</label>
+                  <select id="p-theme" value={config.themeStyle ?? 'fresh'}
+                    onChange={(e) => setConfig((c) => (c ? { ...c, themeStyle: e.target.value as PresenceConfig['themeStyle'] } : c))}>
+                    {(['fresh', 'warm', 'bold'] as const).map((t) => (
+                      <option key={t} value={t}>{THEME_LABELS[t]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="p-accent">Accent colour</label>
+                  <input id="p-accent" type="color" value={config.accentColor ?? '#c2410c'}
+                    onChange={(e) => setConfig((c) => (c ? { ...c, accentColor: e.target.value } : c))}
+                    style={{ width: 64, height: 38, padding: 2 }} />
+                </div>
+              </div>
+              <p className="meta">Buttons, links and highlights use the accent. Save, then check the preview below.</p>
+
               <label className="pick">
                 <input type="checkbox" checked={config.showBooking} onChange={toggle('showBooking')} />
                 <span>Show the booking button (when Bookings is on)</span>
@@ -210,6 +276,35 @@ function PagePage() {
 
               <div className="mt"><button disabled={busy}>{busy ? 'Saving…' : 'Save page'}</button></div>
             </form>
+          </div>
+
+          <div className="card">
+            <div className="row">
+              <h2 className="grow">Preview</h2>
+              <div className="tabs">
+                <button className={previewMode === 'desktop' ? 'on' : ''} onClick={() => setPreviewMode('desktop')}>Desktop</button>
+                <button className={previewMode === 'mobile' ? 'on' : ''} onClick={() => setPreviewMode('mobile')}>Phone</button>
+              </div>
+              <button className="ghost" onClick={() => setPreviewNonce((n) => n + 1)}>Refresh</button>
+            </div>
+            <p className="meta">The real live page, as a visitor sees it. Saves can take a couple of minutes to appear - the page is cached.</p>
+            <div style={{
+              display: 'flex', justifyContent: 'center', background: '#f5f5f4',
+              borderRadius: 10, padding: 16, border: '1px solid #e7e5e4',
+            }}>
+              <iframe
+                title="Page preview"
+                src={`${pageUrl}?preview=${previewNonce}`}
+                style={{
+                  width: previewMode === 'mobile' ? 375 : '100%',
+                  maxWidth: '100%',
+                  height: 560,
+                  border: '1px solid #d6d3d1',
+                  borderRadius: previewMode === 'mobile' ? 24 : 8,
+                  background: '#fff',
+                }}
+              />
+            </div>
           </div>
         </>
       )}

@@ -120,13 +120,36 @@ export default function Knowledge() {
   const addPicked = () =>
     void run(async () => {
       let added = 0
+      let jsRendered = 0
+      let hitLimit = false
       const failures: string[] = []
       for (const u of picked) {
-        try { await api('POST', '/v1/assistant/sources', { type: 'url', url: u }); added++ }
-        catch (e) { failures.push(`${u.replace(/^https?:\/\/[^/]+/, '')} — ${explain(e, 'could not be read')}`) }
+        try {
+          await api('POST', '/v1/assistant/sources', { type: 'url', url: u })
+          added++
+        } catch (e) {
+          const msg = explain(e, 'could not be read')
+          if (/source_limit|limit/i.test(msg)) { hitLimit = true; break }
+          if (/JavaScript/i.test(msg)) jsRendered++
+          failures.push(`${u.replace(/^https?:\/\/[^/]+/, '') || '/'} — ${msg}`)
+        }
       }
       setFound(null); setPicked(new Set())
-      setNote(`Added ${added} page${added === 1 ? '' : 's'}.${failures.length ? ` ${failures.length} skipped: ${failures[0]}` : ''}`)
+      if (added === 0 && jsRendered > 0 && jsRendered === failures.length) {
+        // The whole site draws its pages with JavaScript - a per-page error
+        // list would just repeat itself. Say what is happening and what works.
+        setError(
+          `None of the ${failures.length} pages could be read: this site builds its pages with JavaScript, ` +
+          'so the text never appears in the page itself. What works instead: pick the /llms.txt entry if it is in the list, ' +
+          'upload a PDF or document export, or paste the text in directly.',
+        )
+        return
+      }
+      setNote(
+        `Added ${added} page${added === 1 ? '' : 's'}.` +
+        (hitLimit ? ' Stopped at your plan’s source limit - remove a source or upgrade to add more.' : '') +
+        (failures.length ? ` ${failures.length} skipped (${failures.slice(0, 2).join('; ')}${failures.length > 2 ? '; …' : ''}).` : ''),
+      )
     })
 
   const openPreview = (id: string) =>
@@ -212,7 +235,10 @@ export default function Knowledge() {
                           if (e.target.checked) next.add(u); else next.delete(u)
                           setPicked(next)
                         }} />
-                      <span>{u.replace(/^https?:\/\/[^/]+/, '') || '/'}</span>
+                      <span>
+                        {u.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                        {u.endsWith('/llms.txt') && <span className="meta"> — the whole site in one machine-readable page; best first pick</span>}
+                      </span>
                     </label>
                   ))}
                 </div>

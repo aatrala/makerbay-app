@@ -78,29 +78,45 @@ ${footer()}
 </html>
 `
 
+// Header carries only what a first-time visitor needs; everything else lives
+// in the structured footer.
 const header = () => `<header>
   <div class="wrap">
     <a class="brand" href="/">Maker<span>Bay</span></a>
     <nav>
-      <a href="/modules/assistant">Assistant</a>
-      <a href="/#modules">Modules</a>
-      <a href="/roadmap">Roadmap</a>
+      <a href="/#journey">How it works</a>
       <a href="/pricing">Pricing</a>
+      <a class="signin" href="${APP}">Sign in</a>
       <a class="btn" href="${APP}">Get started</a>
     </nav>
   </div>
 </header>`
 
 const footer = () => `<footer>
-  <div class="wrap">
-    <p>&copy; 2026 Appa Technologies Pty Ltd</p>
-    <nav>
-      <a href="/modules/assistant">Assistant</a>
-      <a href="/roadmap">Roadmap</a>
-      <a href="/changelog">Changelog</a>
+  <div class="wrap foot-grid">
+    <div class="foot-col foot-brand">
+      <a class="brand" href="/">Maker<span>Bay</span></a>
+      <p>Modular software for trades and service businesses. Be found, answered and booked — without lifting a finger.</p>
+    </div>
+    <div class="foot-col">
+      <h4>Product</h4>
+      <a href="/#modules">Modules</a>
       <a href="/pricing">Pricing</a>
+      <a href="https://demo.makerbay.app" rel="noopener">Live example page</a>
+    </div>
+    <div class="foot-col">
+      <h4>What's new</h4>
+      <a href="/changelog">Changelog</a>
+      <a href="/roadmap">Roadmap</a>
+    </div>
+    <div class="foot-col">
+      <h4>Account</h4>
       <a href="${APP}">Sign in</a>
-    </nav>
+      <a href="${APP}">Create a workspace</a>
+    </div>
+  </div>
+  <div class="wrap foot-legal">
+    <p>&copy; 2026 Appa Technologies Pty Ltd</p>
   </div>
 </footer>`
 

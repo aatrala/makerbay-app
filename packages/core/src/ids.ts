@@ -14,12 +14,43 @@ export function ulid(now = Date.now()): string {
   return time.join('') + rand.join('')
 }
 
+/** A clean URL-safe base from a business name: "Smith Plumbing" → "smith-plumbing". */
 export function slugify(name: string): string {
-  const base = name
+  return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 32)
-  const suffix = Array.from(randomBytes(3), (b) => B32[b & 31].toLowerCase()).join('')
-  return base ? `${base}-${suffix}` : suffix
+    .slice(0, 40)
+    .replace(/-+$/, '')
+}
+
+/**
+ * Candidate slugs in the order a person would want them: the clean name
+ * first, then readable suffixes, then numbers. The old scheme appended three
+ * random base32 characters to every slug, which nobody could remember or
+ * read out over the phone.
+ */
+export function slugCandidates(name: string): string[] {
+  const base = slugify(name) || `workspace-${Array.from(randomBytes(2), (b) => B32[b & 31].toLowerCase()).join('')}`
+  const out = [base]
+  for (const word of ['co', 'hq', 'au', 'team', 'group']) out.push(`${base}-${word}`)
+  for (let n = 2; n <= 20; n++) out.push(`${base}-${n}`)
+  return out
+}
+
+/**
+ * Names a tenant slug may never take: our own subdomains, app routes, and
+ * words that would let a workspace impersonate the platform.
+ */
+export const RESERVED_SLUGS = new Set([
+  'admin', 'api', 'app', 'assets', 'billing', 'blog', 'booking', 'chat',
+  'changelog', 'contact', 'demo', 'docs', 'embed', 'help', 'invoice', 'legal',
+  'login', 'mail', 'makerbay', 'mcp', 'modules', 'p', 'pricing', 'privacy',
+  'quote', 'review', 'roadmap', 'root', 'signup', 'sitemap', 'static',
+  'status', 'stream', 'support', 'terms', 'test', 'widget', 'www',
+])
+
+/** Format + reservation check. Availability against the table is the caller's job. */
+export function isValidSlug(slug: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$/.test(slug) && !/--/.test(slug) && !RESERVED_SLUGS.has(slug)
 }

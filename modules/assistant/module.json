@@ -4,8 +4,8 @@
   "tagline": "Answers customer questions from your own documents",
   "status": "live",
   "version": {
-    "api": "1.3.0",
-    "web": "1.4.0",
+    "api": "1.4.0",
+    "web": "1.5.0",
     "embed": "1.2.0"
   },
   "routes": [

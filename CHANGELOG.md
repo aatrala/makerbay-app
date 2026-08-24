@@ -9,6 +9,35 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.3.0 - 2026-08-24
+
+- Changed `platform` Workspace addresses are now memorable: a new workspace
+  gets its clean business name (smith-plumbing, not smith-plumbing-x4x), and
+  under Workspace → Settings you can edit it, with live availability checking
+  and a plain warning that old links stop working.
+- Changed `presence` Your page has a new look: three switchable styles
+  (Fresh, Warm, Bold), your own accent colour, a photo-led hero, service and
+  review cards, and a today-highlighted hours grid - all mobile-first.
+- Added `presence` Ask-a-question and Book-a-time now open in a panel on the
+  page itself, so a visitor is never sent away mid-thought. A floating ask
+  button rides along as they scroll.
+- Added `presence` A live desktop-and-phone preview of your real page in the
+  dashboard, next to the theme controls.
+- Added `presence` A page checklist: the full path from "page exists" to
+  "page earns work" - intro, photo, priced service, hours, booking, reviews,
+  Google review link - each step linked to where it is done.
+- Added `quotes` Currency is now yours to set (AUD, INR, USD and more), and
+  the invoice theme has a live preview in settings. The page and quote
+  surfaces show prices in your currency everywhere.
+- Fixed `assistant` Importing a JavaScript-rendered website no longer fails
+  silently to zero pages: the importer now tries the site's markdown twins
+  and embedded page data, offers the site's llms.txt as the best single
+  source, and - when nothing is readable - says exactly why and what works
+  instead.
+- Changed `platform` The marketing site: simpler header, structured footer,
+  a categorised FAQ, and real product screenshots including a live example
+  page you can open and book.
+
 ## 2.2.0 - 2026-08-24
 
 - Added `reviews` Reviews is live: after a completed booking the customer gets

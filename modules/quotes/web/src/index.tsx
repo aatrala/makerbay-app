@@ -575,6 +575,57 @@ function InvoiceDetail() {
   )
 }
 
+/**
+ * A small honest mock of the public invoice page in the chosen theme - same
+ * layout rules as pages.js, so what the owner previews is what the customer
+ * gets, minus their real numbers.
+ */
+function ThemePreview({ theme, currency, taxLabel }: { theme: string; currency: string; taxLabel: string }) {
+  const money = (cents: number) => cash(cents, currency)
+  const serif = theme === 'classic'
+  const dense = theme === 'compact'
+  const band = theme === 'bold'
+  return (
+    <div style={{
+      border: '1px solid #e7e5e4', borderRadius: 10, padding: dense ? 14 : 20, maxWidth: 460,
+      fontSize: dense ? 12.5 : 14, background: '#fff', color: '#1c1917',
+    }}>
+      {band ? (
+        <div style={{ background: '#111', color: '#fff', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
+          <strong style={{ fontSize: 16 }}>INV-0042</strong>
+          <div style={{ opacity: 0.8, fontSize: 12 }}>Your Business Name</div>
+        </div>
+      ) : (
+        <h3 style={{
+          margin: '0 0 10px', fontFamily: serif ? 'Georgia, serif' : 'inherit',
+          fontWeight: serif ? 400 : 700, letterSpacing: dense ? '.08em' : undefined,
+          textTransform: dense ? 'uppercase' : undefined, fontSize: dense ? 13 : 17,
+        }}>INV-0042</h3>
+      )}
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          <tr style={{ borderBottom: serif ? '1px solid #e7e5e4' : undefined }}>
+            <td style={{ padding: '4px 0' }}>Labour — qualified trade</td>
+            <td style={{ textAlign: 'right' }}>{money(28000)}</td>
+          </tr>
+          <tr>
+            <td style={{ padding: '4px 0' }}>Materials</td>
+            <td style={{ textAlign: 'right' }}>{money(9250)}</td>
+          </tr>
+          <tr>
+            <td style={{ padding: '4px 0', color: '#57534e' }}>{taxLabel}</td>
+            <td style={{ textAlign: 'right', color: '#57534e' }}>{money(3725)}</td>
+          </tr>
+          <tr style={{ borderTop: '2px solid #1c1917', fontWeight: 700, fontSize: band ? '1.2em' : undefined }}>
+            <td style={{ padding: '6px 0' }}>Total due</td>
+            <td style={{ textAlign: 'right' }}>{money(40975)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function PriceList() {
   const [items, setItems] = useState<PriceItem[] | null>(null)
   const [form, setForm] = useState({ description: '', unit: 'hour', dollars: '' })
@@ -682,9 +733,23 @@ function PriceList() {
                   onChange={(e) => setConfig({ ...config, validDays: Number(e.target.value) })} />
               </div>
             </div>
-            <label htmlFor="q-notify">Send quote notifications to</label>
-            <input id="q-notify" type="email" value={config.notifyEmail ?? ''}
-              onChange={(e) => setConfig({ ...config, notifyEmail: e.target.value })} />
+            <div className="row">
+              <div className="grow">
+                <label htmlFor="q-currency">Currency</label>
+                <select id="q-currency" value={config.currency ?? 'AUD'}
+                  onChange={(e) => setConfig({ ...config, currency: e.target.value })}>
+                  {['AUD', 'INR', 'USD', 'NZD', 'GBP', 'EUR', 'CAD', 'SGD', 'ZAR', 'AED'].map((c) => (
+                    <option key={c} value={c}>{c} — {new Intl.NumberFormat('en', { style: 'currency', currency: c }).format(1234.5)}</option>
+                  ))}
+                </select>
+                <p className="meta">Used on every new quote and invoice. Existing documents keep the currency they were made in.</p>
+              </div>
+              <div className="grow">
+                <label htmlFor="q-notify">Send quote notifications to</label>
+                <input id="q-notify" type="email" value={config.notifyEmail ?? ''}
+                  onChange={(e) => setConfig({ ...config, notifyEmail: e.target.value })} />
+              </div>
+            </div>
             <label htmlFor="terms">Terms shown on every quote</label>
             <textarea id="terms" rows={2} value={config.terms}
               onChange={(e) => setConfig({ ...config, terms: e.target.value })} />
@@ -711,6 +776,11 @@ function PriceList() {
               placeholder={'Bank transfer to BSB 000-000, account 12345678.\nOr PayID: 0400 000 000.'}
               onChange={(e) => setConfig({ ...config, paymentInstructions: e.target.value })} />
             <p className="meta">Shown on every invoice that is not yet paid.</p>
+
+            <label className="mt">Theme preview</label>
+            <ThemePreview theme={config.invoiceTheme ?? 'classic'} currency={config.currency ?? 'AUD'}
+              taxLabel={config.taxLabel ?? 'Tax'} />
+            <p className="meta">How the invoice page reads to your customer. The quote page uses the same accent and currency.</p>
 
             <div className="mt"><button disabled={busy}>Save settings</button></div>
           </form>
