@@ -2,13 +2,27 @@
   "id": "requests",
   "name": "Requests",
   "tagline": "Catches every question the assistant could not close",
-  "status": "in-development",
-  "version": { "api": "0.1.0", "web": "0.1.0" },
-  "routes": ["/v1/requests/*", "/v1/public/requests/*"],
-  "meteredMetrics": ["request.created", "notification.sent"],
+  "status": "live",
+  "version": {
+    "api": "1.0.0",
+    "web": "1.0.0"
+  },
+  "routes": [
+    "/v1/requests/*",
+    "/v1/public/requests/*"
+  ],
+  "meteredMetrics": [
+    "request.created",
+    "notification.sent"
+  ],
   "entitlementKey": "requests",
-  "dependsOn": ["contacts"],
-  "roadmap": { "order": 2, "note": "Next after Contacts. Shares the assistant widget rather than adding a second one." },
+  "dependsOn": [
+    "contacts"
+  ],
+  "roadmap": {
+    "order": 2,
+    "note": "Shipped. Shares the assistant widget rather than adding a second one."
+  },
   "marketing": {
     "summary": "When the assistant cannot answer, the conversation should not end there. Requests turns that moment into a captured lead or a ticket: the customer leaves their details in the same chat window, you get an email, and the thread is waiting in your dashboard.",
     "audience": "Businesses where an unanswered question is a lost sale, and anyone who currently loses enquiries in a shared inbox.",
@@ -40,5 +54,9 @@
         "a": "Yes. Requests lives inside the assistant widget rather than shipping a second script for your site."
       }
     ]
+  },
+  "pricing": "free",
+  "freeLimits": {
+    "requestsPerMonth": 500
   }
 }

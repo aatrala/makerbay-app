@@ -9,6 +9,40 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 1.10.0 - 2026-08-24
+
+- Changed `platform` Contacts, Requests and Quotes are free on every workspace,
+  forever. You pay for the AI assistant and Bookings, and only for what you
+  switch on.
+- Added `platform` A pricing page that says which modules cost money and which
+  do not, generated from the same manifests as everything else.
+- Fixed `platform` The changelog page rendered its releases with no entries.
+  Git checks the file out with CRLF on Windows and a JavaScript regex does not
+  match a carriage return, so every entry silently failed to parse. The build
+  now refuses to publish an empty release.
+- Fixed `platform` Email failures caused by the SES sandbox now say so plainly
+  instead of showing a raw AWS error.
+
+## 1.9.0 - 2026-08-24
+
+- Added `requests` Requests is live. When the assistant cannot answer, the
+  customer leaves their details in the same chat window, you get an email, and
+  the thread waits in an inbox you can reply from.
+- Added `booking` Bookings is live. Publish your services and hours, and
+  customers book themselves into slots you can actually work - buffers, lead
+  time and closures all respected, in your timezone.
+- Added `booking` A customer who cannot make it cancels from a private link in
+  their confirmation email, which frees the slot instead of a no-show.
+- Added `quotes` Quotes is live. Price a job from a saved price list, send a
+  link, and the customer accepts on their phone. An accepted quote is fixed:
+  changing one means writing a new one.
+- Added `platform` Unit tests. Slot computation, money arithmetic, CSV parsing
+  and contact matching are covered - 56 tests, no AWS needed to run them.
+- Fixed `platform` First sign-in to the staff console. A new account is issued
+  a temporary password and Cognito refuses to authenticate until it is
+  replaced; the console had no screen for that, so a new account could never
+  get in.
+
 ## 1.8.0 - 2026-08-24
 
 - Added `contacts` Contacts is live on every workspace: one customer list with

@@ -66,6 +66,59 @@ export async function startSignIn(email: string, password: string): Promise<Auth
   return step
 }
 
+/** Human wording for the auth errors a staff member can actually hit. */
+export const explainAuth = (err: unknown): string => {
+  const m = err instanceof Error ? err.message : ''
+  if (/Incorrect username or password/i.test(m)) return 'That email and password do not match.'
+  if (/Temporary password has expired/i.test(m)) {
+    return 'Your temporary password expired. Ask for a new one to be issued in the Cognito console.'
+  }
+  if (/password.*policy|PasswordPolicy|InvalidPassword/i.test(m)) return PASSWORD_RULES.describe
+  if (/Invalid session|NotAuthorized/i.test(m)) return 'That sign-in attempt timed out. Start again.'
+  if (/Invalid code|CodeMismatch/i.test(m)) return 'That code was not accepted. Wait for the next one and retry.'
+  return m || 'Sign-in failed.'
+}
+
+/**
+ * First sign-in on a newly created staff account. Cognito issues a temporary
+ * password and refuses to authenticate until it is replaced, so without this
+ * branch a new account can never get in.
+ */
+export async function setNewPassword(
+  email: string,
+  session: string,
+  newPassword: string,
+): Promise<AuthStep> {
+  const r = await cognito('RespondToAuthChallenge', {
+    ClientId: CLIENT_ID,
+    ChallengeName: 'NEW_PASSWORD_REQUIRED',
+    Session: session,
+    ChallengeResponses: { USERNAME: email, NEW_PASSWORD: newPassword },
+  })
+  const step = apply(r)
+  // Setting the password usually lands straight on MFA enrolment.
+  if (step.challenge === 'MFA_SETUP') {
+    const assoc = await cognito('AssociateSoftwareToken', { Session: r.Session })
+    return { done: false, challenge: 'MFA_SETUP', session: assoc.Session, secretCode: assoc.SecretCode }
+  }
+  return step
+}
+
+export const PASSWORD_RULES = {
+  minLength: 14,
+  describe: 'At least 14 characters, with an uppercase letter, a lowercase letter, a number and a symbol.',
+}
+
+/** Mirrors the pool policy so the failure is caught before the round trip. */
+export function passwordProblem(pw: string): string | null {
+  if (pw.length < PASSWORD_RULES.minLength) return `Use at least ${PASSWORD_RULES.minLength} characters.`
+  if (!/[A-Z]/.test(pw)) return 'Add an uppercase letter.'
+  if (!/[a-z]/.test(pw)) return 'Add a lowercase letter.'
+  if (!/[0-9]/.test(pw)) return 'Add a number.'
+  if (!/[^A-Za-z0-9]/.test(pw)) return 'Add a symbol.'
+  return null
+}
+
 export async function submitMfa(email: string, session: string, code: string): Promise<AuthStep> {
   const r = await cognito('RespondToAuthChallenge', {
     ClientId: CLIENT_ID,

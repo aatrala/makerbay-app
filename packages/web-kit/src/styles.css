@@ -293,6 +293,13 @@ select.narrow { width: auto; min-width: 150px; flex: none; }
 .msg.user .cite-passage { background: #ffffff1f; border-left-color: #ffffff66; }
 .cite-passage q { font-style: italic; }
 
+/* ── Module screens ─────────────────────────────────────────────────── */
+.day-edit { margin-bottom: 6px; }
+.day-name { min-width: 130px; }
+.quote-line { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.quote-line:last-of-type { border-bottom: none; }
+input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
+
 /* ── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 860px) {
   .day-count { width: auto; font-size: 12px; }

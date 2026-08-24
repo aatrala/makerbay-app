@@ -86,6 +86,23 @@ export class MakerbayStack extends cdk.Stack {
     })
     const contactEvents = table('ContactEvents', 'pk', 'sk')
 
+    // Requests, Bookings, Quotes. Each attaches customers to Contacts rather
+    // than keeping its own list, which is why Contacts had to come first.
+    const requests = table('Requests', 'tenantId', 'requestId')
+    const requestsConfig = table('RequestsConfig', 'tenantId')
+    const bookingServices = table('BookingServices', 'tenantId', 'serviceId')
+    const bookings = table('Bookings', 'tenantId', 'bookingId')
+    // The diary and the double-booking check both need bookings by start time.
+    bookings.addGlobalSecondaryIndex({
+      indexName: 'byStart',
+      partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'startsAt', type: dynamodb.AttributeType.STRING },
+    })
+    const bookingConfig = table('BookingConfig', 'tenantId')
+    const priceItems = table('PriceItems', 'tenantId', 'itemId')
+    const quotes = table('Quotes', 'tenantId', 'quoteId')
+    const quotesConfig = table('QuotesConfig', 'tenantId')
+
     // ── DNS + TLS ────────────────────────────────────────────────────────
     const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
       hostedZoneId: HOSTED_ZONE_ID,
@@ -122,7 +139,10 @@ export class MakerbayStack extends cdk.Stack {
     })
     // Anything that sends mail gets this, rather than a blanket ses:* grant.
     const sesSendPolicy = new iam.PolicyStatement({
-      actions: ['ses:SendEmail'],
+      // SESv2 SendEmail authorises against both actions depending on how the
+      // message is composed, and the docs pair them everywhere. Granting only
+      // ses:SendEmail produces an AccessDeniedException that says nothing.
+      actions: ['ses:SendEmail', 'ses:SendRawEmail'],
       resources: [
         `arn:aws:ses:${this.region}:${this.account}:identity/${DOMAIN}`,
         `arn:aws:ses:${this.region}:${this.account}:configuration-set/${emailConfigSet.configurationSetName}`,
@@ -344,6 +364,28 @@ export class MakerbayStack extends cdk.Stack {
       timeoutSeconds: 29,
       memorySize: 512,
     })
+    const moduleEnv = {
+      ...tableEnv,
+      EMAIL_FROM: `hello@${DOMAIN}`,
+      EMAIL_CONFIG_SET: emailConfigSet.configurationSetName,
+    }
+    const requestsFn = fn('RequestsApiFn', 'modules/requests/api/src/handler.ts', {
+      ...moduleEnv,
+      TABLE_REQUESTS: requests.tableName,
+      TABLE_REQUESTSCONFIG: requestsConfig.tableName,
+    })
+    const bookingFn = fn('BookingApiFn', 'modules/booking/api/src/handler.ts', {
+      ...moduleEnv,
+      TABLE_BOOKINGSERVICES: bookingServices.tableName,
+      TABLE_BOOKINGS: bookings.tableName,
+      TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+    })
+    const quotesFn = fn('QuotesApiFn', 'modules/quotes/api/src/handler.ts', {
+      ...moduleEnv,
+      TABLE_PRICEITEMS: priceItems.tableName,
+      TABLE_QUOTES: quotes.tableName,
+      TABLE_QUOTESCONFIG: quotesConfig.tableName,
+    })
     const assistantFn = fn(
       'AssistantApiFn',
       'modules/assistant/api/src/handler.ts',
@@ -456,6 +498,17 @@ export class MakerbayStack extends cdk.Stack {
     bus.grantPutEventsTo(coreFn)
 
     for (const t of [contacts, contactEvents]) t.grantReadWriteData(contactsFn)
+    // Each module writes its own tables plus Contacts, and may send email.
+    for (const f of [requestsFn, bookingFn, quotesFn]) {
+      for (const t of [contacts, contactEvents, tenants, users, apiKeys, entitlements, grants]) {
+        t.grantReadWriteData(f)
+      }
+      bus.grantPutEventsTo(f)
+      f.addToRolePolicy(sesSendPolicy)
+    }
+    for (const t of [requests, requestsConfig]) t.grantReadWriteData(requestsFn)
+    for (const t of [bookingServices, bookings, bookingConfig]) t.grantReadWriteData(bookingFn)
+    for (const t of [priceItems, quotes, quotesConfig]) t.grantReadWriteData(quotesFn)
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)
     bus.grantPutEventsTo(assistantFn)
@@ -575,6 +628,38 @@ export class MakerbayStack extends cdk.Stack {
       integration: new HttpLambdaIntegration('ContactsProxyIntegration', contactsFn),
       authorizer,
     })
+    for (const [name, prefix, handler] of [
+      ['Requests', 'requests', requestsFn],
+      ['Booking', 'booking', bookingFn],
+      ['Quotes', 'quotes', quotesFn],
+    ] as const) {
+      httpApi.addRoutes({
+        path: `/v1/${prefix}`,
+        methods: routeMethods,
+        integration: new HttpLambdaIntegration(`${name}Integration`, handler),
+        authorizer,
+      })
+      httpApi.addRoutes({
+        path: `/v1/${prefix}/{proxy+}`,
+        methods: routeMethods,
+        integration: new HttpLambdaIntegration(`${name}ProxyIntegration`, handler),
+        authorizer,
+      })
+      // Public surfaces: the widget form, the booking page, the quote link.
+      // No authorizer - the caller identifies a tenant with a publishable key
+      // or a slug, and spend stays bounded by the tenant's plan limits.
+      httpApi.addRoutes({
+        path: `/v1/public/${prefix}/{proxy+}`,
+        methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+        integration: new HttpLambdaIntegration(`Public${name}Integration`, handler),
+      })
+      httpApi.addRoutes({
+        path: `/v1/public/${prefix}`,
+        methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+        integration: new HttpLambdaIntegration(`Public${name}RootIntegration`, handler),
+      })
+    }
+
     httpApi.addRoutes({
       path: '/v1/assistant/{proxy+}',
       methods: routeMethods,

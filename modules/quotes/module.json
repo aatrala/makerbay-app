@@ -2,15 +2,29 @@
   "id": "quotes",
   "name": "Quotes",
   "tagline": "Turn a job enquiry into a priced quote the same day",
-  "status": "planned",
-  "version": { "api": "0.0.0", "web": "0.0.0" },
-  "routes": ["/v1/quotes/*", "/v1/public/quotes/*"],
-  "meteredMetrics": ["quote.sent", "quote.accepted"],
+  "status": "live",
+  "version": {
+    "api": "1.0.0",
+    "web": "1.0.0"
+  },
+  "routes": [
+    "/v1/quotes/*",
+    "/v1/public/quotes/*"
+  ],
+  "meteredMetrics": [
+    "quote.sent",
+    "quote.accepted"
+  ],
   "entitlementKey": "quotes",
-  "dependsOn": ["contacts"],
-  "roadmap": { "order": 4, "note": "Quoting only. Invoicing, tax handling and bookkeeping are deliberately out of scope - see the roadmap notes." },
+  "dependsOn": [
+    "contacts"
+  ],
+  "roadmap": {
+    "order": 4,
+    "note": "Shipped. Quoting only - invoicing, tax handling and bookkeeping stay out of scope."
+  },
   "marketing": {
-    "summary": "A work order comes in through the assistant. You open it, pick line items from your price list, and send a quote the customer can accept and pay a deposit on from their phone. No accounting software, no PDF wrangling.",
+    "summary": "A job enquiry comes in through the assistant. You open it, pick line items from your price list, and send a quote the customer can open on their phone and accept. No accounting software, no PDF wrangling.",
     "audience": "Trades and service businesses that quote per job: electricians, plumbers, builders, landscapers, mobile mechanics, cleaners.",
     "features": [
       {
@@ -24,10 +38,6 @@
       {
         "title": "Accepted with one tap",
         "body": "The customer opens a link, sees the quote, and accepts. You get told immediately and the quote is locked."
-      },
-      {
-        "title": "Deposit at acceptance",
-        "body": "Optionally take a deposit when they accept, through the platform's existing Stripe connection."
       }
     ],
     "faq": [
@@ -37,8 +47,16 @@
       },
       {
         "q": "Can I send an invoice from it?",
-        "a": "Not at launch. An accepted quote plus a paid deposit covers most of the value; a proper compliant invoice is a much larger commitment and is not on the near roadmap."
+        "a": "No. An accepted quote is a record that the customer agreed to a price; a compliant invoice with tax handling and numbering belongs in Xero, MYOB or QuickBooks. We would rather export to them later than do it badly now."
+      },
+      {
+        "q": "Can the customer pay a deposit when they accept?",
+        "a": "Not yet, for the same reason: paying money into your account needs a payment setup we have not built. The quote records the acceptance; you invoice and collect however you do today."
       }
     ]
+  },
+  "pricing": "free",
+  "freeLimits": {
+    "quotesPerMonth": 200
   }
 }

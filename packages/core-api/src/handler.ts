@@ -1,5 +1,7 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import {
+  freeModuleLimits,
+  freeModules,
   createTenant,
   deleteApiKey,
   generateApiKey,
@@ -122,7 +124,18 @@ async function me(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {
     getTenant(user.tenantId),
     getEntitlements(user.tenantId),
   ])
-  return json(200, { user, tenant, entitlements })
+  // Free modules are on for every workspace and have no grant behind them, so
+  // they would otherwise be invisible to the dashboard. The server owns what a
+  // workspace may use; the client should never have to know which are free.
+  const modules = { ...entitlements.modules }
+  for (const m of freeModules()) {
+    modules[m.id] = {
+      enabled: true,
+      plan: 'free',
+      limits: freeModuleLimits(m.id),
+    }
+  }
+  return json(200, { user, tenant, entitlements: { ...entitlements, modules } })
 }
 
 async function createKey(ctx: CallerContext, event: Event): Promise<APIGatewayProxyResultV2> {

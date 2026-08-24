@@ -30,7 +30,20 @@ const modules = (
   )
 ).filter(Boolean)
 
+for (const m of modules) {
+  if (!m.marketing?.summary || !m.marketing?.features?.length) {
+    throw new Error(`modules/${m.id}/module.json has no usable marketing block.`)
+  }
+  if (!m.core && !m.pricing) {
+    throw new Error(`modules/${m.id}/module.json has no pricing. Set "free" or "paid".`)
+  }
+}
+
 modules.sort((a, b) => a.roadmap.order - b.roadmap.order)
+
+const isFree = (m) => m.core || m.pricing === 'free'
+const priceTag = (m) =>
+  isFree(m) ? '<span class="tag free">Free</span>' : '<span class="tag paid">Paid</span>'
 
 const STATUS = {
   live: { label: 'Available now', cls: 'live' },
@@ -72,7 +85,7 @@ const header = () => `<header>
       <a href="/modules/assistant">Assistant</a>
       <a href="/#modules">Modules</a>
       <a href="/roadmap">Roadmap</a>
-      <a href="/#pricing">Pricing</a>
+      <a href="/pricing">Pricing</a>
       <a class="btn" href="${APP}">Get started</a>
     </nav>
   </div>
@@ -85,7 +98,7 @@ const footer = () => `<footer>
       <a href="/modules/assistant">Assistant</a>
       <a href="/roadmap">Roadmap</a>
       <a href="/changelog">Changelog</a>
-      <a href="/#pricing">Pricing</a>
+      <a href="/pricing">Pricing</a>
       <a href="${APP}">Sign in</a>
     </nav>
   </div>
@@ -95,9 +108,8 @@ const footer = () => `<footer>
 
 const moduleCard = (m) => {
   const s = STATUS[m.status]
-  const badge = m.core ? '<span class="tag live">Included</span>' : `<span class="tag ${s.cls}">${s.label}</span>`
   return `      <a class="card linkcard" href="/modules/${m.id}">
-        ${badge}
+        <span class="tags">${priceTag(m)}<span class="tag ${s.cls}">${s.label}</span></span>
         <h3>${esc(m.name)}</h3>
         <p>${esc(m.tagline)}.</p>
       </a>`
@@ -120,13 +132,16 @@ const dependencyNote = (m) => {
 
 const modulePage = (m) => {
   const s = STATUS[m.status]
-  const badge = m.core
-    ? '<span class="tag live">Included with every plan</span>'
-    : `<span class="tag ${s.cls}">${s.label}</span>`
+  const badge = `<span class="tags">${priceTag(m)}<span class="tag ${s.cls}">${s.label}</span></span>`
+  const limits = m.freeLimits
+    ? `<p class="dep">Included free, up to ${Object.entries(m.freeLimits)
+        .map(([k, v]) => `${Number(v).toLocaleString()} ${k.replace(/PerMonth$/, ' a month').replace(/([A-Z])/g, ' $1').toLowerCase().trim()}`)
+        .join(' and ')}.</p>`
+    : ''
   const cta =
     m.status === 'live'
       ? `<div class="cta"><a class="btn lg" href="${APP}">Start free</a>
-      <a class="btn lg ghost" href="/#pricing">See pricing</a></div>`
+      <a class="btn lg ghost" href="/pricing">See pricing</a></div>`
       : `<div class="cta"><a class="btn lg" href="${APP}">Start with what is live today</a>
       <a class="btn lg ghost" href="/roadmap">See the roadmap</a></div>`
 
@@ -160,6 +175,7 @@ ${m.marketing.faq.map((f) => `      <h3>${esc(f.q)}</h3>\n      <p>${esc(f.a)}</
     <div class="sec-head">
       <h2>What it does</h2>
       ${dependencyNote(m)}
+      ${limits}
     </div>
     <div class="grid">
 ${m.marketing.features
@@ -210,9 +226,8 @@ const roadmapPage = () =>
 ${modules
   .map((m) => {
     const s = STATUS[m.status]
-    const badge = m.core ? 'Included' : s.label
     return `      <li class="road-item">
-        <span class="tag ${m.core ? 'live' : s.cls}">${badge}</span>
+        <span class="tags">${priceTag(m)}<span class="tag ${s.cls}">${s.label}</span></span>
         <h3><a href="/modules/${m.id}">${esc(m.name)}</a></h3>
         <p>${esc(m.tagline)}.</p>
         <p class="note">${esc(m.roadmap.note)}</p>
@@ -252,6 +267,139 @@ ${modules
 </section>`,
   })
 
+
+// ── Pricing ──────────────────────────────────────────────────────────────
+
+const pricingPage = () => {
+  const free = modules.filter(isFree)
+  const paid = modules.filter((m) => !isFree(m))
+  const row = (m) => `        <tr>
+          <td><a href="/modules/${m.id}">${esc(m.name)}</a><div class="meta">${esc(m.tagline)}</div></td>
+          <td>${priceTag(m)}</td>
+          <td><span class="tag ${STATUS[m.status].cls}">${STATUS[m.status].label}</span></td>
+        </tr>`
+
+  return page({
+    title: 'Pricing - MakerBay',
+    description: 'Contacts, Requests and Quotes are free forever. You pay for the AI assistant and Bookings, and only for what you switch on.',
+    path: '/pricing',
+    body: `<div class="hero">
+  <div class="wrap">
+    <h1>Pay for capability, not for software</h1>
+    <p class="lead">
+      Most of MakerBay is free and stays free. You pay for the two modules that
+      cost real money to run, and only if you switch them on.
+    </p>
+    <div class="cta"><a class="btn lg" href="${APP}">Start free</a></div>
+    <small>No card to start &middot; Cancel any time</small>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Free forever</h2>
+      <p>
+        These cost us almost nothing to run, and each one makes the rest more
+        useful. There is no trial and no upgrade prompt - they are simply free.
+      </p>
+    </div>
+    <div class="grid">
+${free
+  .map(
+    (m) => `      <a class="card linkcard" href="/modules/${m.id}">
+        <span class="tag free">Free</span>
+        <h3>${esc(m.name)}</h3>
+        <p>${esc(m.tagline)}.</p>
+        ${m.freeLimits ? `<p class="meta">Up to ${Object.entries(m.freeLimits).map(([k, v]) => `${Number(v).toLocaleString()} ${k.replace(/PerMonth$/, ' a month')}`).join(' and ')}.</p>` : ''}
+      </a>`,
+  )
+  .join('\n')}
+    </div>
+  </div>
+</section>
+
+<section class="soft" id="paid">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>What you pay for</h2>
+      <p>
+        The assistant costs us money every time it answers a question, and
+        Bookings is worth real money to a business whose day is a calendar.
+        Those two carry the price.
+      </p>
+    </div>
+    <div class="prices">
+      <div class="price">
+        <h3>Free</h3>
+        <div class="amount">$0</div>
+        <ul>
+          <li>Contacts, Requests and Quotes in full</li>
+          <li>200 assistant messages a month</li>
+          <li>20 knowledge documents</li>
+          <li>Widget, shared page, help centre and API</li>
+        </ul>
+        <a class="btn ghost" href="${APP}">Start free</a>
+      </div>
+      <div class="price featured">
+        <h3>Pro</h3>
+        <div class="amount">$29<span> / month</span></div>
+        <ul>
+          <li>Everything in Free</li>
+          <li>2,000 assistant messages included</li>
+          <li>$0.02 per message after that</li>
+          <li>500 knowledge documents</li>
+          <li>Bookings included</li>
+        </ul>
+        <a class="btn" href="${APP}">Get started</a>
+      </div>
+    </div>
+    <p class="meta" style="margin-top:20px">Prices in USD, per workspace.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head"><h2>Every module</h2></div>
+    <div class="scroll-x">
+      <table class="pricing-table">
+        <thead><tr><th>Module</th><th>Cost</th><th>Status</th></tr></thead>
+        <tbody>
+${[...free, ...paid].map(row).join('\n')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="soft">
+  <div class="wrap faq">
+    <h2>Questions about price</h2>
+    <h3>Is "free forever" really forever?</h3>
+    <p>Yes, for the modules marked free. They are cheap for us to run, and a free
+    module that fills your customer list is how we grow. If that ever has to
+    change, existing workspaces keep what they have.</p>
+    <h3>What happens when I hit a limit?</h3>
+    <p>You are told in the dashboard, plainly, before anything stops. The caps
+    exist to bound our costs, not to push you into upgrading.</p>
+    <h3>Do I pay for modules I have not switched on?</h3>
+    <p>No. Nothing is billed until you enable it.</p>
+    <h3>Can I get my data out?</h3>
+    <p>Yes. Contacts exports to CSV whenever you like, on every plan. A customer
+    list you cannot take with you is not really yours.</p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <h2>Start with the free half</h2>
+    <p>Contacts, Requests and Quotes cost nothing. Add the assistant when you want it.</p>
+    <a class="btn lg" href="${APP}">Create your workspace</a>
+  </div>
+</section>`,
+  })
+}
+
 // ── Changelog ────────────────────────────────────────────────────────────
 
 const AREAS = new Set(['platform', ...modules.map((m) => m.id)])
@@ -261,7 +409,10 @@ const KINDS = ['Added', 'Changed', 'Fixed', 'Security']
 function parseChangelog(md) {
   const releases = []
   let current = null
-  for (const raw of md.split('\n')) {
+  // Split on either ending. Git checks this file out with CRLF on Windows, and
+  // `.` in a JS regex does not match \r, so every entry line silently failed to
+  // parse while the headings still matched: releases rendered with no content.
+  for (const raw of md.split(/\r?\n/)) {
     const head = raw.match(/^##\s+(\S+)\s+-\s+(\d{4}-\d{2}-\d{2})\s*$/)
     if (head) {
       current = { version: head[1], date: head[2], entries: [] }
@@ -283,6 +434,16 @@ function parseChangelog(md) {
       last.text += ' ' + raw.trim()
     }
   }
+  // A release with no entries means the parser stopped understanding the file.
+  // Failing the build is far better than publishing an empty changelog.
+  const empty = releases.filter((r) => r.entries.length === 0)
+  if (empty.length) {
+    throw new Error(
+      `Changelog releases parsed with no entries: ${empty.map((r) => r.version).join(', ')}. ` +
+      'Check the entry format: "- Kind `area` text".',
+    )
+  }
+  if (releases.length === 0) throw new Error('No releases parsed from CHANGELOG.md.')
   return releases
 }
 
@@ -414,6 +575,7 @@ for (const m of modules) {
 }
 
 await write('roadmap', roadmapPage())
+await write('pricing', pricingPage())
 
 const releases = parseChangelog(await readFile(join(repo, 'CHANGELOG.md'), 'utf8'))
 await write('changelog', changelogPage(releases))
@@ -430,7 +592,7 @@ for (const file of ['index.html', ...modules.map((m) => `modules/${m.id}/index.h
 
 await writeFile(
   join(dist, 'sitemap.xml'),
-  sitemap(['/', '/roadmap', '/changelog', ...modules.map((m) => `/modules/${m.id}`)]),
+  sitemap(['/', '/pricing', '/roadmap', '/changelog', ...modules.map((m) => `/modules/${m.id}`)]),
   'utf8',
 )
 

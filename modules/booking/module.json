@@ -2,13 +2,27 @@
   "id": "booking",
   "name": "Bookings",
   "tagline": "Appointments customers can make without calling you",
-  "status": "planned",
-  "version": { "api": "0.0.0", "web": "0.0.0" },
-  "routes": ["/v1/booking/*", "/v1/public/booking/*"],
-  "meteredMetrics": ["booking.created", "reminder.sent"],
+  "status": "live",
+  "version": {
+    "api": "1.0.0",
+    "web": "1.0.0"
+  },
+  "routes": [
+    "/v1/booking/*",
+    "/v1/public/booking/*"
+  ],
+  "meteredMetrics": [
+    "booking.created",
+    "reminder.sent"
+  ],
   "entitlementKey": "booking",
-  "dependsOn": ["contacts"],
-  "roadmap": { "order": 3, "note": "After Requests. Attaches to the same contact records rather than inventing its own customer list." },
+  "dependsOn": [
+    "contacts"
+  ],
+  "roadmap": {
+    "order": 3,
+    "note": "Shipped. Single calendar, several services; deposits and calendar sync are deliberately not in v1."
+  },
   "marketing": {
     "summary": "Publish your availability, let customers book themselves in, and send the reminders that stop no-shows. The assistant can take the booking mid-conversation instead of sending people to a separate page.",
     "audience": "Salons, clinics, trades, tutors, studios - anyone whose day is a calendar and whose phone rings during it.",
@@ -22,19 +36,24 @@
         "body": "Opening hours, breaks, service durations and buffer time, so the slots you offer are slots you can actually work."
       },
       {
-        "title": "Reminders that reduce no-shows",
-        "body": "Automatic email reminders before the appointment, with a link to reschedule rather than simply not turn up."
-      },
-      {
-        "title": "Deposits where you need them",
-        "body": "Take a deposit at booking time through the same Stripe connection the platform already uses."
+        "title": "Cancel without phoning you",
+        "body": "The confirmation email carries a private link, so a customer who cannot make it cancels themselves and frees the slot instead of simply not turning up."
       }
     ],
     "faq": [
       {
+        "q": "Does it send reminders before the appointment?",
+        "a": "Not yet. Reminders need scheduled sending, which arrives with the next release. Bookings today confirms by email at the time of booking."
+      },
+      {
         "q": "Will it sync with my calendar?",
-        "a": "Two-way sync with Google Calendar is planned for the first release. Outlook follows."
+        "a": "Not in this release. Two-way Google Calendar sync is a per-tenant authorisation project of its own, and we would rather ship a diary that is correct than a sync that is nearly right."
+      },
+      {
+        "q": "Can I take a deposit at booking time?",
+        "a": "Not yet. Taking money into your account needs a payment setup we have not built, and half of it would be worse than none. Bookings v1 confirms the time; you take payment however you do today."
       }
     ]
-  }
+  },
+  "pricing": "paid"
 }

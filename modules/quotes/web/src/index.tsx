@@ -1,0 +1,496 @@
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Link, Route, useNavigate, useParams } from 'react-router-dom'
+import {
+  Empty,
+  Notice,
+  Skeleton,
+  api,
+  explain,
+  when,
+  type DashboardModule,
+} from '@makerbay/web-kit'
+
+interface PriceItem {
+  itemId: string
+  description: string
+  unit: string
+  unitCents: number
+  active: boolean
+}
+
+interface Line {
+  description: string
+  unit: string
+  quantity: number
+  unitCents: number
+  totalCents: number
+}
+
+interface Quote {
+  quoteId: string
+  number: number
+  contactId: string
+  customerName?: string
+  customerEmail?: string
+  lines: Line[]
+  subtotalCents: number
+  taxCents: number
+  totalCents: number
+  currency: string
+  status: 'draft' | 'sent' | 'accepted' | 'declined' | 'expired'
+  validUntil: string
+  notes?: string
+  terms?: string
+  notifyError?: string
+  createdAt: string
+}
+
+const cash = (cents: number, currency = 'AUD') =>
+  new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(cents / 100)
+
+const STATUS_CHIP: Record<string, string> = {
+  draft: 'awaiting_upload', sent: 'processing', accepted: 'ready',
+  declined: 'failed', expired: 'failed',
+}
+
+function QuotesList() {
+  const [quotes, setQuotes] = useState<Quote[] | null>(null)
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    try { setQuotes((await api('GET', `/v1/quotes${status ? `?status=${status}` : ''}`)).quotes) }
+    catch (e) { setError(explain(e)); setQuotes([]) }
+  }, [status])
+  useEffect(() => { void load() }, [load])
+
+  return (
+    <>
+      <h1>Quotes</h1>
+      <p>Price a job, send a link, get an answer. No PDFs, no accounting software.</p>
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      <div className="tabs">
+        {['', 'draft', 'sent', 'accepted', 'declined'].map((s) => (
+          <button key={s} className={status === s ? 'on' : ''} onClick={() => setStatus(s)}>
+            {s === '' ? 'All' : s}
+          </button>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <span className="grow" />
+          <Link className="btn" to="/quotes/new">New quote</Link>
+        </div>
+
+        {!quotes ? <div className="mt"><Skeleton rows={4} /></div> : quotes.length === 0 ? (
+          <Empty title={status ? 'Nothing with that status' : 'No quotes yet'}
+            action={<Link className="btn" to="/quotes/new">Write your first quote</Link>}>
+            Build a price list once under Price list, and the second quote for the same kind of job
+            takes under a minute.
+          </Empty>
+        ) : (
+          <div className="scroll-x mt">
+            <table>
+              <thead><tr><th>#</th><th>Customer</th><th className="num">Total</th><th>Status</th><th>Sent</th></tr></thead>
+              <tbody>
+                {quotes.map((q) => (
+                  <tr key={q.quoteId}>
+                    <td><Link to={`/quotes/${q.quoteId}`}>#{q.number}</Link></td>
+                    <td>{q.customerName || q.customerEmail || <span className="meta">no name</span>}</td>
+                    <td className="num">{cash(q.totalCents, q.currency)}</td>
+                    <td><span className={`chip ${STATUS_CHIP[q.status]}`}>{q.status}</span></td>
+                    <td className="nowrap">{when(q.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+function NewQuote() {
+  const navigate = useNavigate()
+  const [items, setItems] = useState<PriceItem[]>([])
+  const [lines, setLines] = useState<Array<{ description: string; unit: string; quantity: string; unitDollars: string }>>([
+    { description: '', unit: 'item', quantity: '1', unitDollars: '' },
+  ])
+  const [customerName, setCustomerName] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [notes, setNotes] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void api('GET', '/v1/quotes/items').then((r) => setItems(r.items ?? [])).catch(() => setItems([]))
+  }, [])
+
+  const setLine = (i: number, patch: Partial<(typeof lines)[number]>) =>
+    setLines((ls) => ls.map((l, n) => (n === i ? { ...l, ...patch } : l)))
+
+  const fromPriceList = (i: number, itemId: string) => {
+    const item = items.find((x) => x.itemId === itemId)
+    if (item) setLine(i, { description: item.description, unit: item.unit, unitDollars: (item.unitCents / 100).toFixed(2) })
+  }
+
+  const subtotal = lines.reduce(
+    (sum, l) => sum + Math.round((Number(l.quantity) || 0) * Math.round((Number(l.unitDollars) || 0) * 100)),
+    0,
+  )
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true); setError('')
+    void (async () => {
+      try {
+        const r = await api('POST', '/v1/quotes', {
+          customerName, customerEmail, notes,
+          lines: lines
+            .filter((l) => l.description.trim())
+            .map((l) => ({
+              description: l.description,
+              unit: l.unit,
+              quantity: Number(l.quantity) || 0,
+              unitCents: Math.round((Number(l.unitDollars) || 0) * 100),
+            })),
+        })
+        navigate(`/quotes/${r.quote.quoteId}`)
+      } catch (e) { setError(explain(e)); setBusy(false) }
+    })()
+  }
+
+  return (
+    <>
+      <p className="meta"><Link to="/quotes">← All quotes</Link></p>
+      <h1>New quote</h1>
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      <form onSubmit={submit}>
+        <div className="card">
+          <h2>Customer</h2>
+          <div className="row">
+            <div className="grow">
+              <label htmlFor="q-name">Name</label>
+              <input id="q-name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+            </div>
+            <div className="grow">
+              <label htmlFor="q-email">Email</label>
+              <input id="q-email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+            </div>
+          </div>
+          <p className="meta">They are matched to an existing contact by email, or added as a new one.</p>
+        </div>
+
+        <div className="card">
+          <h2>Lines</h2>
+          {lines.map((l, i) => (
+            <div key={i} className="quote-line">
+              <div className="row">
+                {items.length > 0 && (
+                  <select className="narrow" value="" onChange={(e) => fromPriceList(i, e.target.value)}
+                    aria-label="Pick from your price list">
+                    <option value="">From price list…</option>
+                    {items.filter((x) => x.active).map((x) => (
+                      <option key={x.itemId} value={x.itemId}>{x.description}</option>
+                    ))}
+                  </select>
+                )}
+                <input className="grow" value={l.description} placeholder="What is being done"
+                  onChange={(e) => setLine(i, { description: e.target.value })} aria-label="Description" />
+                <input type="number" step="0.25" min={0} className="narrow" value={l.quantity}
+                  onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label="Quantity" />
+                <input className="narrow" value={l.unit} onChange={(e) => setLine(i, { unit: e.target.value })}
+                  aria-label="Unit" />
+                <input type="number" step="0.01" min={0} className="narrow" value={l.unitDollars}
+                  placeholder="0.00" onChange={(e) => setLine(i, { unitDollars: e.target.value })} aria-label="Unit price" />
+                {lines.length > 1 && (
+                  <button type="button" className="ghost"
+                    onClick={() => setLines((ls) => ls.filter((_, n) => n !== i))}>Remove</button>
+                )}
+              </div>
+            </div>
+          ))}
+          <div className="row mt">
+            <button type="button" className="ghost"
+              onClick={() => setLines((ls) => [...ls, { description: '', unit: 'item', quantity: '1', unitDollars: '' }])}>
+              Add line
+            </button>
+            <span className="grow" />
+            <span className="stat">{cash(subtotal)}</span>
+          </div>
+        </div>
+
+        <div className="card">
+          <label htmlFor="q-notes">Notes for the customer</label>
+          <textarea id="q-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+            placeholder="Access needed through the side gate. Price excludes waste removal." />
+          <div className="mt">
+            <button disabled={busy || !lines.some((l) => l.description.trim())}>
+              {busy ? 'Creating…' : 'Create draft'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </>
+  )
+}
+
+function QuoteDetail() {
+  const { quoteId = '' } = useParams()
+  const [quote, setQuote] = useState<Quote | null>(null)
+  const [publicUrl, setPublicUrl] = useState('')
+  const [taxLabel, setTaxLabel] = useState('Tax')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api('GET', `/v1/quotes/${quoteId}`)
+      setQuote(r.quote); setPublicUrl(r.publicUrl); setTaxLabel(r.config?.taxLabel ?? 'Tax')
+    } catch (e) { setError(explain(e)) }
+  }, [quoteId])
+  useEffect(() => { void load() }, [load])
+
+  const send = () =>
+    void (async () => {
+      setBusy(true); setError(''); setNote('')
+      try {
+        const r = await api('POST', `/v1/quotes/${quoteId}/send`, {})
+        setNote(r.emailed
+          ? `Sent to ${quote?.customerEmail}.`
+          : 'Email is not switched on for this account yet, so nothing was sent. Copy the link below and send it yourself.')
+        await load()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  if (error && !quote) return (
+    <><p className="meta"><Link to="/quotes">← All quotes</Link></p><h1>Quote</h1>
+      <Notice tone="err">{error}</Notice></>
+  )
+  if (!quote) return (
+    <><p className="meta"><Link to="/quotes">← All quotes</Link></p><h1>Quote</h1>
+      <div className="card"><Skeleton rows={5} /></div></>
+  )
+
+  const settled = quote.status === 'accepted' || quote.status === 'declined'
+
+  return (
+    <>
+      <p className="meta"><Link to="/quotes">← All quotes</Link></p>
+      <h1>Quote #{quote.number}</h1>
+      <p>
+        {quote.customerName || quote.customerEmail} ·{' '}
+        <Link to={`/contacts/${quote.contactId}`}>see their history</Link> ·{' '}
+        <span className={`chip ${STATUS_CHIP[quote.status]}`}>{quote.status}</span>
+      </p>
+
+      {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {quote.status === 'accepted' && (
+        <Notice tone="ok">
+          Accepted. This quote is now fixed — to change anything, create a new one.
+        </Notice>
+      )}
+      {quote.status === 'expired' && (
+        <Notice tone="warn">This quote passed its date and can no longer be accepted.</Notice>
+      )}
+
+      <div className="card">
+        <div className="scroll-x">
+          <table>
+            <thead><tr><th>Description</th><th className="num">Qty</th><th className="num">Unit</th><th className="num">Total</th></tr></thead>
+            <tbody>
+              {quote.lines.map((l, i) => (
+                <tr key={i}>
+                  <td>{l.description}</td>
+                  <td className="num">{l.quantity} {l.unit}</td>
+                  <td className="num">{cash(l.unitCents, quote.currency)}</td>
+                  <td className="num">{cash(l.totalCents, quote.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <dl className="facts mt">
+          <dt>Subtotal</dt><dd>{cash(quote.subtotalCents, quote.currency)}</dd>
+          {quote.taxCents > 0 && <><dt>{taxLabel}</dt><dd>{cash(quote.taxCents, quote.currency)}</dd></>}
+          <dt>Total</dt><dd><strong>{cash(quote.totalCents, quote.currency)}</strong></dd>
+          <dt>Valid until</dt><dd>{new Date(quote.validUntil).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
+        </dl>
+        {quote.notes && <><label>Notes</label><p>{quote.notes}</p></>}
+      </div>
+
+      <div className="card">
+        <h2>Send it</h2>
+        {!settled ? (
+          <>
+            <p>Emails the customer a link they can open on their phone and accept.</p>
+            <div className="row">
+              <button onClick={send} disabled={busy || !quote.customerEmail}>
+                {busy ? 'Sending…' : quote.status === 'draft' ? 'Send quote' : 'Send again'}
+              </button>
+              {!quote.customerEmail && <span className="meta">Add an email address first.</span>}
+            </div>
+          </>
+        ) : (
+          <p className="meta">This quote has been {quote.status} and cannot be resent.</p>
+        )}
+        {publicUrl && quote.status !== 'draft' && (
+          <>
+            <label className="mt">Customer link</label>
+            <div className="row">
+              <input className="grow" readOnly value={publicUrl} onFocus={(e) => e.target.select()} aria-label="Customer link" />
+              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener">Preview</a>
+            </div>
+            <p className="meta">Anyone with this link can view and accept. Share it only with your customer.</p>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
+function PriceList() {
+  const [items, setItems] = useState<PriceItem[] | null>(null)
+  const [form, setForm] = useState({ description: '', unit: 'hour', dollars: '' })
+  const [config, setConfig] = useState<any>(null)
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      setItems((await api('GET', '/v1/quotes/items')).items)
+      setConfig((await api('GET', '/v1/quotes/config')).config)
+    } catch (e) { setError(explain(e)); setItems([]) }
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const run = async (fn: () => Promise<void>) => {
+    setError(''); setNote(''); setBusy(true)
+    try { await fn(); await load() } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+  }
+
+  const add = (e: FormEvent) => {
+    e.preventDefault()
+    void run(async () => {
+      await api('POST', '/v1/quotes/items', {
+        description: form.description, unit: form.unit,
+        unitCents: Math.round((Number(form.dollars) || 0) * 100),
+      })
+      setForm({ description: '', unit: 'hour', dollars: '' })
+    })
+  }
+
+  const saveConfig = (e: FormEvent) => {
+    e.preventDefault()
+    void run(async () => { await api('PUT', '/v1/quotes/config', config); setNote('Saved.') })
+  }
+
+  return (
+    <>
+      <h1>Price list</h1>
+      <p>Saved lines you reuse, so the second quote for the same kind of job takes under a minute.</p>
+
+      {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      <div className="card">
+        <h2>Add an item</h2>
+        <form onSubmit={add}>
+          <div className="row">
+            <input className="grow" value={form.description} required placeholder="Labour, qualified electrician"
+              onChange={(e) => setForm({ ...form, description: e.target.value })} aria-label="Description" />
+            <input className="narrow" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}
+              aria-label="Unit" placeholder="hour" />
+            <input className="narrow" type="number" step="0.01" min={0} value={form.dollars}
+              onChange={(e) => setForm({ ...form, dollars: e.target.value })} aria-label="Price" placeholder="95.00" />
+            <button disabled={busy || !form.description}>Add</button>
+          </div>
+        </form>
+
+        {!items ? <div className="mt"><Skeleton rows={3} /></div> : items.length === 0 ? (
+          <Empty title="Nothing saved yet">Add the things you charge for most often.</Empty>
+        ) : (
+          <div className="scroll-x mt">
+            <table>
+              <thead><tr><th>Description</th><th>Unit</th><th className="num">Price</th><th /></tr></thead>
+              <tbody>
+                {items.map((i) => (
+                  <tr key={i.itemId}>
+                    <td>{i.description}</td>
+                    <td>{i.unit}</td>
+                    <td className="num">{cash(i.unitCents, config?.currency ?? 'AUD')}</td>
+                    <td className="nowrap">
+                      <button className="danger" disabled={busy}
+                        onClick={() => void run(async () => { await api('DELETE', `/v1/quotes/items/${i.itemId}`) })}>
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {config && (
+        <div className="card">
+          <h2>Quote settings</h2>
+          <form onSubmit={saveConfig}>
+            <div className="row">
+              <div className="grow">
+                <label htmlFor="tax">Tax rate (%)</label>
+                <input id="tax" type="number" step="0.1" min={0} max={100}
+                  value={Math.round(config.taxRate * 1000) / 10}
+                  onChange={(e) => setConfig({ ...config, taxRate: Number(e.target.value) / 100 })} />
+              </div>
+              <div className="grow">
+                <label htmlFor="taxlabel">Called</label>
+                <input id="taxlabel" value={config.taxLabel}
+                  onChange={(e) => setConfig({ ...config, taxLabel: e.target.value })} />
+              </div>
+              <div className="grow">
+                <label htmlFor="valid">Valid for (days)</label>
+                <input id="valid" type="number" min={1} max={365} value={config.validDays}
+                  onChange={(e) => setConfig({ ...config, validDays: Number(e.target.value) })} />
+              </div>
+            </div>
+            <label htmlFor="q-notify">Send quote notifications to</label>
+            <input id="q-notify" type="email" value={config.notifyEmail ?? ''}
+              onChange={(e) => setConfig({ ...config, notifyEmail: e.target.value })} />
+            <label htmlFor="terms">Terms shown on every quote</label>
+            <textarea id="terms" rows={2} value={config.terms}
+              onChange={(e) => setConfig({ ...config, terms: e.target.value })} />
+            <div className="mt"><button disabled={busy}>Save settings</button></div>
+          </form>
+        </div>
+      )}
+    </>
+  )
+}
+
+export const quotesDashboard: DashboardModule = {
+  id: 'quotes',
+  label: 'Quotes',
+  nav: [
+    { to: '/quotes', label: 'All quotes' },
+    { to: '/quotes/prices', label: 'Price list' },
+  ],
+  routes: () => (
+    <>
+      <Route path="/quotes" element={<QuotesList />} />
+      <Route path="/quotes/new" element={<NewQuote />} />
+      <Route path="/quotes/prices" element={<PriceList />} />
+      <Route path="/quotes/:quoteId" element={<QuoteDetail />} />
+    </>
+  ),
+}
+
+export default quotesDashboard

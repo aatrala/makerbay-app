@@ -1,9 +1,20 @@
 import { useState, type FormEvent } from 'react'
-import { completeMfaSetup, explainAdmin, startSignIn, submitMfa, type AuthStep } from '../api'
+import {
+  PASSWORD_RULES,
+  completeMfaSetup,
+  explainAuth,
+  passwordProblem,
+  setNewPassword,
+  startSignIn,
+  submitMfa,
+  type AuthStep,
+} from '../api'
 
 export default function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [fresh, setFresh] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState<AuthStep | null>(null)
   const [error, setError] = useState('')
@@ -16,15 +27,33 @@ export default function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
       if (next.done) onSignedIn()
       else { setStep(next); setCode('') }
     } catch (e) {
-      setError(explainAdmin(e))
+      setError(explainAuth(e))
     } finally {
       setBusy(false)
     }
   }
 
-  const password_ = (e: FormEvent) => {
+  const restart = () => { setStep(null); setError(''); setFresh(''); setConfirm(''); setCode('') }
+
+  const withPassword = (e: FormEvent) => {
     e.preventDefault()
     void run(() => startSignIn(email, password))
+  }
+
+  // A newly created account must replace its temporary password before it can
+  // authenticate at all. The password is typed here and goes straight to
+  // Cognito; nothing else ever sees it.
+  const choosePassword = (e: FormEvent) => {
+    e.preventDefault()
+    const problem = passwordProblem(fresh)
+    if (problem) return setError(problem)
+    if (fresh !== confirm) return setError('Those two passwords do not match.')
+    void run(async () => {
+      const next = await setNewPassword(email, step!.session!, fresh)
+      // Later steps sign in again, so remember what it is now.
+      setPassword(fresh)
+      return next
+    })
   }
 
   const mfa = (e: FormEvent) => {
@@ -36,16 +65,18 @@ export default function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     )
   }
 
+  const challenge = step?.challenge
+
   return (
     <div className="auth-wrap">
       <div className="auth-card">
         <div className="logo">Maker<span>Bay</span> staff</div>
 
-        {!step ? (
+        {!step && (
           <div className="card">
             <h2>Sign in</h2>
             <p>This console is for MakerBay staff. Everything you do here is recorded.</p>
-            <form onSubmit={password_}>
+            <form onSubmit={withPassword}>
               <label htmlFor="email">Email</label>
               <input id="email" type="email" autoComplete="username" value={email}
                 onChange={(e) => setEmail(e.target.value)} required autoFocus />
@@ -54,18 +85,48 @@ export default function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
                 onChange={(e) => setPassword(e.target.value)} required />
               {error && <div className="error">{error}</div>}
               <div className="mt"><button disabled={busy}>{busy ? 'Checking…' : 'Continue'}</button></div>
+              <p className="meta mt">
+                First time here? Sign in with the temporary password you were issued and you will be
+                asked to choose a new one.
+              </p>
             </form>
           </div>
-        ) : (
+        )}
+
+        {challenge === 'NEW_PASSWORD_REQUIRED' && (
           <div className="card">
-            <h2>{step.challenge === 'MFA_SETUP' ? 'Set up your authenticator' : 'Authenticator code'}</h2>
-            {step.challenge === 'MFA_SETUP' ? (
+            <h2>Choose your password</h2>
+            <p>
+              That was a temporary password. Pick a permanent one now — it is sent straight to
+              Cognito and stored nowhere else.
+            </p>
+            <form onSubmit={choosePassword}>
+              <label htmlFor="new-pw">New password</label>
+              <input id="new-pw" type="password" autoComplete="new-password" value={fresh}
+                onChange={(e) => setFresh(e.target.value)} required autoFocus />
+              <label htmlFor="confirm-pw">Confirm password</label>
+              <input id="confirm-pw" type="password" autoComplete="new-password" value={confirm}
+                onChange={(e) => setConfirm(e.target.value)} required />
+              <p className="meta">{PASSWORD_RULES.describe}</p>
+              {error && <div className="error">{error}</div>}
+              <div className="mt row">
+                <button disabled={busy || !fresh || !confirm}>{busy ? 'Saving…' : 'Set password'}</button>
+                <button type="button" className="ghost" onClick={restart}>Start over</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {(challenge === 'MFA_SETUP' || challenge === 'SOFTWARE_TOKEN_MFA') && (
+          <div className="card">
+            <h2>{challenge === 'MFA_SETUP' ? 'Set up your authenticator' : 'Authenticator code'}</h2>
+            {challenge === 'MFA_SETUP' ? (
               <>
                 <p>
                   Add this secret to your authenticator app, then enter the six-digit code it shows.
                   MFA is required on every staff account.
                 </p>
-                <pre className="code">{step.secretCode}</pre>
+                <pre className="code">{step?.secretCode}</pre>
               </>
             ) : (
               <p>Enter the six-digit code from your authenticator app.</p>
@@ -78,7 +139,7 @@ export default function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
               {error && <div className="error">{error}</div>}
               <div className="mt row">
                 <button disabled={busy || code.length !== 6}>{busy ? 'Verifying…' : 'Sign in'}</button>
-                <button type="button" className="ghost" onClick={() => { setStep(null); setError('') }}>Start over</button>
+                <button type="button" className="ghost" onClick={restart}>Start over</button>
               </div>
             </form>
           </div>

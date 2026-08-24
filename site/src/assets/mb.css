@@ -142,6 +142,29 @@ footer nav { margin-left: auto; display: flex; gap: 20px; }
 .hero .tag.soon { background: #422006; color: #fcd34d; }
 .dep { font-size: 15px; margin-top: 8px; }
 
+
+/* Free or paid, said on every surface a module appears on, so a reader never
+   has to guess whether the thing they just read about costs money. */
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.tags .tag { margin-bottom: 0; }
+.tag.free { background: var(--ok-sub); color: var(--ok); }
+.tag.paid { background: var(--accent-sub); color: var(--accent-dark); }
+.hero .tags { margin-bottom: 18px; }
+.hero .tag.free { background: #14532d; color: #86efac; }
+.hero .tag.paid { background: #431407; color: #fdba74; }
+
+.pricing-table { width: 100%; border-collapse: collapse; }
+.pricing-table th {
+  text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line);
+}
+.pricing-table td { padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pricing-table tr:last-child td { border-bottom: none; }
+.pricing-table .meta { font-size: 14px; color: var(--muted); margin-top: 2px; }
+.pricing-table .tag { margin-bottom: 0; }
+.scroll-x { overflow-x: auto; max-width: 100%; }
+.linkcard .meta { font-size: 14px; color: var(--muted); margin-top: 8px; }
+
 /* --- Roadmap --- */
 .road { list-style: none; counter-reset: r; max-width: 74ch; }
 .road-item { position: relative; padding: 0 0 30px 34px; border-left: 2px solid var(--line); margin-left: 8px; }

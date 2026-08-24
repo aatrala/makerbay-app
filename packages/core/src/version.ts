@@ -34,6 +34,16 @@ export interface ModuleManifest {
   meteredMetrics: string[]
   /** null for core modules, which have nothing to switch on or off. */
   entitlementKey: string | null
+  /**
+   * 'free' modules are on for every workspace at no cost. They are the ones
+   * that cost us almost nothing to run and make the paid modules more useful:
+   * a free module that feeds Contacts is customer acquisition, not lost
+   * revenue. 'paid' modules carry real marginal cost or real willingness to
+   * pay, and stay behind an entitlement.
+   */
+  pricing?: 'free' | 'paid'
+  /** Generous caps that exist to bound cost, not to force an upgrade. */
+  freeLimits?: Record<string, number>
   dependsOn: string[]
   roadmap: { order: number; note: string }
   marketing: {
@@ -45,7 +55,7 @@ export interface ModuleManifest {
 }
 
 /** Platform version: the core (tenancy, auth, entitlements, billing) itself. */
-export const PLATFORM_VERSION = '1.8.0'
+export const PLATFORM_VERSION = '1.10.0'
 
 export const MODULES: ModuleManifest[] = [
   assistantManifest,
@@ -60,7 +70,22 @@ export const moduleManifest = (id: string): ModuleManifest | undefined =>
   MODULES.find((m) => m.id === id)
 
 /** Everything a customer can switch on and be billed for. */
-export const billableModules = (): ModuleManifest[] => MODULES.filter((m) => !m.core)
+export const billableModules = (): ModuleManifest[] =>
+  MODULES.filter((m) => !m.core && m.pricing !== 'free')
+
+/** Modules every workspace gets at no cost, core substrate included. */
+export const freeModules = (): ModuleManifest[] =>
+  MODULES.filter((m) => m.core || m.pricing === 'free')
+
+/** Is this module free for everyone, and therefore never entitlement-gated? */
+export const isFreeModule = (moduleId: string): boolean => {
+  const m = MODULES.find((x) => x.id === moduleId)
+  return Boolean(m && (m.core || m.pricing === 'free'))
+}
+
+/** The caps a free module runs under. Bounds our cost; never forces an upgrade. */
+export const freeModuleLimits = (moduleId: string): Record<string, number> =>
+  MODULES.find((x) => x.id === moduleId)?.freeLimits ?? {}
 
 /** Ordered the way the roadmap tells the story, not the way the array is written. */
 export const roadmapOrder = (): ModuleManifest[] =>

@@ -1,12 +1,21 @@
 import type { DashboardModule, Me } from '@makerbay/web-kit'
 import { assistantDashboard, assistantFirstRun } from '@makerbay/assistant-web'
 import { contactsDashboard } from '@makerbay/contacts-web'
+import { requestsDashboard } from '@makerbay/requests-web'
+import { bookingDashboard } from '@makerbay/booking-web'
+import { quotesDashboard } from '@makerbay/quotes-web'
 
 /**
  * The only file that knows which module dashboards exist. Adding a module is
  * one import and one array entry; nothing else in the shell changes.
  */
-const ALL: DashboardModule[] = [assistantDashboard, contactsDashboard]
+const ALL: DashboardModule[] = [
+  assistantDashboard,
+  requestsDashboard,
+  bookingDashboard,
+  quotesDashboard,
+  contactsDashboard,
+]
 
 /**
  * Core modules ship with every workspace and are never entitlement-gated, so

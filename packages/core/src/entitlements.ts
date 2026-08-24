@@ -1,6 +1,7 @@
 import { DeleteCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { ddb, getEntitlements } from './db'
 import { ulid } from './ids'
+import { freeModuleLimits, isFreeModule } from './version'
 
 /**
  * Entitlements are stored as individual grants rather than one mutable
@@ -12,7 +13,7 @@ import { ulid } from './ids'
  * every other writer, and a subscription event silently wiped manual grants.
  */
 
-export type GrantSource = 'stripe' | 'manual' | 'trial'
+export type GrantSource = 'stripe' | 'manual' | 'trial' | 'included'
 
 export interface Grant {
   tenantId: string
@@ -218,6 +219,18 @@ export async function getEffectiveEntitlement(
   tenantId: string,
   moduleId: string,
 ): Promise<EffectiveEntitlement> {
+  // Free modules are on for everyone. There is nothing to switch on, nothing
+  // to grant and nothing to bill, so they never touch the grant path at all.
+  if (isFreeModule(moduleId)) {
+    return {
+      enabled: true,
+      planTier: 'free',
+      limits: freeModuleLimits(moduleId),
+      overage: 'block',
+      sources: ['included'],
+    }
+  }
+
   const [enabledMap, grants] = await Promise.all([
     getEntitlements(tenantId),
     listGrants(tenantId, moduleId),
