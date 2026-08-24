@@ -1,0 +1,12 @@
+{
+  "name": "@makerbay/visibility-api",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@makerbay/core": "0.1.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145"
+  }
+}

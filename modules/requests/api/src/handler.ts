@@ -34,7 +34,7 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
   body: JSON.stringify(body),
 })
 
-const KINDS: RequestKind[] = ['handoff', 'lead', 'feedback']
+const KINDS: RequestKind[] = ['handoff', 'lead', 'feedback', 'missedcall']
 const STATUSES: RequestStatus[] = ['new', 'open', 'closed']
 const APP = 'https://app.makerbay.app'
 

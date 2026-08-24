@@ -124,6 +124,31 @@ Note for Windows: pass JSON to the AWS CLI from a file (`file://payload.json`)
 rather than inline. PowerShell strips the double quotes out of an inline JSON
 argument before the CLI ever sees it.
 
+## Telephony (missed-call rescue)
+
+Chime SDK Voice has no CloudFormation support, so three one-time CLI steps
+provision it once AWS enables the service for the account (open a support case
+for "Chime SDK Voice service access" - new accounts are restricted from PSTN
+by default, like the SES sandbox):
+
+```bash
+aws chime-sdk-voice create-sip-media-application --aws-region us-east-1 --name makerbay-rescue --endpoints LambdaArn=<RescueSipFnArn output> --profile makerbay
+```
+
+```bash
+aws chime-sdk-voice create-phone-number-order --product-type SipMediaApplicationDialIn --e164-phone-numbers <number from search-available-phone-numbers> --profile makerbay
+```
+
+```bash
+aws chime-sdk-voice create-sip-rule --name rescue-<tenant> --trigger-type ToPhoneNumber --trigger-value <number> --target-applications SipMediaApplicationId=<SMA id>,Priority=1,AwsRegion=us-east-1 --profile makerbay
+```
+
+Then map the number to the tenant in `makerbay-rescuenumbers` and set it on the
+tenant's row in `makerbay-rescueconfig`. SMS needs an origination identity in
+AWS End User Messaging; until one is registered, `sendSms` reports
+`sms_not_configured` and the rescue flow degrades honestly (voicemail,
+transcript and owner email still work).
+
 ## Secrets
 
 Never read a secret into a shell or a log. Stripe keys live in the

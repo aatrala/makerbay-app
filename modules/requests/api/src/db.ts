@@ -6,7 +6,7 @@ const Tables = {
   config: () => process.env.TABLE_REQUESTSCONFIG!,
 }
 
-export type RequestKind = 'handoff' | 'lead' | 'feedback'
+export type RequestKind = 'handoff' | 'lead' | 'feedback' | 'missedcall'
 export type RequestStatus = 'new' | 'open' | 'closed'
 
 export interface RequestReply {
@@ -32,7 +32,7 @@ export interface RequestRow {
   /** The last few turns of the conversation, so the owner has context. */
   transcript?: Array<{ role: string; text: string }>
   replies?: RequestReply[]
-  source: 'widget' | 'hosted' | 'api'
+  source: 'widget' | 'hosted' | 'api' | 'rescue'
   /** Set when the owner's notification could not be delivered. */
   notifyError?: string
   createdAt: string

@@ -2,25 +2,25 @@
   "id": "visibility",
   "name": "Get found",
   "tagline": "Set up properly on Google, and asked for reviews at the right moment",
-  "status": "planned",
+  "status": "live",
   "version": {
-    "api": "0.0.0",
-    "web": "0.0.0"
+    "api": "1.0.0",
+    "web": "1.0.0"
   },
   "routes": [
     "/v1/visibility/*"
   ],
   "meteredMetrics": [
-    "listing.impression"
+    "review.requested"
   ],
-  "entitlementKey": "visibility",
-  "pricing": "paid",
+  "entitlementKey": null,
+  "pricing": "free",
   "dependsOn": [
     "presence"
   ],
   "roadmap": {
     "order": 7,
-    "note": "Reframed after research: a new directory cannot rank against IndiaMART, JustDial and hipages without supply we will not have for years, and auto-generated suburb pages are the shape Google penalises. What works is helping a business get its own Google profile right and collect real reviews."
+    "note": "Shipped as GBP assist plus review requests - the honest version the research pointed at, not a directory."
   },
   "marketing": {
     "summary": "Google Business Profile is how customers actually find a local trade, and it is verified against your business, not ours - so we cannot rank on your behalf and will not pretend to. What we can do is get your profile set up properly, keep your details consistent, and ask every finished customer for a review at the moment they are most likely to leave one.",

@@ -9,6 +9,26 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.1.0 - 2026-08-24
+
+- Added `visibility` Get found is live and free: a guided checklist that gets
+  your Google Business Profile right in about twenty minutes, and review
+  requests sent at the moment a customer is most likely to say yes - one email,
+  once, right after the job is done. Ask from a contact's page, or let a
+  completed booking ask automatically.
+- Added `voice` Missed-call rescue is built and proven: an unanswered call
+  forwards to your rescue number, the caller hears a greeting in your name and
+  gets a text with your booking link while they listen, and their voicemail is
+  written out with the job, address and urgency pulled into your Requests
+  inbox. A booking that follows is tracked back to the rescued call - the
+  conversion number this whole category never publishes.
+- Added `voice` Deliberately not a talking robot. Every conversational AI
+  receptionist measured on real calls answers over a second late and roughly a
+  third of callers say they would hang up on one; the transcript-and-text-back
+  design does the job with none of that risk.
+- Added `requests` Missed calls appear in the inbox alongside handoffs, leads
+  and feedback, with the same reply tools.
+
 ## 2.0.0 - 2026-08-24
 
 - Added `presence` Every workspace now has a real web page at

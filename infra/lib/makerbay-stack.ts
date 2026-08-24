@@ -18,6 +18,8 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import * as route53 from 'aws-cdk-lib/aws-route53'
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets'
 import * as s3 from 'aws-cdk-lib/aws-s3'
+import * as s3n from 'aws-cdk-lib/aws-s3-notifications'
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources'
 import * as s3vectors from 'aws-cdk-lib/aws-s3vectors'
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers'
@@ -105,6 +107,20 @@ export class MakerbayStack extends cdk.Stack {
     // Presence stores only the editable words; services, hours and prices are
     // read live from the modules that own them, so nothing is stored twice.
     const presenceConfig = table('PresenceConfig', 'tenantId')
+    const visibilityConfig = table('VisibilityConfig', 'tenantId')
+    // Missed-call rescue: the events table streams so the text goes out the
+    // moment a call is answered, without slowing the call itself down.
+    const rescueConfig = table('RescueConfig', 'tenantId')
+    const rescueNumbers = table('RescueNumbers', 'phoneNumber')
+    const rescueEvents = new dynamodb.Table(this, 'RescueEvents', {
+      tableName: 'makerbay-rescueevents',
+      partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'rescueId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      stream: dynamodb.StreamViewType.NEW_IMAGE,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
 
     // ── DNS + TLS ────────────────────────────────────────────────────────
     const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
@@ -382,6 +398,10 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_BOOKINGSERVICES: bookingServices.tableName,
       TABLE_BOOKINGS: bookings.tableName,
       TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+      // A completed job asks for a review; a booking after a missed call
+      // closes the rescued request and counts the conversion.
+      TABLE_REQUESTS: requests.tableName,
+      TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
     })
     const quotesFn = fn('QuotesApiFn', 'modules/quotes/api/src/handler.ts', {
       ...moduleEnv,
@@ -396,6 +416,94 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_BOOKINGCONFIG: bookingConfig.tableName,
       TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
     })
+    const visibilityFn = fn('VisibilityApiFn', 'modules/visibility/api/src/handler.ts', {
+      ...moduleEnv,
+      TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
+    })
+    // Call audio lives in its own bucket: greetings the Chime service reads,
+    // recordings it writes, transcripts Transcribe writes. Never public.
+    const rescueAudio = new s3.Bucket(this, 'RescueAudioBucket', {
+      bucketName: `makerbay-rescue-audio-${this.account}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      lifecycleRules: [
+        // Voicemail audio is raw personal data; the transcript is the record.
+        { prefix: 'recordings/', expiration: cdk.Duration.days(30) },
+        { prefix: 'transcripts/', expiration: cdk.Duration.days(90) },
+      ],
+    })
+    // The Chime SDK media plane plays greetings and writes recordings itself.
+    rescueAudio.addToResourcePolicy(new iam.PolicyStatement({
+      principals: [new iam.ServicePrincipal('voiceconnector.chime.amazonaws.com')],
+      actions: ['s3:GetObject', 's3:PutObject', 's3:PutObjectAcl'],
+      resources: [rescueAudio.arnForObjects('*')],
+      conditions: { StringEquals: { 'aws:SourceAccount': this.account } },
+    }))
+
+    const rescueEnv = {
+      ...moduleEnv,
+      TABLE_RESCUECONFIG: rescueConfig.tableName,
+      TABLE_RESCUENUMBERS: rescueNumbers.tableName,
+      TABLE_RESCUEEVENTS: rescueEvents.tableName,
+      TABLE_REQUESTS: requests.tableName,
+      RESCUE_AUDIO_BUCKET: rescueAudio.bucketName,
+      CHAT_MODEL_ID,
+    }
+    // Answers the forwarded call. Must respond in well under a second, so it
+    // does nothing but look up the tenant, log the call and return actions.
+    const rescueSipFn = fn('RescueSipFn', 'modules/voice/api/src/sip-handler.ts', rescueEnv, {
+      timeoutSeconds: 10,
+    })
+    rescueSipFn.addPermission('ChimeInvoke', {
+      principal: new iam.ServicePrincipal('voiceconnector.chime.amazonaws.com'),
+      sourceAccount: this.account,
+    })
+    // Chime SDK Voice has no CloudFormation support at all, so the SIP media
+    // application, the phone number order and the SIP rule are one-time CLI
+    // steps (documented in README) - like the phone number itself would be.
+    new cdk.CfnOutput(this, 'RescueSipFnArn', { value: rescueSipFn.functionArn })
+
+    // Everything slow: SMS, contact, request, transcription, extraction.
+    const rescueProcessorFn = fn('RescueProcessorFn', 'modules/voice/api/src/processor.ts', rescueEnv, {
+      timeoutSeconds: 120,
+      memorySize: 512,
+    })
+    rescueProcessorFn.addEventSource(new lambdaEventSources.DynamoEventSource(rescueEvents, {
+      startingPosition: lambda.StartingPosition.LATEST,
+      batchSize: 5,
+      retryAttempts: 2,
+    }))
+    rescueAudio.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(rescueProcessorFn),
+      { prefix: 'recordings/' },
+    )
+    rescueAudio.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(rescueProcessorFn),
+      { prefix: 'transcripts/', suffix: '.json' },
+    )
+    rescueProcessorFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['transcribe:StartTranscriptionJob'],
+      resources: ['*'],
+    }))
+    rescueProcessorFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: ['*'],
+    }))
+
+    // Owner config: greeting synthesis and the rescue log.
+    const rescueApiFn = fn('RescueApiFn', 'modules/voice/api/src/handler.ts', rescueEnv, {
+      timeoutSeconds: 29,
+      memorySize: 512,
+    })
+    rescueApiFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['polly:SynthesizeSpeech'],
+      resources: ['*'],
+    }))
+
     const assistantFn = fn(
       'AssistantApiFn',
       'modules/assistant/api/src/handler.ts',
@@ -520,6 +628,25 @@ export class MakerbayStack extends cdk.Stack {
     for (const t of [bookingServices, bookings, bookingConfig]) t.grantReadWriteData(bookingFn)
     for (const t of [priceItems, quotes, quotesConfig]) t.grantReadWriteData(quotesFn)
     presenceConfig.grantReadWriteData(presenceFn)
+    visibilityConfig.grantReadWriteData(visibilityFn)
+    for (const t of [tenants, users, entitlements, grants]) t.grantReadData(visibilityFn)
+    contactEvents.grantReadWriteData(visibilityFn)
+    contacts.grantReadWriteData(visibilityFn)
+    bus.grantPutEventsTo(visibilityFn)
+    visibilityFn.addToRolePolicy(sesSendPolicy)
+    // Booking marks jobs done and closes rescued requests, so it needs both.
+    visibilityConfig.grantReadData(bookingFn)
+    requests.grantReadWriteData(bookingFn)
+
+    for (const f of [rescueSipFn, rescueProcessorFn, rescueApiFn]) {
+      for (const t of [rescueConfig, rescueNumbers, rescueEvents, tenants, users]) t.grantReadWriteData(f)
+      rescueAudio.grantReadWrite(f)
+    }
+    for (const t of [contacts, contactEvents, requests, entitlements, grants]) {
+      t.grantReadWriteData(rescueProcessorFn)
+    }
+    bus.grantPutEventsTo(rescueProcessorFn)
+    rescueProcessorFn.addToRolePolicy(sesSendPolicy)
     // Read-only views: presence renders what other modules own, never writes it.
     for (const t of [bookingServices, bookingConfig, assistantConfig, tenants, users, entitlements, grants]) {
       t.grantReadData(presenceFn)
@@ -675,6 +802,18 @@ export class MakerbayStack extends cdk.Stack {
       })
     }
 
+    httpApi.addRoutes({
+      path: '/v1/visibility/{proxy+}',
+      methods: routeMethods,
+      integration: new HttpLambdaIntegration('VisibilityIntegration', visibilityFn),
+      authorizer,
+    })
+    httpApi.addRoutes({
+      path: '/v1/voice/{proxy+}',
+      methods: routeMethods,
+      integration: new HttpLambdaIntegration('RescueIntegration', rescueApiFn),
+      authorizer,
+    })
     httpApi.addRoutes({
       path: '/v1/presence/{proxy+}',
       methods: routeMethods,

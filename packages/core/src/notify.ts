@@ -106,3 +106,50 @@ export const money = (cents: number, currency = 'AUD'): string =>
 /** Line total, rounded once, so a hand-added column matches the invoice. */
 export const lineTotalCents = (quantity: number, unitCents: number): number =>
   Math.round(quantity * unitCents)
+
+// ── SMS ──────────────────────────────────────────────────────────────────
+// Same contract as sendEmail: never throws, failures are recorded on the row
+// and shown in the dashboard. Until an origination number is registered with
+// AWS End User Messaging, every send reports sms_not_configured - the flows
+// still work, the message text is kept, and the dashboard says so plainly.
+
+import { PinpointSMSVoiceV2Client, SendTextMessageCommand } from '@aws-sdk/client-pinpoint-sms-voice-v2'
+
+const smsClient = new PinpointSMSVoiceV2Client({})
+
+export interface SmsResult {
+  sent: boolean
+  error?: string
+}
+
+export async function sendSms(to: string, text: string): Promise<SmsResult> {
+  const origination = process.env.SMS_ORIGINATION
+  if (!origination) return { sent: false, error: 'sms_not_configured' }
+  const dest = to?.trim()
+  if (!dest || !/^\+?[0-9]{7,15}$/.test(dest.replace(/[\s()-]/g, ''))) {
+    return { sent: false, error: 'no_recipient' }
+  }
+  try {
+    await smsClient.send(
+      new SendTextMessageCommand({
+        DestinationPhoneNumber: dest.replace(/[\s()-]/g, ''),
+        OriginationIdentity: origination,
+        MessageBody: text.slice(0, 480),
+      }),
+    )
+    return { sent: true }
+  } catch (err) {
+    const name = (err as { name?: string }).name ?? 'unknown'
+    console.warn('sms send failed', { error: name })
+    return { sent: false, error: name }
+  }
+}
+
+export function explainSmsError(error?: string): string | undefined {
+  if (!error) return undefined
+  if (error === 'sms_not_configured') {
+    return 'Text messaging is not switched on for this account yet, so the text was not sent.'
+  }
+  if (error === 'no_recipient') return 'The caller withheld their number, so no text could be sent.'
+  return `The text could not be sent (${error}).`
+}

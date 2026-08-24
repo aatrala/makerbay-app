@@ -14,6 +14,8 @@ import {
   upsertContact,
   type CallerContext,
 } from '@makerbay/core'
+import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { ddb as ddbRaw } from '@makerbay/core'
 import {
   DEFAULT_BOOKING_CONFIG,
   blocking,
@@ -325,11 +327,82 @@ async function createBooking(
   })
 
   await emitUsage({ tenantId, moduleId: 'booking', metric: 'booking.created', quantity: 1 })
+  await attributeRescue(tenantId, contact.contactId)
   return json(201, { bookingId, booking: view, emailed: customerMail.sent })
 }
 
 async function slugOf(tenantId: string): Promise<string> {
   return (await getTenant(tenantId))?.slug ?? ''
+}
+
+async function autoAskReview(tenantId: string, contactId: string, email: string): Promise<void> {
+  try {
+    const cfg = await ddbRaw.send(
+      new GetCommand({ TableName: process.env.TABLE_VISIBILITYCONFIG!, Key: { tenantId } }),
+    )
+    const reviewLink = String(cfg.Item?.reviewLink ?? '')
+    if (cfg.Item?.autoAsk !== true || !reviewLink) return
+    const tenant = await getTenant(tenantId)
+    const notice = await sendEmail({
+      to: email,
+      subject: `How did we do? - ${tenant?.name ?? ''}`,
+      text: [
+        String(cfg.Item?.askMessage ?? 'Thanks for choosing us! A Google review takes a minute and makes a real difference.'),
+        '',
+        `Leave a review: ${reviewLink}`,
+        '',
+        tenant?.name ?? '',
+      ].join('\n'),
+    })
+    await appendContactEvent(tenantId, contactId, {
+      moduleId: 'visibility',
+      title: notice.sent ? 'Asked for a Google review after a completed job' : 'Review ask written (email not sent)',
+    })
+    await emitUsage({ tenantId, moduleId: 'visibility', metric: 'review.requested', quantity: 1 })
+  } catch (err) {
+    // Asking is telemetry-grade; it must never fail the completion itself.
+    console.warn('auto review ask failed', err)
+  }
+}
+
+/**
+ * If this customer had an open missed-call request from the last week, the
+ * booking is what the rescue was for: close the request and count the
+ * conversion. Nobody in this category publishes rescue-to-booking rates -
+ * we can, because the diary and the rescue live in one system.
+ */
+async function attributeRescue(tenantId: string, contactId: string): Promise<void> {
+  try {
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    const r = await ddbRaw.send(
+      new QueryCommand({
+        TableName: process.env.TABLE_REQUESTS!,
+        KeyConditionExpression: 'tenantId = :t',
+        FilterExpression: 'contactId = :c AND kind = :k AND #st <> :closed AND createdAt > :cutoff',
+        ExpressionAttributeNames: { '#st': 'status' },
+        ExpressionAttributeValues: {
+          ':t': tenantId, ':c': contactId, ':k': 'missedcall', ':closed': 'closed', ':cutoff': weekAgo,
+        },
+        ScanIndexForward: false,
+        Limit: 50,
+      }),
+    )
+    const open = (r.Items ?? [])[0]
+    if (!open) return
+    await ddbRaw.send(
+      new UpdateCommand({
+        TableName: process.env.TABLE_REQUESTS!,
+        Key: { tenantId, requestId: open.requestId },
+        UpdateExpression: 'SET #st = :s, closedAt = :now, updatedAt = :now, bookedFromRescue = :yes',
+        ExpressionAttributeNames: { '#st': 'status' },
+        ExpressionAttributeValues: { ':s': 'closed', ':now': new Date().toISOString(), ':yes': true },
+      }),
+    )
+    await emitUsage({ tenantId, moduleId: 'voice', metric: 'rescue.booked', quantity: 1 })
+  } catch (err) {
+    // Attribution is telemetry; it must never fail a customer's booking.
+    console.warn('rescue attribution failed', err)
+  }
 }
 
 async function cancelByToken(
@@ -430,6 +503,12 @@ async function patchBooking(tenantId: string, bookingId: string, event: Event): 
     cancelledAt: status === 'cancelled' ? now : existing.cancelledAt,
   }
   await putBooking(row)
+
+  // The moment a customer is most likely to leave a review is right after the
+  // job is done. One ask, once - configured under Get found.
+  if (status === 'completed' && existing.status !== 'completed' && existing.email) {
+    await autoAskReview(tenantId, existing.contactId, existing.email)
+  }
 
   if (status === 'cancelled' && existing.status !== 'cancelled') {
     const config = await getBookingConfig(tenantId)

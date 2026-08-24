@@ -70,6 +70,14 @@ export default function ContactDetail() {
   const setStatus = (status: string) =>
     void run(async () => { await api('PATCH', `/v1/contacts/${contactId}`, { status }) })
 
+  const askReview = () =>
+    void run(async () => {
+      const r = await api('POST', '/v1/visibility/ask', { contactId })
+      setNote(r.sent
+        ? 'Asked. The review email with your Google link is on its way.'
+        : 'The ask was recorded, but the email could not be sent yet.')
+    })
+
   const addEntry = (e: FormEvent) => {
     e.preventDefault()
     void run(async () => {
@@ -172,6 +180,13 @@ export default function ContactDetail() {
               {contact.note ? <><dt>Note</dt><dd>{contact.note}</dd></> : null}
             </dl>
 
+            {contact.email && (
+              <div className="mt">
+                <button className="ghost" disabled={busy} onClick={askReview}>
+                  Ask for a Google review
+                </button>
+              </div>
+            )}
             <label>Status</label>
             <div className="row">
               {STATUSES.map((s) => (

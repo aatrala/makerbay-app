@@ -12,7 +12,7 @@ import {
 
 interface RequestRow {
   requestId: string
-  kind: 'handoff' | 'lead' | 'feedback'
+  kind: 'handoff' | 'lead' | 'feedback' | 'missedcall'
   status: 'new' | 'open' | 'closed'
   contactId: string
   name?: string
@@ -30,6 +30,7 @@ const KIND_LABEL: Record<string, string> = {
   handoff: 'Wants a person',
   lead: 'Wants contact',
   feedback: 'Feedback',
+  missedcall: 'Missed call',
 }
 
 const emailWarning = (error?: string) =>
