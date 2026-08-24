@@ -85,14 +85,43 @@
     if (!embedded) app.querySelector('#input').focus()
   }
 
-  /** Create a message bubble. Text is set via textContent, never innerHTML. */
+  /**
+   * Render text into a node with URLs as real links. Built from text nodes
+   * and createElement - never innerHTML - so the safety property holds.
+   */
+  function renderLinked(node, text) {
+    node.textContent = ''
+    var parts = String(text || '').split(/(https?:\/\/[^\s)"'<>,]+|(?:^|\s)(?:www\.|[a-z0-9-]+\.makerbay\.app)[^\s)"'<>,]*)/g)
+    parts.forEach(function (part) {
+      if (!part) return
+      var lead = part.match(/^\s+/)
+      if (lead) { node.appendChild(document.createTextNode(lead[0])); part = part.slice(lead[0].length) }
+      if (/^(https?:\/\/|www\.|[a-z0-9-]+\.makerbay\.app)/.test(part)) {
+        // Trailing sentence punctuation belongs to the sentence, not the URL.
+        var trail = part.match(/[.,;:!?]+$/)
+        var url = trail ? part.slice(0, -trail[0].length) : part
+        var a = document.createElement('a')
+        a.href = /^https?:\/\//.test(url) ? url : 'https://' + url
+        a.target = '_blank'
+        a.rel = 'noopener'
+        a.textContent = url
+        node.appendChild(a)
+        if (trail) node.appendChild(document.createTextNode(trail[0]))
+      } else {
+        node.appendChild(document.createTextNode(part))
+      }
+    })
+  }
+
+  /** Create a message bubble. Content built via text/anchor nodes, never innerHTML. */
   function add(role, text) {
     var log = document.getElementById('log')
     var el = document.createElement('div')
     el.className = 'msg ' + (role === 'me' ? 'me' : 'bot')
     var body = document.createElement('span')
     body.className = 'body'
-    body.textContent = text || ''
+    if (role === 'me') body.textContent = text || ''
+    else renderLinked(body, text || '')
     el.appendChild(body)
     log.appendChild(el)
     log.scrollTop = log.scrollHeight
@@ -100,9 +129,18 @@
   }
 
   function appendText(bubble, text) {
-    bubble.querySelector('.body').textContent += text
+    var body = bubble.querySelector('.body')
+    // Streaming appends plain text; links are resolved once the answer is
+    // final (finishText), because a URL can arrive split across deltas.
+    body.textContent += text
     var log = document.getElementById('log')
     log.scrollTop = log.scrollHeight
+  }
+
+  /** Called when a streamed answer is complete: re-render with clickable links. */
+  function finishText(bubble) {
+    var body = bubble.querySelector('.body')
+    renderLinked(body, body.textContent)
   }
 
   /** Attach sources and the thumbs control once an answer is complete. */
@@ -193,6 +231,7 @@
             appendText(bubble, evt.text)
           } else if (evt.type === 'done') {
             ensureBubble()
+            finishText(bubble)
             decorate(bubble, evt.citations, evt.messageId || messageId)
           } else if (evt.type === 'error') {
             if (evt.error === 'limit_exceeded') limitHit = true

@@ -57,6 +57,16 @@
 
   if (!slug) return fail('This link is not valid.')
 
+  // The business's accent colour, so the booking, quote, review and invoice
+  // pages look like the page that linked here - not a different blue product.
+  fetch(API + '/v1/public/assistant/config?slug=' + encodeURIComponent(slug))
+    .then(function (r) { return r.ok ? r.json() : null })
+    .then(function (d) {
+      var c = d && d.assistant && d.assistant.brandColor
+      if (c && /^#[0-9a-fA-F]{6}$/.test(c)) document.documentElement.style.setProperty('--brand', c)
+    })
+    .catch(function () { /* default colour is fine */ })
+
   if (path === '/booking') return bookingPage()
   if (path === '/booking/cancel') return cancelPage()
   if (path === '/quote') return quotePage()
