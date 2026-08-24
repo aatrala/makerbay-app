@@ -93,12 +93,36 @@ export const PLANS: Record<string, PlanDefinition> = {
   },
   pro: {
     id: 'pro',
-    name: 'Pro',
+    name: 'Trade',
     monthlyPriceCents: 2900,
     includedMessages: 2000,
     overageCentsPerMessage: 2,
     limits: { messagesPerMonth: 100000, sources: 500, sourceBytes: 2 * 1024 * 1024 * 1024 },
   },
+}
+
+/** Annual: two months free, and no metered overage - the plan pauses at the
+ * allowance instead (Stripe cannot mix a yearly base with monthly metering,
+ * and a surprise catch-up bill at renewal would break the no-surprises rule). */
+export const ANNUAL_PRICE_CENTS = 29000
+
+/**
+ * What a Trade subscription switches on beyond the assistant. One place, so
+ * the webhook and any future admin tooling agree. Tier pricing, not module
+ * pricing: the subscription IS the bundle.
+ */
+export const TRADE_BUNDLE: Array<{ moduleId: string; limits: Record<string, number> }> = [
+  // Effectively unlimited: the caps exist to bound abuse, not usage.
+  { moduleId: 'booking', limits: { bookingsPerMonth: 100000 } },
+  { moduleId: 'reviews', limits: { reviewsPerMonth: 100000 } },
+  // The presence grant at tier pro opens custom domains.
+  { moduleId: 'presence', limits: {} },
+]
+
+/** Free baselines to restore when a subscription lapses. */
+export const FREE_MODULE_BASELINES: Record<string, Record<string, number>> = {
+  booking: { bookingsPerMonth: 20 },
+  reviews: { reviewsPerMonth: 20 },
 }
 
 export const PRO_PRODUCT_KEY = 'makerbay-assistant-pro'

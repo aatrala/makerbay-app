@@ -1,6 +1,6 @@
 # Pricing proposal - tiers + pay-as-you-go
 
-Status: **PROPOSED - awaiting founder approval.** Produced 2026-08-24 by a
+Status: **APPROVED 2026-08-24 (Variant A) and implemented.** Founder decisions: USD worldwide (no regional pricing); free caps stay at 20/mo with honest framing; annual $290 with month-to-month headline; Genie taster tiers Free 25 / Trade 250 / Genie 2,500 msgs per month when Genie ships. Produced 2026-08-24 by a
 second Fable 5 strategist from the live pricing page, PLANS catalog, module
 manifests and docs/market-research.md. Nothing implemented.
 

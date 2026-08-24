@@ -8,6 +8,7 @@ import Shell from './pages/Shell'
 import Billing from './pages/Billing'
 import UsagePage from './pages/UsagePage'
 import WorkspacePage from './pages/WorkspacePage'
+import ActivityPage from './pages/ActivityPage'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/usage" element={<UsagePage me={me} />} />
         <Route path="/billing" element={<Billing />} />
         <Route path="/workspace" element={<WorkspacePage me={me} onSaved={() => void reload()} />} />
+        <Route path="/activity" element={<ActivityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

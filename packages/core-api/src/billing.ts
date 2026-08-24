@@ -10,7 +10,7 @@ import {
   setTenantBilling,
   type CallerContext,
 } from '@makerbay/core'
-import { isTestMode, METER_EVENT_NAME, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
+import { ANNUAL_PRICE_CENTS, isTestMode, METER_EVENT_NAME, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -34,7 +34,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (!tenant) return json(404, { error: 'no_tenant' })
 
     if (method === 'GET' && path === '/v1/core/billing/summary') return await summary(tenant)
-    if (method === 'POST' && path === '/v1/core/billing/checkout') return await checkout(tenant)
+    if (method === 'POST' && path === '/v1/core/billing/checkout') return await checkout(tenant, event)
     if (method === 'POST' && path === '/v1/core/billing/portal') return await portal(tenant)
     if (method === 'POST' && path === '/v1/core/billing/reset') return await reset(tenant, event)
     return json(404, { error: 'not_found' })
@@ -151,16 +151,23 @@ async function proPrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
   })
   let base = existing.data.find((p) => p.lookup_key === baseLookup)
   let metered = existing.data.find((p) => p.lookup_key === meteredLookup)
-  if (base && metered) return { base, metered }
 
   const products = await stripe.products.search({ query: `metadata['key']:'${PRO_PRODUCT_KEY}'` })
-  const product =
-    products.data[0] ??
-    (await stripe.products.create({
-      name: 'MakerBay Assistant Pro',
-      description: `Includes ${plan.includedMessages.toLocaleString()} assistant messages per month`,
+  let product = products.data[0]
+  if (!product) {
+    product = await stripe.products.create({
+      name: 'MakerBay Trade',
+      description: `Everything switched on: unlimited bookings, reviews and invoices, ${plan.includedMessages.toLocaleString()} assistant messages a month, custom domain.`,
       metadata: { key: PRO_PRODUCT_KEY },
-    }))
+    })
+  } else if (product.name !== 'MakerBay Trade') {
+    // The plan was renamed from "Assistant Pro" when pricing moved from
+    // modules to tiers; keep the Stripe object in step.
+    product = await stripe.products.update(product.id, {
+      name: 'MakerBay Trade',
+      description: `Everything switched on: unlimited bookings, reviews and invoices, ${plan.includedMessages.toLocaleString()} assistant messages a month, custom domain.`,
+    })
+  }
 
   if (!base) {
     base = await stripe.prices.create({
@@ -187,12 +194,32 @@ async function proPrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
       nickname: 'Assistant messages',
     })
   }
-  return { base, metered }
+  return { base, metered, product }
 }
 
-async function checkout(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {
+/** The annual base: two months free, no metered item (see ANNUAL_PRICE_CENTS). */
+async function annualPrice(
+  stripe: Awaited<ReturnType<typeof stripeClient>>,
+  productId: string,
+) {
+  const lookup = `${PRO_PRODUCT_KEY}-base-annual`
+  const existing = await stripe.prices.list({ lookup_keys: [lookup], limit: 5 })
+  if (existing.data[0]) return existing.data[0]
+  return stripe.prices.create({
+    product: productId,
+    currency: 'usd',
+    unit_amount: ANNUAL_PRICE_CENTS,
+    recurring: { interval: 'year' },
+    lookup_key: lookup,
+    nickname: 'Trade annual',
+  })
+}
+
+async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const interval: 'month' | 'year' = body.interval === 'year' ? 'year' : 'month'
   const stripe = await stripeClient()
-  const { base, metered } = await proPrices(stripe)
+  const { base, metered, product } = await proPrices(stripe)
 
   let customerId = tenant.stripeCustomerId
   if (!customerId) {
@@ -204,10 +231,17 @@ async function checkout(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {
     await setTenantBilling(tenant.tenantId, { stripeCustomerId: customerId })
   }
 
+  // Annual carries the base alone: Stripe cannot mix a yearly base with
+  // monthly metering, and the honest alternative to overage is a pause at
+  // the allowance, not a catch-up bill at renewal.
+  const lineItems = interval === 'year'
+    ? [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
+    : [{ price: base.id, quantity: 1 }, { price: metered.id }]
+
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: customerId,
-    line_items: [{ price: base.id, quantity: 1 }, { price: metered.id }],
+    line_items: lineItems,
     client_reference_id: tenant.tenantId,
     subscription_data: { metadata: { tenantId: tenant.tenantId } },
     success_url: `${process.env.APP_URL}/billing?upgraded=1`,

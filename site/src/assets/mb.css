@@ -277,3 +277,70 @@ header nav .signin { font-weight: 600; }
   .hero { padding: 60px 0 54px; }
   .hero p.lead { font-size: 18px; }
 }
+
+/* Tier cards on the pricing page */
+.prices.tiers { max-width: none; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.tier-pitch { font-size: 14.5px; color: var(--accent-dark); font-weight: 600; margin-top: 4px; }
+.price.coming { opacity: .92; background: var(--soft); border-style: dashed; }
+.price .tag.soon { display: inline-block; }
+
+/* ── Roadmap board (Now / Next / Later) ─────────────────────────────── */
+.board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.board .col h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .09em;
+  margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.board .dot { width: 10px; height: 10px; border-radius: 50%; }
+.col.now h2 { color: var(--ok); } .col.now .dot { background: var(--ok); }
+.col.next h2 { color: #3730a3; } .col.next .dot { background: #3730a3; }
+.col.later h2 { color: var(--muted); } .col.later .dot { background: var(--muted); }
+.colsub { font-size: 13.5px; color: var(--muted); margin-bottom: 16px; min-height: 40px; }
+.rcard { border: 1px solid var(--line); border-radius: 12px; padding: 15px 17px; background: #fff;
+  margin-bottom: 12px; border-left: 3px solid var(--line); }
+.col.now .rcard { border-left-color: var(--ok); }
+.col.next .rcard { border-left-color: #3730a3; background: var(--soft); }
+.col.later .rcard { border-left-color: var(--muted); background: var(--soft); }
+.rcard h3 { font-size: 16px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.rcard h3 a { color: var(--ink); }
+.rcard h3 .tag { margin-bottom: 0; }
+.rcard p { font-size: 13.5px; color: var(--body); }
+.rcard .gate { margin-top: 8px; font-size: 12px; color: #3730a3; font-weight: 600; }
+.col.later .rcard .gate { color: var(--muted); }
+.never-band { text-align: left; }
+.never-band p { margin: 0 0 20px; }
+.never-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.never-card { border: 1px solid #3a2b22; border-radius: 10px; padding: 14px 16px; }
+.never-card h3 { font-size: 15px; color: #fed7aa; margin-bottom: 3px; }
+.never-card p { font-size: 13.5px; color: #d6d3d1; margin: 0; }
+@media (max-width: 860px) { .board { grid-template-columns: 1fr; } .colsub { min-height: 0; } }
+
+/* ── Changelog timeline ─────────────────────────────────────────────── */
+.hero .cl-stats { display: flex; gap: 34px; margin-top: 22px; flex-wrap: wrap; }
+.cl-stats b { display: block; font-size: 24px; letter-spacing: -.02em; color: #fed7aa; }
+.cl-stats span { font-size: 13px; color: #a8a29e; }
+.cl-wrap { max-width: 880px; }
+.month { padding-top: 8px; }
+.month > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin-bottom: 8px; }
+.tl { position: relative; padding-left: 34px; }
+.tl::before { content: ''; position: absolute; left: 9px; top: 6px; bottom: 0; width: 2px; background: var(--line); }
+.rel { position: relative; padding: 14px 0 26px; }
+.rel::before { content: ''; position: absolute; left: -31px; top: 22px; width: 14px; height: 14px;
+  border-radius: 50%; background: #fff; border: 3px solid var(--accent); }
+.rel.major::before { background: var(--accent); }
+.rel-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rel-head h3 { font-size: 20px; letter-spacing: -.01em; margin: 0; }
+.rel-head .v { font-size: 12px; font-weight: 700; color: var(--muted); }
+.rel-head .when { font-size: 13.5px; color: var(--muted); }
+.rel > p.sum { color: var(--body); margin-top: 4px; max-width: 62ch; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pill { font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 16px;
+  border: 1px solid var(--line); background: var(--soft); color: var(--ink); }
+.pill b { color: var(--ok); font-weight: 750; margin-right: 2px; }
+.pill.chg b { color: var(--accent-dark); }
+.pill.fix b { color: #075985; }
+.rel details { margin-top: 12px; }
+.rel summary { cursor: pointer; font-size: 14px; font-weight: 650; color: var(--accent-dark); list-style: none; }
+.rel summary::-webkit-details-marker { display: none; }
+.rel summary::before { content: '▸ '; }
+.rel details[open] summary::before { content: '▾ '; }
+.rel details ul { list-style: none; margin-top: 8px; border-left: 2px solid var(--line); padding-left: 14px; }
+.rel details li { padding: 5px 0; font-size: 14.5px; color: var(--body); }
+.rel details li b { color: var(--ink); font-weight: 650; }

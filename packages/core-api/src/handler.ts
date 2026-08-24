@@ -1,5 +1,8 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { QueryCommand } from '@aws-sdk/lib-dynamodb'
 import {
+  ddb as ddbDoc,
+  recordAudit,
   freeModuleLimits,
   freeModules,
   createTenant,
@@ -80,6 +83,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && enableMatch) return await enableModule(ctx, enableMatch[1])
     if (method === 'GET' && path === '/v1/core/workspace/slug') return await checkSlug(event)
     if (method === 'PATCH' && path === '/v1/core/workspace') return await patchWorkspace(ctx, event)
+    if (method === 'GET' && path === '/v1/core/activity') return await activity(ctx, event)
     if (method === 'GET' && path === '/v1/core/usage') return await usage(ctx)
     if (method === 'GET' && path === '/v1/core/version') {
       return json(200, {
@@ -191,10 +195,46 @@ async function patchWorkspace(ctx: CallerContext, event: Event): Promise<APIGate
         return json(409, { error: 'slug_taken', message: 'That address is already in use.' })
       }
       await updateTenantSlug(tenantId, slug)
+      await recordAudit({
+        tenantId,
+        actor: { type: 'user', id: ctx.userId ?? '', label: ctx.email || undefined },
+        origin: 'ui',
+        action: 'workspace.slug_changed',
+        moduleId: 'platform',
+        summary: `Public address changed from ${current?.slug ?? '?'} to ${slug} - old links stopped working`,
+      })
     }
   }
 
   return json(200, { tenant: await getTenant(tenantId) })
+}
+
+/**
+ * The workspace activity feed, one month per request, newest first. Fed by
+ * the audit writer; a brand-new month is legitimately empty.
+ */
+async function activity(ctx: CallerContext, event: Event): Promise<APIGatewayProxyResultV2> {
+  const tenantId = await freshTenantId(ctx)
+  if (!tenantId) return json(404, { error: 'no_tenant' })
+  const month = /^\d{4}-\d{2}$/.test(String(event.queryStringParameters?.month))
+    ? String(event.queryStringParameters?.month)
+    : new Date().toISOString().slice(0, 7)
+  const r = await ddbDoc.send(
+    new QueryCommand({
+      TableName: process.env.TABLE_AUDIT!,
+      KeyConditionExpression: 'pk = :p',
+      ExpressionAttributeValues: { ':p': `${tenantId}#${month}` },
+      ScanIndexForward: false,
+      Limit: 200,
+    }),
+  )
+  return json(200, {
+    month,
+    entries: (r.Items ?? []).map((i) => ({
+      ts: i.ts, actor: i.actor, origin: i.origin, action: i.action,
+      moduleId: i.moduleId, summary: i.summary,
+    })),
+  })
 }
 
 async function me(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {

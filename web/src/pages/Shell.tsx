@@ -35,6 +35,7 @@ export default function Shell({ me, modules, stripeMode }: {
             ))}
             <div className="navlabel">Workspace</div>
             <NavLink to="/workspace">Settings</NavLink>
+            <NavLink to="/activity">Activity</NavLink>
             <NavLink to="/usage">Usage</NavLink>
             <NavLink to="/billing">Billing</NavLink>
           </nav>

@@ -4,12 +4,35 @@ Every customer-visible change to MakerBay. The public version of this page is
 at [makerbay.app/changelog](https://makerbay.app/changelog) and is generated
 from this file, so this is the only place an entry gets written.
 
-Format: one `##` heading per release, dated, with entries tagged by area.
+Format: one `##` heading per release, dated, optionally followed by a `> ` line
+(**Headline** — one-sentence standfirst) used by the public page, then entries
+tagged by area.
 Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.5.0 - 2026-08-24
+
+> **One price for everything, and a trail of what happened** — Pricing is now two honest tiers: Free runs your business online, Trade at $29 switches everything on. And every workspace gains an Activity feed - one plain sentence for everything that happens.
+
+- Changed `platform` Pricing moved from modules to tiers: Free (your page,
+  quotes, invoices, payments, inbox) and Trade at $29/month with unlimited
+  bookings, reviews, quotes and invoices, 2,000 assistant messages and your
+  own domain. Same prices worldwide, in USD. Existing subscribers got
+  strictly more for the same money. Annual at $290 - two months free - and
+  annual plans pause politely at the allowance instead of billing overage.
+- Added `platform` The Activity feed: everything that happens in your
+  workspace - bookings, payments, review asks, settings changes - as one
+  plain sentence each, kept for 13 months. Traceability, not telemetry.
+  This is also the foundation Genie will stand on.
+- Changed `platform` The roadmap is now an honest Now / Next / Later board -
+  every Next item carries the bar it must clear, every Later item its
+  trigger - and the changelog became this timeline, with a headline per
+  release.
+
 ## 2.4.0 - 2026-08-24
+
+> **Get paid, and an assistant that knows your business** — Card payment lands on invoices and quote deposits, straight to your bank with no platform fee. And the assistant now answers prices, hours and service areas before you upload a single document.
 
 - Added `payments` Get paid is live: connect your bank once through Stripe
   and your unpaid invoices grow a Pay online button, and accepted quotes can
@@ -29,6 +52,8 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   the product, demonstrated by the product.
 
 ## 2.3.0 - 2026-08-24
+
+> **Addresses you can say out loud** — Your public address is now your business name, editable with live availability checking. Your page gained three styles, your accent colour, and in-page booking and chat.
 
 - Changed `platform` Workspace addresses are now memorable: a new workspace
   gets its clean business name (smith-plumbing, not smith-plumbing-x4x), and
@@ -58,6 +83,8 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   page you can open and book.
 
 ## 2.2.0 - 2026-08-24
+
+> **Reviews, reminders, and invoices** — Mark a job done and the right things happen on their own: one polite review ask, reminder emails that cut no-shows, and accepted quotes that become printable invoices in one click.
 
 - Added `reviews` Reviews is live: after a completed booking the customer gets
   one polite ask, leaves stars and words on a page in your name, and the
@@ -89,6 +116,8 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 
 ## 2.1.0 - 2026-08-24
 
+> **Get found, and calls that rescue themselves** — A guided Google Business Profile checklist, and missed-call rescue: the caller gets your booking link by text while their voicemail lands transcribed in your inbox.
+
 - Added `visibility` Get found is live and free: a guided checklist that gets
   your Google Business Profile right in about twenty minutes, and review
   requests sent at the moment a customer is most likely to say yes - one email,
@@ -108,6 +137,8 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   and feedback, with the same reply tools.
 
 ## 2.0.0 - 2026-08-24
+
+> **Every workspace gets a real page** — Services, live hours, a photo and buttons that actually book and answer, at makerbay.app/p/your-business. Hidden from search engines until genuinely complete.
 
 - Added `presence` Every workspace now has a real web page at
   makerbay.app/p/{slug}: services and prices from Bookings, opening hours with

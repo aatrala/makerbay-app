@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 import type Stripe from 'stripe'
 import { emitEvent, putStripeGrant, setModuleEntitlement, setTenantBilling } from '@makerbay/core'
-import { PLANS, stripeClient, webhookSecret } from './stripe-client'
+import { FREE_MODULE_BASELINES, PLANS, stripeClient, TRADE_BUNDLE, webhookSecret } from './stripe-client'
 
 /**
  * Stripe subscription lifecycle. The request is authenticated by its
@@ -35,10 +35,17 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           console.warn('subscription without tenantId', sub.id)
           break
         }
-        // Only an active or trialing subscription grants Pro.
+        // Only an active or trialing subscription grants Trade.
         const entitled = ['active', 'trialing'].includes(sub.status)
         const plan = entitled ? PLANS.pro : PLANS.free
         const item = sub.items?.data.find((i) => i.price?.recurring?.usage_type === 'metered')
+        // Annual subscriptions carry no metered item: the assistant pauses at
+        // the included allowance instead of billing overage (no catch-up
+        // surprise at renewal).
+        const isAnnual = sub.items?.data.some((i) => i.price?.recurring?.interval === 'year') ?? false
+        const assistantLimits = entitled && isAnnual
+          ? { ...plan.limits, messagesPerMonth: plan.includedMessages }
+          : plan.limits
         const periodEnd = (sub as unknown as { current_period_end?: number }).current_period_end
 
         await setTenantBilling(tenantId, {
@@ -52,30 +59,51 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           lastWebhookType: stripeEvent.type,
           lastWebhookLive: stripeEvent.livemode,
         })
-        // Keep the module switched on, then write only the Stripe grant.
-        // Manual comps live under different sort keys and are untouched.
+        // The subscription is the BUNDLE: assistant plus everything in
+        // TRADE_BUNDLE. Keep each module switched on, then write only the
+        // Stripe grants - manual comps live under different sort keys and
+        // are untouched. A lapsed subscription flips the grants inactive and
+        // restores the free baselines.
         await setModuleEntitlement(tenantId, 'assistant', {
           enabled: true,
           plan: plan.id,
-          limits: plan.limits,
+          limits: assistantLimits,
         })
-        try {
-          await putStripeGrant({
-            tenantId,
-            moduleId: 'assistant',
-            planTier: plan.id,
-            limits: plan.limits,
-            active: entitled,
-            stripeSubscriptionId: sub.id,
-            stripeEventCreated: stripeEvent.created,
-          })
-        } catch (err) {
-          // Condition failure means a newer event already landed. Stripe does
-          // not guarantee ordering, so this is expected, not an error.
-          if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') throw err
-          console.log('skipped out-of-order subscription event', { tenantId, id: sub.id })
+        for (const b of TRADE_BUNDLE) {
+          const baseline = FREE_MODULE_BASELINES[b.moduleId]
+          if (baseline) {
+            await setModuleEntitlement(tenantId, b.moduleId, {
+              enabled: true,
+              plan: plan.id,
+              limits: entitled ? b.limits : baseline,
+            })
+          }
+          // Free modules (presence) need no on-switch - the grant alone
+          // carries the pro tier that opens their paid extras.
         }
-        console.log('subscription applied', { tenantId, plan: plan.id, status: sub.status })
+        const grantTargets = [
+          { moduleId: 'assistant', limits: assistantLimits },
+          ...TRADE_BUNDLE,
+        ]
+        for (const g of grantTargets) {
+          try {
+            await putStripeGrant({
+              tenantId,
+              moduleId: g.moduleId,
+              planTier: plan.id,
+              limits: entitled ? g.limits : {},
+              active: entitled,
+              stripeSubscriptionId: sub.id,
+              stripeEventCreated: stripeEvent.created,
+            })
+          } catch (err) {
+            // Condition failure means a newer event already landed. Stripe
+            // does not guarantee ordering - expected, not an error.
+            if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') throw err
+            console.log('skipped out-of-order subscription event', { tenantId, id: sub.id, moduleId: g.moduleId })
+          }
+        }
+        console.log('subscription applied', { tenantId, plan: plan.id, status: sub.status, annual: isAnnual })
         break
       }
       // Connect payments. Signature is verified above; the payments module

@@ -1,7 +1,9 @@
 # Spec: Genie - conversational admin for owners
 
-Status: **PROPOSED - awaiting founder approval.** Nothing here is built except
-what is marked as already existing. Designed 2026-08-24 with a second Fable 5
+Status: **APPROVED 2026-08-24; build underway.** Step 1 (audit log: table,
+recordAudit helper, bus writer, dashboard Activity feed) SHIPPED in platform
+1.15.0. Genie message allowances decided: Free 25/mo, Trade 250/mo, Genie
+tier 2,500/mo - hard stop with an upgrade prompt, no surprise overage. Designed 2026-08-24 with a second Fable 5
 architect pressure-testing the approach against the repo.
 
 ## What it is

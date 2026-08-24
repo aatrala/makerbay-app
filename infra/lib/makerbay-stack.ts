@@ -112,6 +112,17 @@ export class MakerbayStack extends cdk.Stack {
     // One row per Stripe Checkout attempt. The webhook flips pending to paid;
     // nothing else may.
     const payments = table('Payments', 'tenantId', 'paymentId')
+    // The workspace activity trail (tenant-facing; Genie's memory of what
+    // happened). Partitioned per month like Usage; TTL keeps ~13 months.
+    const audit = new dynamodb.Table(this, 'Audit', {
+      tableName: 'makerbay-audit',
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
     // Presence stores only the editable words; services, hours and prices are
     // read live from the modules that own them, so nothing is stored twice.
     const presenceConfig = table('PresenceConfig', 'tenantId')
@@ -675,6 +686,21 @@ export class MakerbayStack extends cdk.Stack {
       eventPattern: { detailType: ['usage'] },
       targets: [new eventsTargets.LambdaFunction(usageAggregatorFn)],
     })
+
+    // Activity trail: explicit audit events plus the usage stream (which
+    // already narrates the business) land in the audit table via one writer.
+    const auditWriterFn = fn('AuditWriterFn', 'packages/core-api/src/audit-writer.ts', {
+      TABLE_AUDIT: audit.tableName,
+    })
+    audit.grantWriteData(auditWriterFn)
+    new events.Rule(this, 'AuditRule', {
+      eventBus: bus,
+      eventPattern: { detailType: ['audit', 'usage'] },
+      targets: [new eventsTargets.LambdaFunction(auditWriterFn)],
+    })
+    // The dashboard's Activity feed reads it through core-api.
+    coreFn.addEnvironment('TABLE_AUDIT', audit.tableName)
+    audit.grantReadData(coreFn)
 
     // ── Grants ───────────────────────────────────────────────────────────
     for (const t of [users, apiKeys, entitlements, grants]) t.grantReadData(authorizerFn)

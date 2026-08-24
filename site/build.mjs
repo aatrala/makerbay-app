@@ -42,8 +42,9 @@ for (const m of modules) {
 modules.sort((a, b) => a.roadmap.order - b.roadmap.order)
 
 const isFree = (m) => m.core || m.pricing === 'free'
+// Tier pricing, not module pricing: paid capability lives in the Trade plan.
 const priceTag = (m) =>
-  isFree(m) ? '<span class="tag free">Free</span>' : '<span class="tag paid">Paid</span>'
+  isFree(m) ? '<span class="tag free">Free</span>' : '<span class="tag paid">In Trade</span>'
 
 const STATUS = {
   live: { label: 'Available now', cls: 'live' },
@@ -220,77 +221,122 @@ ${faq}
 
 // ── Roadmap ──────────────────────────────────────────────────────────────
 
-const roadmapPage = () =>
-  page({
+/**
+ * Roadmap: a Now / Next / Later board. Now comes from the manifests; Next and
+ * Later are editorial - each carries the bar it must clear or the trigger
+ * that unparks it, because a roadmap that says WHEN without saying WHY is a
+ * wish list.
+ */
+const NEXT_ITEMS = [
+  {
+    name: 'Missed-call rescue', price: 'paid',
+    body: 'Unanswered call → instant text with your booking link + transcribed voicemail in your inbox, with the job, address and urgency picked out.',
+    gate: 'Gate: telephony enablement — built and proven, awaiting carrier access',
+  },
+  {
+    name: 'Genie', price: null,
+    body: 'Your whole business from a conversation on your phone — see what happened, reply, book, quote. Every action confirmed by you, everything on an audit trail.',
+    gate: 'Gate: the audit trail ships first; every write needs your explicit confirm',
+  },
+  {
+    name: 'After-hours voice', price: null,
+    body: 'A phone agent that answers when you cannot, grounded in the same knowledge as your chat assistant.',
+    gate: 'Gate: must beat our published latency bar on real calls — measured, not promised',
+  },
+]
+const LATER_ITEMS = [
+  {
+    name: 'Local directory',
+    body: 'Find a MakerBay business by suburb and trade. Only worth building at density — a thin directory helps nobody.',
+    gate: 'Trigger: enough complete, bookable businesses per area',
+  },
+  {
+    name: 'In-call payments',
+    body: 'Take a card securely during a phone call — after voice itself earns its place.',
+    gate: 'Trigger: voice live + a PCI-safe capture path',
+  },
+  {
+    name: 'Calendar sync',
+    body: 'Two-way Google Calendar. We would rather ship a diary that is correct than a sync that is nearly right.',
+    gate: 'Trigger: demand from paying workspaces',
+  },
+]
+const NEVER_ITEMS = [
+  { name: 'Bookkeeping & tax', body: 'Simple invoices yes; ledgers and tax belong in Xero, MYOB or QuickBooks.' },
+  { name: 'Review gating', body: "Routing only happy customers to Google breaks Google's rules. Never." },
+  { name: 'A full CRM / helpdesk', body: "If you need pipelines or Zendesk, use them — we'll hold your customer list honestly." },
+  { name: 'Pay-for-placement', body: 'If the directory ships, nobody buys their way above a better business.' },
+]
+
+const roadmapPage = () => {
+  const live = modules.filter((m) => m.status === 'live')
+  const nowCards = live
+    .map((m) => `      <div class="rcard"><h3><a href="/modules/${m.id}">${esc(m.name)}</a> ${priceTag(m)}</h3><p>${esc(m.tagline)}.</p></div>`)
+    .join('\n')
+  const nextCards = NEXT_ITEMS
+    .map((i) => `      <div class="rcard"><h3>${esc(i.name)}${i.price === 'paid' ? ' <span class="tag paid">In Trade</span>' : ''}</h3><p>${i.body}</p><div class="gate">${esc(i.gate)}</div></div>`)
+    .join('\n')
+  const laterCards = LATER_ITEMS
+    .map((i) => `      <div class="rcard"><h3>${esc(i.name)}</h3><p>${esc(i.body)}</p><div class="gate">${esc(i.gate)}</div></div>`)
+    .join('\n')
+  const neverCards = NEVER_ITEMS
+    .map((i) => `      <div class="never-card"><h3>${esc(i.name)}</h3><p>${esc(i.body)}</p></div>`)
+    .join('\n')
+
+  return page({
     title: 'Roadmap - MakerBay',
-    description: 'What is live, what is being built, and what comes next - in the order it has to be built.',
+    description: 'Now, next and later - with the bar each item must clear before it ships, and the things we will not build at all.',
     path: '/roadmap',
     body: `<div class="hero">
   <div class="wrap">
     <h1>Roadmap</h1>
     <p class="lead">
-      What is live, what is being built, and what comes next. The order is not a
-      wish list: each module is placed where it is because of what it needs
-      underneath it.
+      Be found &middot; Be answered &middot; Get booked &middot; Get paid — without lifting a finger.
+      Three honest columns: <strong>Now</strong> is live and in the changelog. <strong>Next</strong> is
+      designed in the open, each with the bar it must pass. <strong>Later</strong> is parked behind an
+      explicit trigger. And below all of it, what we will not build at all.
     </p>
-    <small>Last updated 24 August 2026</small>
+    <small>Updated ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} &middot; ${live.length} modules live</small>
   </div>
 </div>
 
 <section>
-  <div class="wrap">
-    <ol class="road">
-${modules
-  .map((m) => {
-    const s = STATUS[m.status]
-    return `      <li class="road-item">
-        <span class="tags">${priceTag(m)}<span class="tag ${s.cls}">${s.label}</span></span>
-        <h3><a href="/modules/${m.id}">${esc(m.name)}</a></h3>
-        <p>${esc(m.tagline)}.</p>
-        <p class="note">${esc(m.roadmap.note)}</p>
-      </li>`
-  })
-  .join('\n')}
-    </ol>
+  <div class="wrap board">
+    <div class="col now">
+      <h2><span class="dot"></span>Now — live</h2>
+      <p class="colsub">Shipped, verified, in the <a href="/changelog">changelog</a>.</p>
+${nowCards}
+    </div>
+    <div class="col next">
+      <h2><span class="dot"></span>Next — in design</h2>
+      <p class="colsub">A public bar to clear before each one ships.</p>
+${nextCards}
+    </div>
+    <div class="col later">
+      <h2><span class="dot"></span>Later — parked on purpose</h2>
+      <p class="colsub">Each has a written trigger. Nothing ships quietly.</p>
+${laterCards}
+    </div>
   </div>
 </section>
 
-<section class="soft">
+<section class="band never-band">
   <div class="wrap">
-    <div class="sec-head">
-      <h2>What we are not building</h2>
-      <p>Saying this out loud is more useful than a longer roadmap.</p>
-    </div>
-    <div class="faq">
-      <h3>Bookkeeping and tax accounting</h3>
-      <p>Quotes can turn an accepted quote into a simple, numbered invoice the
-      customer can read and pay against - and that is where it stops. Ledgers,
-      reconciliation and tax accounting belong in Xero, MYOB or QuickBooks. We
-      would rather export to them than compete with them badly.</p>
-      <h3>A full CRM</h3>
-      <p>Contacts exists so the other modules have somewhere sensible to put a
-      customer. If you need pipelines, forecasting and email sequences, use a
-      real CRM.</p>
-      <h3>A full helpdesk</h3>
-      <p>Requests captures and replies. If you already run Zendesk or Freshdesk,
-      forward to it instead of moving to us.</p>
-      <h3>Review gating</h3>
-      <p>Filtering unhappy customers away from public review sites breaks
-      Google's policies. We will not build it.</p>
-      <h3>Compliance automation</h3>
-      <p>Deferred. It is a serious product with serious buyers, and it deserves
-      more attention than it would get alongside everything above.</p>
+    <h2>What we are not building</h2>
+    <p>Published so you can plan around us. These are commitments, not gaps.</p>
+    <div class="never-grid">
+${neverCards}
     </div>
   </div>
 </section>`,
   })
+}
 
 
 // ── Pricing ──────────────────────────────────────────────────────────────
 
 const pricingPage = () => {
   const free = modules.filter(isFree)
-  const paid = modules.filter((m) => !isFree(m))
   const row = (m) => `        <tr>
           <td><a href="/modules/${m.id}">${esc(m.name)}</a><div class="meta">${esc(m.tagline)}</div></td>
           <td>${priceTag(m)}</td>
@@ -299,91 +345,98 @@ const pricingPage = () => {
 
   return page({
     title: 'Pricing - MakerBay',
-    description: 'Your page, Contacts, Requests, Quotes with invoices and Get found are free forever. You pay for the AI assistant, Bookings and Reviews, and only for what you switch on.',
+    description: 'Free runs your business online. Trade at $29/month switches everything on. Genie at $99/month runs it from a conversation. Same prices worldwide, month to month, no contracts.',
     path: '/pricing',
     body: `<div class="hero">
   <div class="wrap">
-    <h1>Pay for capability, not for software</h1>
+    <h1>Two prices. No homework.</h1>
     <p class="lead">
-      Most of MakerBay is free and stays free. You pay for the two modules that
-      cost real money to run, and only if you switch them on.
+      You should not need a spreadsheet to buy software. Free runs your business
+      online. Trade switches everything on for what competitors charge to start.
+      That is the whole decision.
     </p>
     <div class="cta"><a class="btn lg" href="${APP}">Start free</a></div>
-    <small>No card to start &middot; Cancel any time</small>
+    <small>Same prices worldwide, in USD &middot; Month to month &middot; No card to start &middot; Cancel any time</small>
   </div>
 </div>
 
 <section>
   <div class="wrap">
-    <div class="sec-head">
-      <h2>Free forever</h2>
-      <p>
-        These cost us almost nothing to run, and each one makes the rest more
-        useful. There is no trial and no upgrade prompt - they are simply free.
-      </p>
-    </div>
-    <div class="grid">
-${free
-  .map(
-    (m) => `      <a class="card linkcard" href="/modules/${m.id}">
-        <span class="tag free">Free</span>
-        <h3>${esc(m.name)}</h3>
-        <p>${esc(m.tagline)}.</p>
-        ${m.freeLimits ? `<p class="meta">Up to ${Object.entries(m.freeLimits).map(([k, v]) => `${Number(v).toLocaleString()} ${k.replace(/PerMonth$/, ' a month')}`).join(' and ')}.</p>` : ''}
-      </a>`,
-  )
-  .join('\n')}
-    </div>
-  </div>
-</section>
-
-<section class="soft" id="paid">
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>What you pay for</h2>
-      <p>
-        The assistant costs us money every time it answers a question, and
-        Bookings and Reviews are worth real money to a business whose day is a
-        calendar and whose customers read star ratings. Those carry the price.
-      </p>
-    </div>
-    <div class="prices">
+    <div class="prices tiers">
       <div class="price">
         <h3>Free</h3>
         <div class="amount">$0</div>
+        <p class="tier-pitch">Run your business online. Actually free.</p>
         <ul>
-          <li>Contacts, Requests and Quotes in full</li>
-          <li>200 assistant messages a month</li>
-          <li>20 knowledge documents</li>
-          <li>Widget, shared page, help centre and API</li>
+          <li>Your page — services, prices, hours, reviews, booking button</li>
+          <li>Contacts, Requests inbox and public help centre</li>
+          <li>200 quotes a month, with one-click invoices</li>
+          <li>Card payments via Stripe — we add no fee</li>
+          <li>Get found: the Google Business Profile checklist</li>
+          <li>200 assistant messages a month &middot; 20 documents</li>
+          <li>20 bookings and 20 review invites a month</li>
         </ul>
         <a class="btn ghost" href="${APP}">Start free</a>
       </div>
       <div class="price featured">
-        <h3>Pro</h3>
+        <h3>Trade</h3>
         <div class="amount">$29<span> / month</span></div>
+        <p class="tier-pitch">Everything switched on, for what Jobber charges to start.</p>
         <ul>
-          <li>Everything in Free</li>
-          <li>2,000 assistant messages included</li>
-          <li>$0.02 per message after that</li>
-          <li>500 knowledge documents</li>
-          <li>Bookings included</li>
+          <li>Everything in Free, plus:</li>
+          <li><strong>Unlimited</strong> bookings, review invites, quotes and invoices</li>
+          <li>2,000 assistant messages a month</li>
+          <li>Your page on <strong>your own domain</strong></li>
+          <li>Missed-call rescue, when it reaches your region</li>
+          <li>Booking reminders, review asks, the whole loop</li>
         </ul>
         <a class="btn" href="${APP}">Get started</a>
+        <p class="meta" style="margin-top:12px">$290 a year — 2 months free.</p>
+      </div>
+      <div class="price coming">
+        <h3>Genie</h3>
+        <div class="amount">$99<span> / month</span></div>
+        <p class="tier-pitch">An office manager for less than one billable hour a week.</p>
+        <ul>
+          <li>Everything in Trade, plus:</li>
+          <li><strong>Genie</strong>: run the business from a conversation on your phone — see what happened, reply, book, quote</li>
+          <li>Every Genie action confirmed by you, on an audit trail</li>
+          <li>After-hours voice answering, when it passes our latency bar</li>
+          <li>6,000 assistant messages &middot; priority support</li>
+        </ul>
+        <span class="tag soon" style="margin-top:6px">In design — not for sale yet</span>
       </div>
     </div>
-    <p class="meta" style="margin-top:20px">Prices in USD, per workspace.</p>
+    <p class="meta" style="margin-top:20px">
+      Pay-as-you-go applies only to things that cost us money per use: assistant
+      messages beyond your allowance ($0.02 each, opt-in — the default is a polite
+      stop), and voice minutes when voice ships. Never per booking, per quote or
+      per invoice — we will not tax your own success.
+    </p>
+  </div>
+</section>
+
+<section class="soft">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>A taste of Genie on every plan</h2>
+      <p>
+        When Genie ships, Free workspaces get 25 Genie messages a month and Trade
+        gets 250 — enough for the morning briefing habit. Running the whole
+        business by chat is what the $99 tier is for.
+      </p>
+    </div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <div class="sec-head"><h2>Every module</h2></div>
+    <div class="sec-head"><h2>Every module, and where it lives</h2></div>
     <div class="scroll-x">
       <table class="pricing-table">
-        <thead><tr><th>Module</th><th>Cost</th><th>Status</th></tr></thead>
+        <thead><tr><th>Module</th><th>Plan</th><th>Status</th></tr></thead>
         <tbody>
-${[...free, ...paid].map(row).join('\n')}
+${[...free, ...modules.filter((m) => !isFree(m))].map(row).join('\n')}
         </tbody>
       </table>
     </div>
@@ -394,24 +447,32 @@ ${[...free, ...paid].map(row).join('\n')}
   <div class="wrap faq">
     <h2>Questions about price</h2>
     <h3>Is "free forever" really forever?</h3>
-    <p>Yes, for the modules marked free. They are cheap for us to run, and a free
-    module that fills your customer list is how we grow. If that ever has to
-    change, existing workspaces keep what they have.</p>
+    <p>Yes. Everything in the Free tier stays free for existing workspaces, full stop. A free
+    plan that fills your customer list is how we grow.</p>
+    <h3>Why are bookings and review invites capped on Free?</h3>
+    <p>Honestly: not because they cost us much — because if MakerBay is taking 20+ bookings a
+    month for you, it is running your day, and $29 is a fair price for that. The caps on
+    assistant messages are different: those genuinely cost us money per message.</p>
     <h3>What happens when I hit a limit?</h3>
-    <p>You are told in the dashboard, plainly, before anything stops. The caps
-    exist to bound our costs, not to push you into upgrading.</p>
-    <h3>Do I pay for modules I have not switched on?</h3>
-    <p>No. Nothing is billed until you enable it.</p>
+    <p>You are told in the dashboard, plainly, before anything stops. Message overage is opt-in;
+    the default is a polite stop, never a surprise bill.</p>
+    <h3>How does annual billing work?</h3>
+    <p>$290 a year — two months free. Annual plans pause politely at the message allowance
+    instead of billing overage, so a yearly invoice can never surprise you. Month to month
+    stays the headline; there are no contracts and no cancellation calls.</p>
+    <h3>Do prices differ by country?</h3>
+    <p>No. Same prices worldwide, in USD. Stripe handles your local card and currency conversion.</p>
     <h3>Can I get my data out?</h3>
-    <p>Yes. Contacts exports to CSV whenever you like, on every plan. A customer
-    list you cannot take with you is not really yours.</p>
+    <p>Yes. Contacts exports to CSV whenever you like, on every plan. A customer list you cannot
+    take with you is not really yours.</p>
   </div>
 </section>
 
 <section class="band">
   <div class="wrap">
     <h2>Start with the free half</h2>
-    <p>Contacts, Requests and Quotes cost nothing. Add the assistant when you want it.</p>
+    <p>Your page, quotes, payments and the inbox cost nothing. Switch on Trade when the caps
+    start to matter.</p>
     <a class="btn lg" href="${APP}">Create your workspace</a>
   </div>
 </section>`,
@@ -433,11 +494,18 @@ function parseChangelog(md) {
   for (const raw of md.split(/\r?\n/)) {
     const head = raw.match(/^##\s+(\S+)\s+-\s+(\d{4}-\d{2}-\d{2})\s*$/)
     if (head) {
-      current = { version: head[1], date: head[2], entries: [] }
+      current = { version: head[1], date: head[2], entries: [], headline: '', standfirst: '' }
       releases.push(current)
       continue
     }
     if (!current) continue
+    // Optional editorial line: > **Headline** — standfirst
+    const ed = raw.match(/^>\s+\*\*(.+?)\*\*\s+[—-]\s+(.*)$/)
+    if (ed && current.entries.length === 0) {
+      current.headline = ed[1].trim()
+      current.standfirst = ed[2].trim()
+      continue
+    }
     const entry = raw.match(/^-\s+(\w+)\s+`([a-z-]+)`\s+(.*)$/)
     if (entry) {
       const [, kind, area, text] = entry
@@ -475,92 +543,83 @@ const longDate = (iso) =>
 
 const areaName = (id) => (id === 'platform' ? 'Platform' : modules.find((m) => m.id === id)?.name ?? id)
 
-const changelogPage = (releases) => {
-  const used = [...new Set(releases.flatMap((r) => r.entries.map((e) => e.area)))]
-  const filters = ['all', ...used]
-    .map(
-      (a) =>
-        `<button class="chip-btn${a === 'all' ? ' on' : ''}" data-area="${a}">${
-          a === 'all' ? 'Everything' : esc(areaName(a))
-        }</button>`,
-    )
-    .join('\n        ')
+const KIND_LABEL = { Added: 'New', Changed: 'Better', Fixed: 'Fixed', Security: 'Security' }
+const KIND_CLS = { Added: '', Changed: 'chg', Fixed: 'fix', Security: 'fix' }
 
-  const body = releases
+const monthName = (iso) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+const shortDate = (iso) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+
+/** A short pill from an entry: kind + the area it touched. */
+const pill = (e) =>
+  `<span class="pill ${KIND_CLS[e.kind] ?? ''}"><b>${KIND_LABEL[e.kind] ?? e.kind}</b> ${esc(areaName(e.area))}</span>`
+
+const changelogPage = (releases) => {
+  // Group by month, newest first (releases already arrive newest-first).
+  const months = []
+  for (const r of releases) {
+    const key = r.date.slice(0, 7)
+    let m = months.find((x) => x.key === key)
+    if (!m) { m = { key, label: monthName(r.date), releases: [] }; months.push(m) }
+    m.releases.push(r)
+  }
+
+  const body = months
     .map(
-      (r) => `      <article class="release" data-areas="${[...new Set(r.entries.map((e) => e.area))].join(' ')}">
-        <h2>${esc(r.version)} <span class="when">${longDate(r.date)}</span></h2>
-        <ul>
-${r.entries
-  .map(
-    (e) =>
-      `          <li data-area="${e.area}"><span class="kind ${e.kind.toLowerCase()}">${e.kind}</span> <span class="area">${esc(
-        areaName(e.area),
-      )}</span> ${esc(e.text)}</li>`,
-  )
+      (m) => `  <div class="month">
+    <h2>${esc(m.label)}</h2>
+    <div class="tl">
+${m.releases
+  .map((r) => {
+    const major = r.entries.length >= 4
+    const title = r.headline || `Release ${r.version}`
+    const pills = [...new Set(r.entries.slice(0, 4).map(pill))].join('\n')
+    const all = r.entries
+      .map((e) => `            <li><b>${esc(areaName(e.area))}</b> — ${esc(e.text)}</li>`)
+      .join('\n')
+    return `      <article class="rel${major ? ' major' : ''}">
+        <div class="rel-head"><h3>${esc(title)}</h3>
+          <span class="v">${esc(r.version)}</span><span class="when">${shortDate(r.date)}</span></div>
+        ${r.standfirst ? `<p class="sum">${esc(r.standfirst)}</p>` : ''}
+        <div class="pills">
+          ${pills}
+        </div>
+        <details><summary>All changes in ${esc(r.version)}</summary>
+          <ul>
+${all}
+          </ul>
+        </details>
+      </article>`
+  })
   .join('\n')}
-        </ul>
-      </article>`,
+    </div>
+  </div>`,
     )
     .join('\n')
 
   return page({
     title: 'Changelog - MakerBay',
-    description: 'Every customer-visible change to MakerBay, newest first.',
+    description: 'Every customer-visible change, in the open. Nothing ships without an entry here.',
     path: '/changelog',
     body: `<div class="hero">
   <div class="wrap">
     <h1>Changelog</h1>
-    <p class="lead">Every customer-visible change, newest first. Filter by the part of the product you care about.</p>
+    <p class="lead">Every customer-visible change, in the open. Nothing ships without an entry
+    here — a promise you can hold us to.</p>
+    <div class="cl-stats">
+      <div><b>${releases.length}</b><span>releases</span></div>
+      <div><b>${modules.filter((m) => m.status === 'live').length}</b><span>modules live</span></div>
+      <div><b>${monthName(releases[0].date)}</b><span>latest release</span></div>
+    </div>
   </div>
 </div>
 
 <section>
-  <div class="wrap">
-    <div class="filters" role="group" aria-label="Filter changelog by area">
-        ${filters}
-    </div>
-    <div class="changelog">
+  <div class="wrap cl-wrap">
 ${body}
-    </div>
-    <p class="empty-note" hidden>No entries for that part of the product yet.</p>
   </div>
-</section>
-
-<script>
-// Filtering is a display concern; every entry is already in the page, so it
-// works on a slow connection and the back button behaves.
-(function () {
-  var buttons = document.querySelectorAll('.chip-btn')
-  var note = document.querySelector('.empty-note')
-  function apply(area) {
-    var shown = 0
-    document.querySelectorAll('.release').forEach(function (rel) {
-      var any = false
-      rel.querySelectorAll('li').forEach(function (li) {
-        var match = area === 'all' || li.dataset.area === area
-        li.hidden = !match
-        if (match) any = true
-      })
-      rel.hidden = !any
-      if (any) shown++
-    })
-    note.hidden = shown > 0
-  }
-  buttons.forEach(function (b) {
-    b.addEventListener('click', function () {
-      buttons.forEach(function (o) { o.classList.toggle('on', o === b) })
-      apply(b.dataset.area)
-      history.replaceState(null, '', b.dataset.area === 'all' ? location.pathname : '#' + b.dataset.area)
-    })
-  })
-  var initial = location.hash.replace('#', '')
-  if (initial) {
-    var target = document.querySelector('.chip-btn[data-area="' + initial.replace(/[^a-z-]/g, '') + '"]')
-    if (target) target.click()
-  }
-})()
-</script>`,
+</section>`,
   })
 }
 

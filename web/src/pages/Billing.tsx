@@ -39,11 +39,11 @@ export default function Billing() {
       })
   }, [])
 
-  const go = async (path: string) => {
+  const go = async (path: string, body: Record<string, unknown> = {}) => {
     setBusy(true)
     setError('')
     try {
-      const r = await api('POST', path, {})
+      const r = await api('POST', path, body)
       window.location.href = r.url
     } catch (e) {
       setError(explain(e))
@@ -174,14 +174,25 @@ export default function Billing() {
 
       {!onPro && (
         <div className="card">
-          <h2>Upgrade to {pro.name}</h2>
+          <h2>Upgrade to {pro.name} — everything switched on</h2>
           <p>
-            {money(pro.monthlyPriceCents)} per month including {pro.includedMessages.toLocaleString()} messages,
-            then {money(pro.overageCentsPerMessage)} per additional message. Cancel any time.
+            Unlimited bookings, review invites, quotes and invoices, your own domain, and{' '}
+            {pro.includedMessages.toLocaleString()} assistant messages a month. Month to month,
+            cancel any time.
           </p>
-          <button onClick={() => void go('/v1/core/billing/checkout')} disabled={busy}>
-            {busy ? 'Opening Stripe…' : `Upgrade to ${pro.name}`}
-          </button>
+          <div className="row">
+            <button onClick={() => void go('/v1/core/billing/checkout', { interval: 'month' })} disabled={busy}>
+              {busy ? 'Opening Stripe…' : `${money(pro.monthlyPriceCents)} / month`}
+            </button>
+            <button className="ghost" onClick={() => void go('/v1/core/billing/checkout', { interval: 'year' })} disabled={busy}>
+              {money(29000)} / year — 2 months free
+            </button>
+          </div>
+          <p className="meta mt">
+            Monthly includes pay-as-you-go beyond the message allowance at{' '}
+            {money(pro.overageCentsPerMessage)} each. Annual pauses politely at the allowance
+            instead — no surprise catch-up bills.
+          </p>
         </div>
       )}
 
