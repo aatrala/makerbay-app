@@ -4,7 +4,7 @@
   "tagline": "Appointments customers can make without calling you",
   "status": "live",
   "version": {
-    "api": "1.0.0",
+    "api": "1.0.1",
     "web": "1.0.0"
   },
   "routes": [

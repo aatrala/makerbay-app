@@ -2,10 +2,10 @@
   "id": "presence",
   "name": "Your page",
   "tagline": "A page that gets you found, answers questions and takes bookings",
-  "status": "in-development",
+  "status": "live",
   "version": {
-    "api": "0.1.0",
-    "web": "0.1.0"
+    "api": "1.0.0",
+    "web": "1.0.0"
   },
   "routes": [
     "/v1/presence/*",
@@ -21,7 +21,7 @@
   ],
   "roadmap": {
     "order": 6,
-    "note": "Next. Mostly assembly of what is already built - it is what turns the modules into one product a customer can be sold."
+    "note": "Shipped. Renders only what the owner entered and what the modules already know; a page stays out of search results until it is genuinely complete."
   },
   "marketing": {
     "summary": "Every workspace gets a real page from the moment it is created - your services, your opening hours, a live booking form and an assistant that answers from your own documents. Not a template to fill in: a page that already works, which you then edit.",

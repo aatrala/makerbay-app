@@ -158,6 +158,8 @@ async function publicRoute(
     const serviceId = String(q.serviceId ?? '')
     const date = String(q.date ?? '')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json(400, { error: 'bad_date' })
+    // An empty key would make DynamoDB throw a 500; an unknown service is 404.
+    if (!serviceId) return json(404, { error: 'unknown_service' })
     const service = await getService(resolved.tenantId, serviceId)
     if (!service || !service.active) return json(404, { error: 'unknown_service' })
 
@@ -230,7 +232,7 @@ async function createBooking(
       message: 'Leave an email address or a phone number so we can confirm.',
     })
   }
-  const service = await getService(tenantId, serviceId)
+  const service = serviceId ? await getService(tenantId, serviceId) : undefined
   if (!service || !service.active) return json(404, { error: 'unknown_service' })
 
   const start = new Date(startsAt)

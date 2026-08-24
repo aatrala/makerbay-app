@@ -102,6 +102,9 @@ export class MakerbayStack extends cdk.Stack {
     const priceItems = table('PriceItems', 'tenantId', 'itemId')
     const quotes = table('Quotes', 'tenantId', 'quoteId')
     const quotesConfig = table('QuotesConfig', 'tenantId')
+    // Presence stores only the editable words; services, hours and prices are
+    // read live from the modules that own them, so nothing is stored twice.
+    const presenceConfig = table('PresenceConfig', 'tenantId')
 
     // ── DNS + TLS ────────────────────────────────────────────────────────
     const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
@@ -386,6 +389,13 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_QUOTES: quotes.tableName,
       TABLE_QUOTESCONFIG: quotesConfig.tableName,
     })
+    const presenceFn = fn('PresenceApiFn', 'modules/presence/api/src/handler.ts', {
+      ...tableEnv,
+      TABLE_PRESENCECONFIG: presenceConfig.tableName,
+      TABLE_BOOKINGSERVICES: bookingServices.tableName,
+      TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+      TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+    })
     const assistantFn = fn(
       'AssistantApiFn',
       'modules/assistant/api/src/handler.ts',
@@ -509,6 +519,11 @@ export class MakerbayStack extends cdk.Stack {
     for (const t of [requests, requestsConfig]) t.grantReadWriteData(requestsFn)
     for (const t of [bookingServices, bookings, bookingConfig]) t.grantReadWriteData(bookingFn)
     for (const t of [priceItems, quotes, quotesConfig]) t.grantReadWriteData(quotesFn)
+    presenceConfig.grantReadWriteData(presenceFn)
+    // Read-only views: presence renders what other modules own, never writes it.
+    for (const t of [bookingServices, bookingConfig, assistantConfig, tenants, users, entitlements, grants]) {
+      t.grantReadData(presenceFn)
+    }
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)
     bus.grantPutEventsTo(assistantFn)
@@ -661,6 +676,18 @@ export class MakerbayStack extends cdk.Stack {
     }
 
     httpApi.addRoutes({
+      path: '/v1/presence/{proxy+}',
+      methods: routeMethods,
+      integration: new HttpLambdaIntegration('PresenceIntegration', presenceFn),
+      authorizer,
+    })
+    // The public page render. No authorizer: the slug identifies the tenant.
+    httpApi.addRoutes({
+      path: '/v1/public/presence',
+      methods: [apigwv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration('PublicPresenceIntegration', presenceFn),
+    })
+    httpApi.addRoutes({
       path: '/v1/assistant/{proxy+}',
       methods: routeMethods,
       integration: new HttpLambdaIntegration('AssistantIntegration', assistantFn),
@@ -756,6 +783,19 @@ export class MakerbayStack extends cdk.Stack {
       enforceSSL: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
+    // Presence hero photos live under p/{tenantId}/ in this bucket, served
+    // publicly through the embed distribution at chat.makerbay.app. The Lambda
+    // may write only that prefix.
+    presenceFn.addEnvironment('PHOTO_BUCKET', embedBucket.bucketName)
+    embedBucket.grantPut(presenceFn, 'p/*')
+    embedBucket.grantRead(presenceFn, 'p/*')
+    // Browsers PUT directly to the presigned URL, which needs bucket CORS.
+    embedBucket.addCorsRule({
+      allowedMethods: [s3.HttpMethods.PUT],
+      allowedOrigins: [`https://app.${DOMAIN}`],
+      allowedHeaders: ['content-type'],
+      maxAge: 3600,
+    })
     const embedDistribution = new cloudfront.Distribution(this, 'EmbedDistribution', {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(embedBucket),
@@ -827,7 +867,43 @@ function handler(event) {
 }
 `),
     })
+    // makerbay.app/p/{slug} is a business page rendered by the presence
+    // Lambda. A viewer-request function maps the friendly path onto the API,
+    // and the edge caches the HTML so a crawl never becomes a Lambda bill.
+    const presenceRewrite = new cloudfront.Function(this, 'PresenceRewrite', {
+      functionName: `makerbay-presence-rewrite-${this.account}`,
+      comment: 'Maps makerbay.app/p/{slug} onto the public presence API',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request
+  var parts = request.uri.split('/').filter(function (p) { return p.length > 0 })
+  request.uri = '/v1/public/presence'
+  request.querystring = parts.length > 1 ? { slug: { value: parts[1] } } : {}
+  return request
+}
+`),
+    })
+    const presenceCachePolicy = new cloudfront.CachePolicy(this, 'PresenceCachePolicy', {
+      cachePolicyName: `makerbay-presence-${this.account}`,
+      defaultTtl: cdk.Duration.minutes(5),
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.hours(24),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    })
     const siteDistribution = new cloudfront.Distribution(this, 'SiteDistribution', {
+      additionalBehaviors: {
+        '/p/*': {
+          origin: new origins.HttpOrigin(`api.${DOMAIN}`),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: presenceCachePolicy,
+          functionAssociations: [
+            { function: presenceRewrite, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
+          ],
+        },
+      },
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

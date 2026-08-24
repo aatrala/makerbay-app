@@ -4,6 +4,16 @@
  *   /{workspace-slug}      — the hosted page
  */
 ;(function () {
+  // Booking, cancellation and quote pages share this surface but not this
+  // file. Dispatch before anything chat-shaped happens.
+  var pagePath = location.pathname.replace(/\/+$/, '')
+  if (pagePath === '/booking' || pagePath === '/booking/cancel' || pagePath === '/quote') {
+    var s = document.createElement('script')
+    s.src = '/pages.js'
+    document.body.appendChild(s)
+    return
+  }
+
   var API = 'https://api.makerbay.app'
   var STREAM = 'https://stream.makerbay.app'
   var app = document.getElementById('app')

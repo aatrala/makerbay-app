@@ -9,6 +9,30 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.0.0 - 2026-08-24
+
+- Added `presence` Every workspace now has a real web page at
+  makerbay.app/p/{slug}: services and prices from Bookings, opening hours with
+  a live open-or-closed status in the business timezone, a photo, and buttons
+  that book a real slot or ask the assistant. Edit it from Your page in the
+  dashboard.
+- Added `presence` The page is honest with search engines. It stays hidden
+  until it has an intro, a photo and a priced service, and if you have your own
+  website it links there and stays out of results entirely - we never compete
+  with you for your own name.
+- Added `booking` Customers can now actually book. The public booking page
+  walks service, day, time and details, refuses a slot taken a second earlier,
+  and the confirmation email carries a private cancel link that frees the slot.
+- Added `quotes` The quote link customers receive now opens a real page: every
+  line and total, accept or decline with one tap, and a clear state once it is
+  settled or expired.
+- Fixed `booking` Switching the Bookings module on had never worked - the
+  module catalogue predated it. Enabling it now grants a free tier of 20
+  bookings a month.
+- Fixed `presence` A photo upload that failed part-way no longer leaves the
+  page pointing at a missing image; the photo is verified in storage before it
+  counts.
+
 ## 1.11.0 - 2026-08-24
 
 - Added `platform` The roadmap now shows where the product is going: a page per

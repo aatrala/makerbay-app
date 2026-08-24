@@ -4,12 +4,14 @@ import { contactsDashboard } from '@makerbay/contacts-web'
 import { requestsDashboard } from '@makerbay/requests-web'
 import { bookingDashboard } from '@makerbay/booking-web'
 import { quotesDashboard } from '@makerbay/quotes-web'
+import { presenceDashboard } from '@makerbay/presence-web'
 
 /**
  * The only file that knows which module dashboards exist. Adding a module is
  * one import and one array entry; nothing else in the shell changes.
  */
 const ALL: DashboardModule[] = [
+  presenceDashboard,
   assistantDashboard,
   requestsDashboard,
   bookingDashboard,

@@ -25,11 +25,22 @@ import {
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
 // Module catalog: what can be enabled, and free-plan limits.
+/**
+ * What switching a paid module on gives you before any payment: a baseline
+ * generous enough to prove the module works, small enough that real usage
+ * needs the Pro plan. Free modules never appear here - they bypass
+ * entitlements entirely (see freeModules in core).
+ */
 const MODULE_CATALOG: Record<string, ModuleEntitlement> = {
   assistant: {
     enabled: true,
     plan: 'free',
     limits: { messagesPerMonth: 200, sources: 20, sourceBytes: 25 * 1024 * 1024 },
+  },
+  booking: {
+    enabled: true,
+    plan: 'free',
+    limits: { bookingsPerMonth: 20 },
   },
 }
 
