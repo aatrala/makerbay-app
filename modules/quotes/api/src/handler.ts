@@ -21,6 +21,7 @@ import {
   getInvoice,
   invoiceFromQuote,
   invoiceLabel,
+  quoteLabel,
   listInvoices,
   patchInvoice,
   publicInvoiceView,
@@ -127,7 +128,13 @@ export const handler = async (
     if (method === 'POST' && toInvoice) return await createInvoice(tenantId, toInvoice[1])
 
     if (method === 'GET' && path === '/v1/quotes/invoices') {
-      return json(200, { invoices: await listInvoices(tenantId) })
+      const cfg = await getQuotesConfig(tenantId)
+      return json(200, {
+        invoices: (await listInvoices(tenantId)).map((i) => ({
+          ...i,
+          label: invoiceLabel(i, cfg.docPrefix),
+        })),
+      })
     }
     const inv = path.match(/^\/v1\/quotes\/invoices\/([0-9A-Z]{26})$/)
     if (method === 'GET' && inv) return await invoiceDetail(tenantId, inv[1])
@@ -226,7 +233,7 @@ async function publicRoute(
       : null
     return json(200, {
       business: resolved.name,
-      quote: { ...publicView(quote, status, config.taxLabel), deposit },
+      quote: { ...publicView(quote, status, config.taxLabel, config.docPrefix), deposit },
     })
   }
 
@@ -236,9 +243,10 @@ async function publicRoute(
   return json(404, { error: 'not_found' })
 }
 
-const publicView = (q: QuoteRow, status: QuoteStatus, taxLabel: string) => ({
+const publicView = (q: QuoteRow, status: QuoteStatus, taxLabel: string, docPrefix = '') => ({
   supersededBy: (q as { supersededByToken?: string }).supersededByToken ?? null,
   number: q.number,
+  label: quoteLabel(q.number, docPrefix),
   status,
   lines: q.lines,
   subtotalCents: q.subtotalCents,
@@ -284,18 +292,19 @@ async function respond(
   await putQuote(updated)
 
   const config = await getQuotesConfig(tenantId)
+  const qLabel = quoteLabel(quote.number, config.docPrefix)
   await appendContactEvent(tenantId, quote.contactId, {
     moduleId: 'quotes',
     title: accepted
-      ? `Accepted quote #${quote.number} for ${money(quote.totalCents, quote.currency)}`
-      : `Declined quote #${quote.number}`,
+      ? `Accepted quote ${qLabel} for ${money(quote.totalCents, quote.currency)}`
+      : `Declined quote ${qLabel}`,
     href: `/quotes/${quote.quoteId}`,
   })
   await sendEmail({
     to: config.notifyEmail || '',
-    subject: `Quote #${quote.number} ${accepted ? 'accepted' : 'declined'}`,
+    subject: `Quote ${qLabel} ${accepted ? 'accepted' : 'declined'}`,
     text: [
-      `${quote.customerName ?? 'Your customer'} ${accepted ? 'accepted' : 'declined'} quote #${quote.number}.`,
+      `${quote.customerName ?? 'Your customer'} ${accepted ? 'accepted' : 'declined'} quote ${qLabel}.`,
       accepted ? `Total: ${money(quote.totalCents, quote.currency)}` : '',
       '',
       `${APP}/quotes/${quote.quoteId}`,
@@ -413,8 +422,17 @@ async function index(tenantId: string, event: Event): Promise<APIGatewayProxyRes
   const config = await getQuotesConfig(tenantId)
   return json(200, {
     // Expiry is evaluated on read, so a quote lapses without a scheduled job.
-    quotes: rows.map((r) => ({ ...r, status: effectiveStatus(r) })),
-    config: { currency: config.currency, taxLabel: config.taxLabel, taxRate: config.taxRate },
+    quotes: rows.map((r) => ({
+      ...r,
+      status: effectiveStatus(r),
+      label: quoteLabel(r.number, config.docPrefix),
+    })),
+    config: {
+      currency: config.currency,
+      taxLabel: config.taxLabel,
+      taxRate: config.taxRate,
+      docPrefix: config.docPrefix,
+    },
   })
 }
 
@@ -425,8 +443,9 @@ async function detail(tenantId: string, quoteId: string): Promise<APIGatewayProx
   const tenant = await getTenant(tenantId)
   return json(200, {
     quote: { ...quote, status: effectiveStatus(quote) },
+    label: quoteLabel(quote.number, config.docPrefix),
     publicUrl: `${CHAT}/quote?slug=${tenant?.slug ?? ''}&token=${quote.publicToken}`,
-    config: { currency: config.currency, taxLabel: config.taxLabel },
+    config: { currency: config.currency, taxLabel: config.taxLabel, docPrefix: config.docPrefix },
   })
 }
 
@@ -439,7 +458,7 @@ async function patch(tenantId: string, quoteId: string, event: Event): Promise<A
   if (existing.status === 'accepted' || existing.status === 'declined') {
     return json(409, {
       error: 'quote_settled',
-      message: `Quote #${existing.number} has already been ${existing.status}. Create a new one instead.`,
+      message: `Quote ${quoteLabel(existing.number)} has already been ${existing.status}. Create a new one instead.`,
     })
   }
 
@@ -474,12 +493,13 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
 
   const tenant = await getTenant(tenantId)
   const config = await getQuotesConfig(tenantId)
+  const qLabel = quoteLabel(quote.number, config.docPrefix)
   const url = `${CHAT}/quote?slug=${tenant?.slug ?? ''}&token=${quote.publicToken}`
 
   const notice = await sendEmail({
     to: quote.customerEmail,
     replyTo: config.notifyEmail || undefined,
-    subject: `Quote #${quote.number} from ${tenant?.name ?? 'us'}`,
+    subject: `Quote ${qLabel} from ${tenant?.name ?? 'us'}`,
     text: [
       `${quote.customerName ?? 'Hello'},`,
       '',
@@ -511,7 +531,7 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
   await putQuote(updated)
   await appendContactEvent(tenantId, quote.contactId, {
     moduleId: 'quotes',
-    title: `Sent quote #${quote.number} for ${money(quote.totalCents, quote.currency)}`,
+    title: `Sent quote ${qLabel} for ${money(quote.totalCents, quote.currency)}`,
     href: `/quotes/${quote.quoteId}`,
   })
   await emitUsage({ tenantId, moduleId: 'quotes', metric: 'quote.sent', quantity: 1 })
@@ -587,9 +607,10 @@ async function invoiceDetail(tenantId: string, invoiceId: string): Promise<APIGa
   const invoice = await getInvoice(tenantId, invoiceId)
   if (!invoice) return json(404, { error: 'not_found' })
   const tenant = await getTenant(tenantId)
+  const config = await getQuotesConfig(tenantId)
   return json(200, {
     invoice,
-    label: invoiceLabel(invoice),
+    label: invoiceLabel(invoice, config.docPrefix),
     publicUrl: `${CHAT}/invoice?slug=${tenant?.slug ?? ''}&token=${invoice.publicToken}`,
   })
 }
@@ -617,16 +638,17 @@ async function onPaymentReceived(detail: PaymentReceivedEvent['detail']): Promis
         updatedAt: new Date().toISOString(),
       })
       const config = await getQuotesConfig(tenantId)
+      const qLabel = quoteLabel(quote.number, config.docPrefix)
       await appendContactEvent(tenantId, quote.contactId, {
         moduleId: 'quotes',
-        title: `Paid the deposit on quote #${quote.number} - ${money(detail.amountCents, detail.currency)}`,
+        title: `Paid the deposit on quote ${qLabel} - ${money(detail.amountCents, detail.currency)}`,
         href: `/quotes/${quote.quoteId}`,
       })
       await sendEmail({
         to: config.notifyEmail || '',
-        subject: `Deposit paid on quote #${quote.number}`,
+        subject: `Deposit paid on quote ${qLabel}`,
         text: [
-          `${quote.customerName ?? 'Your customer'} paid the ${money(detail.amountCents, detail.currency)} deposit on quote #${quote.number}.`,
+          `${quote.customerName ?? 'Your customer'} paid the ${money(detail.amountCents, detail.currency)} deposit on quote ${qLabel}.`,
           '',
           `Quote: ${APP}/quotes/${quote.quoteId}`,
         ].join('\n'),
@@ -663,6 +685,13 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
       Math.max(Number(b.depositPercent ?? (existing as { depositPercent?: number }).depositPercent ?? 0) || 0, 0),
       100,
     ),
+    // The document tag: short, uppercase, letters and digits only. SP turns
+    // Q-001 into SP-Q-001 on every new label; existing numbers are untouched.
+    docPrefix: (() => {
+      if (b.docPrefix === undefined) return existing.docPrefix ?? ''
+      const p = String(b.docPrefix).trim().toUpperCase()
+      return /^[A-Z0-9]{0,6}$/.test(p) ? p : (existing.docPrefix ?? '')
+    })(),
   } as typeof existing
   await putQuotesConfig(config)
   return json(200, { config })

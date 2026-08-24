@@ -60,8 +60,9 @@ async function nextInvoiceNumber(tenantId: string): Promise<number> {
     new UpdateCommand({
       TableName: Tables.config(),
       Key: { tenantId },
-      UpdateExpression: 'SET nextInvoiceNumber = if_not_exists(nextInvoiceNumber, :one) + :one',
-      ExpressionAttributeValues: { ':one': 1 },
+      // Seed ZERO, not one - the first invoice must be 001, not 002.
+      UpdateExpression: 'SET nextInvoiceNumber = if_not_exists(nextInvoiceNumber, :zero) + :one',
+      ExpressionAttributeValues: { ':zero': 0, ':one': 1 },
       ReturnValues: 'UPDATED_NEW',
     }),
   )
@@ -137,15 +138,17 @@ export async function sendInvoice(tenantId: string, invoiceId: string): Promise<
   }
 
   const tenant = await getTenant(tenantId)
+  const config = await getQuotesConfig(tenantId)
+  const label = invoiceLabel(invoice, config.docPrefix)
   const url = `${CHAT}/invoice?slug=${tenant?.slug ?? ''}&token=${invoice.publicToken}`
   const due = new Date(invoice.dueAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const notice = await sendEmail({
     to: invoice.customerEmail,
-    subject: `Invoice ${invoiceLabel(invoice)} from ${tenant?.name ?? 'us'} - ${money(invoice.totalCents, invoice.currency)}`,
+    subject: `Invoice ${label} from ${tenant?.name ?? 'us'} - ${money(invoice.totalCents, invoice.currency)}`,
     text: [
       `${invoice.customerName ?? 'Hello'},`,
       '',
-      `Invoice ${invoiceLabel(invoice)} for ${money(invoice.totalCents, invoice.currency)}, due ${due}.`,
+      `Invoice ${label} for ${money(invoice.totalCents, invoice.currency)}, due ${due}.`,
       '',
       `View it here: ${url}`,
       invoice.paymentInstructions ? `\nHow to pay:\n${invoice.paymentInstructions}` : '',
@@ -166,7 +169,7 @@ export async function sendInvoice(tenantId: string, invoiceId: string): Promise<
   if (invoice.contactId) {
     await appendContactEvent(tenantId, invoice.contactId, {
       moduleId: 'quotes',
-      title: `Sent invoice ${invoiceLabel(invoice)} for ${money(invoice.totalCents, invoice.currency)}`,
+      title: `Sent invoice ${label} for ${money(invoice.totalCents, invoice.currency)}`,
     })
   }
   await emitUsage({ tenantId, moduleId: 'quotes', metric: 'invoice.sent', quantity: 1 })
@@ -199,16 +202,28 @@ export async function patchInvoice(
   }
   await ddb.send(new PutCommand({ TableName: Tables.invoices(), Item: updated }))
   if (status === 'paid' && invoice.contactId) {
+    const cfg = await getQuotesConfig(tenantId)
     await appendContactEvent(tenantId, invoice.contactId, {
       moduleId: 'quotes',
-      title: `Invoice ${invoiceLabel(invoice)} paid - ${money(invoice.totalCents, invoice.currency)}`,
+      title: `Invoice ${invoiceLabel(invoice, cfg.docPrefix)} paid - ${money(invoice.totalCents, invoice.currency)}`,
     })
     await emitUsage({ tenantId, moduleId: 'quotes', metric: 'invoice.paid', quantity: 1 })
   }
   return json(200, { invoice: updated })
 }
 
-export const invoiceLabel = (i: Pick<InvoiceRow, 'number'>): string => `INV-${String(i.number).padStart(4, '0')}`
+/**
+ * Document labels: an optional per-tenant tag, the document kind, and a
+ * number padded to three digits - SP-INV-001 reads like a real business,
+ * INV-0007 reads like software.
+ */
+export const docLabel = (kind: 'Q' | 'INV', number: number, prefix = ''): string =>
+  `${prefix ? `${prefix}-` : ''}${kind}-${String(number).padStart(3, '0')}`
+
+export const invoiceLabel = (i: Pick<InvoiceRow, 'number'>, prefix = ''): string =>
+  docLabel('INV', i.number, prefix)
+
+export const quoteLabel = (number: number, prefix = ''): string => docLabel('Q', number, prefix)
 
 /** The public JSON the themed page renders from. Theme comes from config. */
 export async function publicInvoiceView(
@@ -226,7 +241,7 @@ export async function publicInvoiceView(
     // A pay button appears only when it would actually work.
     payable: payoutsEnabled && invoice.status === 'sent',
     invoice: {
-      label: invoiceLabel(invoice),
+      label: invoiceLabel(invoice, (config as { docPrefix?: string }).docPrefix ?? ''),
       status: invoice.status,
       lines: invoice.lines,
       subtotalCents: invoice.subtotalCents,

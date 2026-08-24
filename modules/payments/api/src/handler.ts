@@ -308,6 +308,18 @@ interface Target {
   contactId?: string
   customerEmail?: string
 }
+
+// Mirrors the quotes module's document labels (SP-INV-001) so the Stripe
+// statement line matches the paperwork the customer is holding.
+const docLabel = (kind: 'Q' | 'INV', number: number, prefix = ''): string =>
+  `${prefix ? `${prefix}-` : ''}${kind}-${String(number).padStart(3, '0')}`
+
+async function tenantDocPrefix(tenantId: string): Promise<string> {
+  const cfg = await ddb.send(
+    new GetCommand({ TableName: Tables.quotesConfig(), Key: { tenantId } }),
+  )
+  return String(cfg.Item?.docPrefix ?? '')
+}
 type TargetError = { error: string; message: string; status: number }
 
 async function invoiceTarget(tenantId: string, token: string): Promise<Target | TargetError> {
@@ -328,7 +340,7 @@ async function invoiceTarget(tenantId: string, token: string): Promise<Target | 
     refId: String(invoice.invoiceId),
     amountCents: Number(invoice.totalCents),
     currency: String(invoice.currency ?? 'AUD'),
-    description: `Invoice INV-${String(invoice.number).padStart(4, '0')}`,
+    description: `Invoice ${docLabel('INV', Number(invoice.number), await tenantDocPrefix(tenantId))}`,
     contactId: invoice.contactId ? String(invoice.contactId) : undefined,
     customerEmail: invoice.customerEmail ? String(invoice.customerEmail) : undefined,
   }
@@ -360,7 +372,7 @@ async function quoteDepositTarget(tenantId: string, token: string): Promise<Targ
     refId: String(quote.quoteId),
     amountCents,
     currency: String(quote.currency ?? 'AUD'),
-    description: `Deposit (${pct}%) on quote #${quote.number}`,
+    description: `Deposit (${pct}%) on quote ${docLabel('Q', Number(quote.number), String(cfg.Item?.docPrefix ?? ''))}`,
     contactId: quote.contactId ? String(quote.contactId) : undefined,
     customerEmail: quote.customerEmail ? String(quote.customerEmail) : undefined,
   }

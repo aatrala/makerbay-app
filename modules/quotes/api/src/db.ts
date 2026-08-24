@@ -66,6 +66,8 @@ export interface QuotesConfigRow {
   notifyEmail: string
   /** Monotonic per tenant, so quote numbers read like a real business. */
   nextNumber: number
+  /** Optional tag in front of every document number: SP → SP-Q-001. */
+  docPrefix?: string
 }
 
 export const DEFAULT_QUOTES_CONFIG: Omit<QuotesConfigRow, 'tenantId'> = {
@@ -76,6 +78,7 @@ export const DEFAULT_QUOTES_CONFIG: Omit<QuotesConfigRow, 'tenantId'> = {
   validDays: 30,
   notifyEmail: '',
   nextNumber: 1,
+  docPrefix: '',
 }
 
 export async function getQuotesConfig(tenantId: string): Promise<QuotesConfigRow> {
@@ -97,8 +100,10 @@ export async function nextQuoteNumber(tenantId: string): Promise<number> {
     new UpdateCommand({
       TableName: Tables.config(),
       Key: { tenantId },
-      UpdateExpression: 'SET nextNumber = if_not_exists(nextNumber, :one) + :one',
-      ExpressionAttributeValues: { ':one': 1 },
+      // if_not_exists must seed ZERO: seeding with :one made the first
+      // document number 2, which customers noticed.
+      UpdateExpression: 'SET nextNumber = if_not_exists(nextNumber, :zero) + :one',
+      ExpressionAttributeValues: { ':zero': 0, ':one': 1 },
       ReturnValues: 'UPDATED_NEW',
     }),
   )

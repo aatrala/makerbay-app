@@ -271,7 +271,7 @@
       if (res.status !== 200) return fail('This quote could not be found.')
       var q = res.data.quote
       var business = res.data.business || ''
-      document.title = 'Quote #' + q.number + ' — ' + business
+      document.title = 'Quote ' + (q.label || '#' + q.number) + ' — ' + business
       app.className = ''
       var foot = '</div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
 
@@ -322,7 +322,7 @@
       app.innerHTML =
         '<header><div class="name">' + esc(business) + '</div></header>' +
         '<div class="page-body">' +
-        '<h2 class="q-title">Quote #' + q.number + (q.customerName ? ' for ' + esc(q.customerName) : '') + '</h2>' +
+        '<h2 class="q-title">Quote ' + esc(q.label || '#' + q.number) + (q.customerName ? ' for ' + esc(q.customerName) : '') + '</h2>' +
         '<table class="q-lines"><tbody>' + lines + '</tbody>' +
         '<tfoot>' +
         '<tr><td>Subtotal</td><td class="num">' + money(q.subtotalCents, q.currency) + '</td></tr>' +

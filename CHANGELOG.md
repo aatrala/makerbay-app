@@ -11,6 +11,21 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.7.0 - 2026-08-24
+
+> **Document numbers that read like a real business** — quotes and invoices now start at 001 and can carry your own tag: SP-Q-001, SP-INV-001.
+
+- Fixed `quotes` The first quote and the first invoice are now number 001, not
+  002. Businesses already past their first documents keep every number they
+  have - the fix only changes where a fresh series starts.
+- Added `quotes` A document prefix in quote settings: up to six letters or
+  digits, stamped on every quote and invoice number (SP makes SP-Q-001 and
+  SP-INV-001). The label follows the document everywhere - the email subject,
+  the customer's page, the Stripe statement line, the contact history and
+  Genie's briefings.
+- Changed `quotes` Document numbers are padded to three digits everywhere
+  (Q-001, INV-042) instead of a mix of #1 and INV-0001.
+
 ## 2.6.0 - 2026-08-24
 
 > **Meet Genie, and a dashboard that fits on one screen** — Genie answers questions about your whole business from a chat on your phone. And the sidebar shrank from thirty-six rows to twelve: one link per module, sub-pages as tabs.

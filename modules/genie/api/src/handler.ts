@@ -195,12 +195,14 @@ const TOOL_RUNNERS: Record<string, (tenantId: string, args: Record<string, unkno
     }
   },
   async money(tenantId) {
-    const [quotes, invoices, payments] = await Promise.all([
+    const [quotes, invoices, payments, cfg] = await Promise.all([
       q(Tables.quotes(), tenantId, 100),
       q(Tables.invoices(), tenantId, 100),
       q(Tables.payments(), tenantId, 100),
+      ddb.send(new GetCommand({ TableName: Tables.quotesConfig(), Key: { tenantId } })).then((r) => r.Item),
     ])
     const unpaid = invoices.filter((i) => i.status === 'sent')
+    const prefix = String(cfg?.docPrefix ?? '')
     return {
       quotes: {
         awaitingAnswer: quotes.filter((x) => x.status === 'sent').length,
@@ -208,7 +210,7 @@ const TOOL_RUNNERS: Record<string, (tenantId: string, args: Record<string, unkno
         drafts: quotes.filter((x) => x.status === 'draft').length,
       },
       unpaidInvoices: unpaid.map((i) => ({
-        label: `INV-${String(i.number).padStart(4, '0')}`, customer: i.customerName ?? i.customerEmail,
+        label: `${prefix ? `${prefix}-` : ''}INV-${String(i.number).padStart(3, '0')}`, customer: i.customerName ?? i.customerEmail,
         totalCents: i.totalCents, currency: i.currency, dueAt: i.dueAt,
       })),
       recentPayments: payments.slice(0, 10).map((p) => ({

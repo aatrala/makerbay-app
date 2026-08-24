@@ -29,6 +29,8 @@ interface Line {
 interface Quote {
   quoteId: string
   number: number
+  /** Server-composed document label (SP-Q-001); the client never builds it. */
+  label?: string
   contactId: string
   customerName?: string
   customerEmail?: string
@@ -48,6 +50,7 @@ interface Quote {
 interface Invoice {
   invoiceId: string
   number: number
+  label?: string
   quoteId?: string
   contactId?: string
   customerName?: string
@@ -66,7 +69,8 @@ interface Invoice {
   paidAt?: string
 }
 
-const invoiceLabel = (i: Pick<Invoice, 'number'>) => `INV-${String(i.number).padStart(4, '0')}`
+const invoiceLabel = (i: Pick<Invoice, 'number' | 'label'>) =>
+  i.label ?? `INV-${String(i.number).padStart(3, '0')}`
 
 const cash = (cents: number, currency = 'AUD') =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(cents / 100)
@@ -121,7 +125,7 @@ function QuotesList() {
               <tbody>
                 {quotes.map((q) => (
                   <tr key={q.quoteId}>
-                    <td><Link to={`/quotes/${q.quoteId}`}>#{q.number}</Link></td>
+                    <td><Link to={`/quotes/${q.quoteId}`}>{q.label ?? `#${q.number}`}</Link></td>
                     <td>{q.customerName || q.customerEmail || <span className="meta">no name</span>}</td>
                     <td className="num">{cash(q.totalCents, q.currency)}</td>
                     <td><span className={`chip ${STATUS_CHIP[q.status]}`}>{q.status}</span></td>
@@ -276,7 +280,8 @@ function QuoteDetail() {
   const load = useCallback(async () => {
     try {
       const r = await api('GET', `/v1/quotes/${quoteId}`)
-      setQuote(r.quote); setPublicUrl(r.publicUrl); setTaxLabel(r.config?.taxLabel ?? 'Tax')
+      setQuote(r.label ? { ...r.quote, label: r.label } : r.quote)
+      setPublicUrl(r.publicUrl); setTaxLabel(r.config?.taxLabel ?? 'Tax')
     } catch (e) { setError(explain(e)) }
   }, [quoteId])
   useEffect(() => { void load() }, [load])
@@ -307,7 +312,7 @@ function QuoteDetail() {
   return (
     <>
       <p className="meta"><Link to="/quotes">← All quotes</Link></p>
-      <h1>Quote #{quote.number}</h1>
+      <h1>Quote {quote.label ?? `#${quote.number}`}</h1>
       <p>
         {quote.customerName || quote.customerEmail} ·{' '}
         <Link to={`/contacts/${quote.contactId}`}>see their history</Link> ·{' '}
@@ -580,8 +585,11 @@ function InvoiceDetail() {
  * layout rules as pages.js, so what the owner previews is what the customer
  * gets, minus their real numbers.
  */
-function ThemePreview({ theme, currency, taxLabel }: { theme: string; currency: string; taxLabel: string }) {
+function ThemePreview({ theme, currency, taxLabel, docPrefix = '' }: {
+  theme: string; currency: string; taxLabel: string; docPrefix?: string
+}) {
   const money = (cents: number) => cash(cents, currency)
+  const sample = `${docPrefix ? `${docPrefix}-` : ''}INV-042`
   const serif = theme === 'classic'
   const dense = theme === 'compact'
   const band = theme === 'bold'
@@ -592,7 +600,7 @@ function ThemePreview({ theme, currency, taxLabel }: { theme: string; currency: 
     }}>
       {band ? (
         <div style={{ background: '#111', color: '#fff', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
-          <strong style={{ fontSize: 16 }}>INV-0042</strong>
+          <strong style={{ fontSize: 16 }}>{sample}</strong>
           <div style={{ opacity: 0.8, fontSize: 12 }}>Your Business Name</div>
         </div>
       ) : (
@@ -600,7 +608,7 @@ function ThemePreview({ theme, currency, taxLabel }: { theme: string; currency: 
           margin: '0 0 10px', fontFamily: serif ? 'Georgia, serif' : 'inherit',
           fontWeight: serif ? 400 : 700, letterSpacing: dense ? '.08em' : undefined,
           textTransform: dense ? 'uppercase' : undefined, fontSize: dense ? 13 : 17,
-        }}>INV-0042</h3>
+        }}>{sample}</h3>
       )}
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <tbody>
@@ -749,6 +757,19 @@ function PriceList() {
                 <input id="q-notify" type="email" value={config.notifyEmail ?? ''}
                   onChange={(e) => setConfig({ ...config, notifyEmail: e.target.value })} />
               </div>
+              <div className="grow">
+                <label htmlFor="q-prefix">Document prefix</label>
+                <input id="q-prefix" maxLength={6} placeholder="SP" value={config.docPrefix ?? ''}
+                  onChange={(e) => setConfig({
+                    ...config,
+                    docPrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6),
+                  })} />
+                <p className="meta">
+                  Your tag on every document number:{' '}
+                  {(config.docPrefix ? `${config.docPrefix}-` : '') + 'Q-001'} and{' '}
+                  {(config.docPrefix ? `${config.docPrefix}-` : '') + 'INV-001'}.
+                </p>
+              </div>
             </div>
             <label htmlFor="terms">Terms shown on every quote</label>
             <textarea id="terms" rows={2} value={config.terms}
@@ -788,7 +809,7 @@ function PriceList() {
 
             <label className="mt">Theme preview</label>
             <ThemePreview theme={config.invoiceTheme ?? 'classic'} currency={config.currency ?? 'AUD'}
-              taxLabel={config.taxLabel ?? 'Tax'} />
+              taxLabel={config.taxLabel ?? 'Tax'} docPrefix={config.docPrefix ?? ''} />
             <p className="meta">How the invoice page reads to your customer. The quote page uses the same accent and currency.</p>
 
             <div className="mt"><button disabled={busy}>Save settings</button></div>
