@@ -128,3 +128,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   display: inline-block; margin-top: 6px; background: var(--brand); color: #fff;
   border-radius: 9px; padding: 12px 20px; font-weight: 650; text-decoration: none;
 }
+header .book-cta {
+  margin-left: auto; margin-right: 10px; background: rgba(255,255,255,.16); color: #fff;
+  padding: 6px 14px; border-radius: 16px; font-size: 13px; font-weight: 650;
+  text-decoration: none; white-space: nowrap;
+}
+header .book-cta:hover { background: rgba(255,255,255,.26); }

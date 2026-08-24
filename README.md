@@ -1,9 +1,14 @@
 # MakerBay
 
-Modular B2B SaaS for small businesses. A workspace subscribes to a base plan and
-switches on capability **modules** one at a time. Every module is API-first: a
-dashboard screen, a REST API with tenant-scoped keys, and an MCP surface so
-agent tools can use it too.
+Modular SaaS for trades and service businesses: be found, answered and booked
+without lifting a finger. A workspace switches on capability **modules** one
+at a time - a public business page, an AI assistant grounded in the
+workspace's own documents and settings, self-serve bookings with reminders,
+quotes that become invoices, first-party reviews, missed-call rescue, and
+card payments via Stripe Connect. Every module is API-first: a dashboard
+screen, a REST API with tenant-scoped keys, and an MCP surface so agent tools
+can use it too. Most modules are free; see [docs/README.md](docs/README.md)
+for what is shipped, proposed and deferred.
 
 **Live:** [makerbay.app](https://makerbay.app) · **App:** [app.makerbay.app](https://app.makerbay.app) ·
 **Roadmap:** [makerbay.app/roadmap](https://makerbay.app/roadmap) ·

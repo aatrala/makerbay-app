@@ -109,6 +109,9 @@ export class MakerbayStack extends cdk.Stack {
     const invoices = table('Invoices', 'tenantId', 'invoiceId')
     const reviews = table('Reviews', 'tenantId', 'reviewId')
     const reviewsConfig = table('ReviewsConfig', 'tenantId')
+    // One row per Stripe Checkout attempt. The webhook flips pending to paid;
+    // nothing else may.
+    const payments = table('Payments', 'tenantId', 'paymentId')
     // Presence stores only the editable words; services, hours and prices are
     // read live from the modules that own them, so nothing is stored twice.
     const presenceConfig = table('PresenceConfig', 'tenantId')
@@ -429,6 +432,16 @@ export class MakerbayStack extends cdk.Stack {
       // Get found, and the no-Reviews fallback ask reads the same config.
       TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
     })
+    const paymentsFn = fn('PaymentsApiFn', 'modules/payments/api/src/handler.ts', {
+      ...moduleEnv,
+      TABLE_PAYMENTS: payments.tableName,
+      // Read-only views: payments validates what it charges for against the
+      // documents that own the amounts.
+      TABLE_INVOICES: invoices.tableName,
+      TABLE_QUOTES: quotes.tableName,
+      TABLE_QUOTESCONFIG: quotesConfig.tableName,
+      STRIPE_SECRET_ARN: stripeSecret.secretArn,
+    }, { timeoutSeconds: 25 })
     // Fired by a one-off EventBridge schedule made when the booking is created.
     const reminderFn = fn('BookingReminderFn', 'modules/booking/api/src/reminder.ts', {
       ...moduleEnv,
@@ -547,6 +560,12 @@ export class MakerbayStack extends cdk.Stack {
         TABLE_SOURCES: sources.tableName,
         TABLE_CONVERSATIONS: conversations.tableName,
         TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+        // Grounding: services, hours, areas and currency answerable with
+        // zero uploaded documents.
+        TABLE_BOOKINGSERVICES: bookingServices.tableName,
+        TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+        TABLE_PRESENCECONFIG: presenceConfig.tableName,
+        TABLE_QUOTESCONFIG: quotesConfig.tableName,
         KNOWLEDGE_BUCKET: knowledgeBucket.bucketName,
         KB_ID: kb.attrKnowledgeBaseId,
         DS_ID: dataSource.attrDataSourceId,
@@ -565,6 +584,12 @@ export class MakerbayStack extends cdk.Stack {
         TABLE_SOURCES: sources.tableName,
         TABLE_CONVERSATIONS: conversations.tableName,
         TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+        // Grounding: services, hours, areas and currency answerable with
+        // zero uploaded documents.
+        TABLE_BOOKINGSERVICES: bookingServices.tableName,
+        TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+        TABLE_PRESENCECONFIG: presenceConfig.tableName,
+        TABLE_QUOTESCONFIG: quotesConfig.tableName,
         KNOWLEDGE_BUCKET: knowledgeBucket.bucketName,
         KB_ID: kb.attrKnowledgeBaseId,
         DS_ID: dataSource.attrDataSourceId,
@@ -588,6 +613,12 @@ export class MakerbayStack extends cdk.Stack {
         TABLE_SOURCES: sources.tableName,
         TABLE_CONVERSATIONS: conversations.tableName,
         TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+        // Grounding: services, hours, areas and currency answerable with
+        // zero uploaded documents.
+        TABLE_BOOKINGSERVICES: bookingServices.tableName,
+        TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+        TABLE_PRESENCECONFIG: presenceConfig.tableName,
+        TABLE_QUOTESCONFIG: quotesConfig.tableName,
         KNOWLEDGE_BUCKET: knowledgeBucket.bucketName,
         KB_ID: kb.attrKnowledgeBaseId,
         DS_ID: dataSource.attrDataSourceId,
@@ -695,6 +726,32 @@ export class MakerbayStack extends cdk.Stack {
       eventPattern: { source: ['makerbay.booking'], detailType: ['booking.completed'] },
       targets: [new eventsTargets.LambdaFunction(reviewsFn)],
     })
+
+    // Payments: its own table plus read-only views of the documents it
+    // charges for, Contacts, the Stripe key, and the tenant row (Connect
+    // state lives there).
+    payments.grantReadWriteData(paymentsFn)
+    for (const t of [invoices, quotes, quotesConfig]) t.grantReadData(paymentsFn)
+    for (const t of [contacts, contactEvents, tenants]) t.grantReadWriteData(paymentsFn)
+    for (const t of [users, apiKeys, entitlements, grants]) t.grantReadData(paymentsFn)
+    bus.grantPutEventsTo(paymentsFn)
+    stripeSecret.grantRead(paymentsFn)
+    secretsKey.grantDecrypt(paymentsFn)
+    // Stripe events, signature-verified by the billing webhook, arrive here.
+    new events.Rule(this, 'StripeConnectEventsRule', {
+      eventBus: bus,
+      eventPattern: {
+        source: ['makerbay.stripe'],
+        detailType: ['stripe.checkout.completed', 'stripe.account.updated'],
+      },
+      targets: [new eventsTargets.LambdaFunction(paymentsFn)],
+    })
+    // Money landed - the quotes module makes its documents agree.
+    new events.Rule(this, 'PaymentReceivedRule', {
+      eventBus: bus,
+      eventPattern: { source: ['makerbay.payments'], detailType: ['payment.received'] },
+      targets: [new eventsTargets.LambdaFunction(quotesFn)],
+    })
     presenceConfig.grantReadWriteData(presenceFn)
     visibilityConfig.grantReadWriteData(visibilityFn)
     for (const t of [tenants, users, entitlements, grants]) t.grantReadData(visibilityFn)
@@ -721,6 +778,8 @@ export class MakerbayStack extends cdk.Stack {
     }
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)
+    // Grounding reads: what the workspace already knows about itself.
+    for (const t of [bookingServices, bookingConfig, presenceConfig, quotesConfig]) t.grantReadData(assistantFn)
     bus.grantPutEventsTo(assistantFn)
     knowledgeBucket.grantReadWrite(assistantFn, 'knowledge/*')
     assistantFn.addToRolePolicy(
@@ -741,6 +800,8 @@ export class MakerbayStack extends cdk.Stack {
 
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantStreamFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantStreamFn)
+    // Grounding reads: what the workspace already knows about itself.
+    for (const t of [bookingServices, bookingConfig, presenceConfig, quotesConfig]) t.grantReadData(assistantStreamFn)
     bus.grantPutEventsTo(assistantStreamFn)
     assistantStreamFn.addToRolePolicy(
       new iam.PolicyStatement({ actions: ['bedrock:Retrieve'], resources: [kb.attrKnowledgeBaseArn] }),
@@ -757,6 +818,8 @@ export class MakerbayStack extends cdk.Stack {
 
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(mcpFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(mcpFn)
+    // Grounding reads: what the workspace already knows about itself.
+    for (const t of [bookingServices, bookingConfig, presenceConfig, quotesConfig]) t.grantReadData(mcpFn)
     bus.grantPutEventsTo(mcpFn)
     knowledgeBucket.grantReadWrite(mcpFn, 'knowledge/*')
     mcpFn.addToRolePolicy(
@@ -794,6 +857,9 @@ export class MakerbayStack extends cdk.Stack {
       usage.grantReadData(f)
     }
     users.grantReadData(billingFn)
+    // Connect events (checkout completed, account updated) travel the bus to
+    // the payments module after signature verification.
+    bus.grantPutEventsTo(billingWebhookFn)
 
     // ── API ──────────────────────────────────────────────────────────────
     const httpApi = new apigwv2.HttpApi(this, 'Api', {
@@ -843,6 +909,7 @@ export class MakerbayStack extends cdk.Stack {
       ['Booking', 'booking', bookingFn],
       ['Quotes', 'quotes', quotesFn],
       ['Reviews', 'reviews', reviewsFn],
+      ['Payments', 'payments', paymentsFn],
     ] as const) {
       httpApi.addRoutes({
         path: `/v1/${prefix}`,

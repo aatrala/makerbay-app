@@ -10,7 +10,7 @@ import {
   hashApiKey,
   ulid,
 } from '@makerbay/core'
-import { getConfig, getSessionMessages, putMessage } from './db'
+import { businessFacts, getConfig, getSessionMessages, putMessage } from './db'
 import { buildCitations, classifyAnswer, retrieveChunks, streamAnswer } from './rag'
 
 // Provided by the Lambda Node runtime when the function is deployed with
@@ -95,7 +95,11 @@ const streamingHandler = async (
     const sessionId = /^[A-Z0-9]{10,32}$/.test(String(body.sessionId ?? '')) ? body.sessionId : ulid()
     const config = await getConfig(tenantId)
     const history = await getSessionMessages(tenantId, sessionId, 10)
-    const chunks = await retrieveChunks(tenantId, message)
+    const [chunks, tenantRow] = await Promise.all([
+      retrieveChunks(tenantId, message),
+      getTenant(tenantId),
+    ])
+    const facts = await businessFacts(tenantId, tenantRow?.name ?? '')
 
     const now = new Date().toISOString()
     const messageId = `${now}#${ulid()}`
@@ -105,7 +109,7 @@ const streamingHandler = async (
     let fallback = true
     let tokens = 0
 
-    if (chunks.length > 0) {
+    if (chunks.length > 0 || facts) {
       // Hold back the opening tokens: the model occasionally leads with the
       // fallback sentence and then answers anyway, and once a token is on the
       // wire it cannot be retracted.

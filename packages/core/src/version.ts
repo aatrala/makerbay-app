@@ -5,6 +5,7 @@ import quotesManifest from '../../../modules/quotes/module.json'
 import requestsManifest from '../../../modules/requests/module.json'
 import presenceManifest from '../../../modules/presence/module.json'
 import reviewsManifest from '../../../modules/reviews/module.json'
+import paymentsManifest from '../../../modules/payments/module.json'
 import visibilityManifest from '../../../modules/visibility/module.json'
 import voiceManifest from '../../../modules/voice/module.json'
 
@@ -58,7 +59,7 @@ export interface ModuleManifest {
 }
 
 /** Platform version: the core (tenancy, auth, entitlements, billing) itself. */
-export const PLATFORM_VERSION = '1.13.0'
+export const PLATFORM_VERSION = '1.14.0'
 
 export const MODULES: ModuleManifest[] = [
   contactsManifest,
@@ -70,6 +71,7 @@ export const MODULES: ModuleManifest[] = [
   visibilityManifest,
   voiceManifest,
   reviewsManifest,
+  paymentsManifest,
 ] as ModuleManifest[]
 
 export const moduleManifest = (id: string): ModuleManifest | undefined =>

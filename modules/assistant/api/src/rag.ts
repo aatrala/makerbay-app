@@ -111,6 +111,7 @@ function buildPrompt(
   chunks: RetrievedChunk[],
   history: MessageRow[],
   userMessage: string,
+  facts = '',
 ): { system: string; messages: Message[] } {
   const context = chunks
     .map((c, i) => `[${i + 1}] (source: ${c.sourceName})\n${c.text}`)
@@ -122,16 +123,20 @@ function buildPrompt(
   const system = [
     `You are "${config.name}", answering customers on behalf of this business.`,
     config.instructions ? `The business asks you to: ${config.instructions}` : '',
+    // The workspace's own settings are first-class context: services, prices,
+    // hours and areas should be answerable before any document is uploaded.
+    facts ? `Facts from the business's own settings (treat as context):\n${facts}` : '',
     [
       'How to answer:',
-      '1. If the context below contains the answer, give it directly and concisely. Never preface it with a disclaimer.',
-      '2. If the context covers only part of the question, answer that part and say plainly which part you do not have. Do not use the exact fallback sentence in this case.',
-      `3. Only if the context contains nothing relevant at all, reply with exactly this sentence and nothing else: ${config.fallbackMessage}`,
+      '1. If the context or business facts below contain the answer, give it directly and concisely. Never preface it with a disclaimer.',
+      '2. If they cover only part of the question, answer that part and say plainly which part you do not have. Do not use the exact fallback sentence in this case.',
+      `3. Only if neither contains anything relevant at all, reply with exactly this sentence and nothing else: ${config.fallbackMessage}`,
       'Never combine rule 3 with an actual answer — either you can help or you cannot.',
-      'Never invent facts, figures, policies or availability that are not in the context.',
+      'Never invent facts, figures, policies or availability that are not in the context or business facts.',
+      'If someone wants to book, tell them they can pick a time with the Book a time button on this page.',
       'Write in plain language, a few sentences at most, as a helpful colleague would.',
     ].join('\n'),
-    `Context:\n${context}`,
+    context ? `Context:\n${context}` : 'Context: (no documents matched this question)',
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -151,8 +156,9 @@ export async function generateAnswer(
   chunks: RetrievedChunk[],
   history: MessageRow[],
   userMessage: string,
+  facts = '',
 ): Promise<GeneratedAnswer> {
-  const { system, messages } = buildPrompt(config, chunks, history, userMessage)
+  const { system, messages } = buildPrompt(config, chunks, history, userMessage, facts)
 
   const r = await runtimeClient.send(
     new ConverseCommand({
@@ -188,8 +194,9 @@ export async function streamAnswer(
   history: MessageRow[],
   userMessage: string,
   onDelta: (text: string) => void,
+  facts = '',
 ): Promise<GeneratedAnswer> {
-  const { system, messages } = buildPrompt(config, chunks, history, userMessage)
+  const { system, messages } = buildPrompt(config, chunks, history, userMessage, facts)
 
   const r = await runtimeClient.send(
     new ConverseStreamCommand({

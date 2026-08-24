@@ -5,6 +5,13 @@ const Tables = {
   sources: () => process.env.TABLE_SOURCES!,
   conversations: () => process.env.TABLE_CONVERSATIONS!,
   config: () => process.env.TABLE_ASSISTANT_CONFIG!,
+  // Read-only views for grounding: the assistant should answer "where do you
+  // work" and "what does it cost" from what the workspace already knows,
+  // before a single document is uploaded.
+  bookingServices: () => process.env.TABLE_BOOKINGSERVICES!,
+  bookingConfig: () => process.env.TABLE_BOOKINGCONFIG!,
+  presenceConfig: () => process.env.TABLE_PRESENCECONFIG!,
+  quotesConfig: () => process.env.TABLE_QUOTESCONFIG!,
 }
 
 export interface SourceRow {
@@ -63,7 +70,7 @@ export interface AssistantConfigRow {
 
 export const DEFAULT_CONFIG: Omit<AssistantConfigRow, 'tenantId'> = {
   name: 'Assistant',
-  greeting: 'Hi! Ask me anything about our docs.',
+  greeting: 'Hi! Ask me anything - services, prices, availability.',
   instructions: '',
   fallbackMessage: "I don't have that information yet. Please contact the team directly.",
   brandColor: '#1a73e8',
@@ -189,4 +196,63 @@ export async function getConfig(tenantId: string): Promise<AssistantConfigRow> {
 
 export async function putConfig(row: AssistantConfigRow): Promise<void> {
   await ddb.send(new PutCommand({ TableName: Tables.config(), Item: row }))
+}
+
+/**
+ * What the workspace itself already knows, as plain sentences the model can
+ * quote: services and prices from Bookings, hours, service areas and contact
+ * from the page settings. This is why a brand-new workspace can answer
+ * "where do you work?" before its owner has uploaded anything.
+ */
+export async function businessFacts(tenantId: string, businessName: string): Promise<string> {
+  try {
+    const [services, hours, presence, quotesCfg] = await Promise.all([
+      ddb.send(new QueryCommand({
+        TableName: Tables.bookingServices(),
+        KeyConditionExpression: 'tenantId = :t',
+        ExpressionAttributeValues: { ':t': tenantId },
+      })).then((r) => r.Items ?? []).catch(() => []),
+      ddb.send(new GetCommand({ TableName: Tables.bookingConfig(), Key: { tenantId } }))
+        .then((r) => r.Item).catch(() => undefined),
+      ddb.send(new GetCommand({ TableName: Tables.presenceConfig(), Key: { tenantId } }))
+        .then((r) => r.Item).catch(() => undefined),
+      ddb.send(new GetCommand({ TableName: Tables.quotesConfig(), Key: { tenantId } }))
+        .then((r) => r.Item).catch(() => undefined),
+    ])
+
+    const currency = String(quotesCfg?.currency ?? 'AUD')
+    const cash = (cents: number) => {
+      try {
+        return new Intl.NumberFormat('en', { style: 'currency', currency }).format(cents / 100)
+      } catch { return `$${(cents / 100).toFixed(2)}` }
+    }
+
+    const lines: string[] = [`Business name: ${businessName}.`]
+    if (presence?.headline) lines.push(`What they do: ${presence.headline}.`)
+    if (Array.isArray(presence?.serviceAreas) && presence.serviceAreas.length) {
+      lines.push(`Service areas: ${presence.serviceAreas.join(', ')}.`)
+    }
+    const active = services.filter((s) => s.active)
+    if (active.length) {
+      lines.push('Services offered (bookable online):')
+      for (const s of active.slice(0, 20)) {
+        const price = s.priceCents ? `, ${cash(Number(s.priceCents))}` : ''
+        lines.push(`- ${s.name} (${s.durationMinutes} min${price})${s.description ? `: ${s.description}` : ''}`)
+      }
+    }
+    const hourEntries = hours?.hours && typeof hours.hours === 'object'
+      ? Object.entries(hours.hours as Record<string, Array<{ from: string; to: string }>>)
+          .filter(([, w]) => Array.isArray(w) && w.length)
+      : []
+    if (hourEntries.length) {
+      lines.push(`Opening hours (${String(hours?.timezone ?? 'local time')}): ` +
+        hourEntries.map(([d, w]) => `${d} ${w.map((x) => `${x.from}-${x.to}`).join(', ')}`).join('; ') + '.')
+    }
+    if (presence?.phone) lines.push(`Phone: ${presence.phone}.`)
+    if (presence?.email) lines.push(`Email: ${presence.email}.`)
+    return lines.length > 1 ? lines.join('\n') : ''
+  } catch {
+    // Grounding is an enhancement; a failed read must never block an answer.
+    return ''
+  }
 }

@@ -65,6 +65,9 @@
       '<header>' +
       '<div class="avatar">' + esc((config.name || 'A').trim().charAt(0).toUpperCase()) + '</div>' +
       '<div class="name">' + esc(config.name || 'Assistant') + '</div>' +
+      (config.bookingEnabled && config.slug
+        ? '<a class="book-cta" href="/booking?slug=' + encodeURIComponent(config.slug) + '">Book a time</a>'
+        : '') +
       '<button class="close" aria-label="Close chat">&#10005;</button>' +
       '</header>' +
       '<div class="log" id="log"></div>' +

@@ -128,6 +128,39 @@ export async function setTenantBilling(
   )
 }
 
+type ConnectFields = Pick<TenantRow, 'stripeAccountId' | 'payoutsEnabled' | 'connectOnboardedAt'>
+
+/** Stripe Connect state. Written only by the payments module. */
+export async function setTenantConnect(
+  tenantId: string,
+  fields: Partial<ConnectFields>,
+): Promise<void> {
+  const entries = Object.entries(fields).filter(([, v]) => v !== undefined)
+  if (entries.length === 0) return
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.tenants(),
+      Key: { tenantId },
+      UpdateExpression: `SET ${entries.map(([, ], i) => `#k${i} = :v${i}`).join(', ')}`,
+      ExpressionAttributeNames: Object.fromEntries(entries.map(([k], i) => [`#k${i}`, k])),
+      ExpressionAttributeValues: Object.fromEntries(entries.map(([, v], i) => [`:v${i}`, v])),
+      ConditionExpression: 'attribute_exists(tenantId)',
+    }),
+  )
+}
+
+/** The tenant owning a Stripe Connect account - webhook events arrive keyed by account id. */
+export async function getTenantByStripeAccount(accountId: string): Promise<TenantRow | undefined> {
+  const r = await ddb.send(
+    new ScanCommand({
+      TableName: Tables.tenants(),
+      FilterExpression: 'stripeAccountId = :a',
+      ExpressionAttributeValues: { ':a': accountId },
+    }),
+  )
+  return (r.Items ?? [])[0] as TenantRow | undefined
+}
+
 /** Tenants with a Stripe subscription — the daily metered-usage report set. */
 export async function listBillableTenants(): Promise<TenantRow[]> {
   const r = await ddb.send(

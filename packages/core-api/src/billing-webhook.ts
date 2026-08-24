@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 import type Stripe from 'stripe'
-import { putStripeGrant, setModuleEntitlement, setTenantBilling } from '@makerbay/core'
+import { emitEvent, putStripeGrant, setModuleEntitlement, setTenantBilling } from '@makerbay/core'
 import { PLANS, stripeClient, webhookSecret } from './stripe-client'
 
 /**
@@ -76,6 +76,31 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           console.log('skipped out-of-order subscription event', { tenantId, id: sub.id })
         }
         console.log('subscription applied', { tenantId, plan: plan.id, status: sub.status })
+        break
+      }
+      // Connect payments. Signature is verified above; the payments module
+      // owns fulfilment, reached over the bus like every module-to-module
+      // hop. The forwarded detail is the Stripe object itself.
+      case 'checkout.session.completed': {
+        const session = stripeEvent.data.object as Stripe.Checkout.Session
+        await emitEvent('stripe', 'stripe.checkout.completed', {
+          id: session.id,
+          payment_intent: session.payment_intent,
+          metadata: session.metadata ?? {},
+          amount_total: session.amount_total,
+          currency: session.currency,
+        })
+        break
+      }
+      case 'account.updated': {
+        const account = stripeEvent.data.object as Stripe.Account
+        await emitEvent('stripe', 'stripe.account.updated', {
+          id: account.id,
+          metadata: account.metadata ?? {},
+          payouts_enabled: account.payouts_enabled,
+          charges_enabled: account.charges_enabled,
+          details_submitted: account.details_submitted,
+        })
         break
       }
       default:

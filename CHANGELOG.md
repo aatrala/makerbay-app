@@ -9,6 +9,25 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.4.0 - 2026-08-24
+
+- Added `payments` Get paid is live: connect your bank once through Stripe
+  and your unpaid invoices grow a Pay online button, and accepted quotes can
+  ask for a deposit percentage on the spot. Money goes straight to your
+  account - MakerBay never holds funds and adds no fee on top of Stripe's.
+  The invoice marks itself paid when the money lands; the webhook is the
+  source of truth, never the button press. Full refunds from the dashboard.
+- Changed `assistant` The assistant now knows what your workspace knows:
+  services, prices, opening hours, service areas and contact details answer
+  correctly before you upload a single document, and it points customers at
+  the real Book a time button. The default greeting no longer talks about
+  "docs".
+- Changed `assistant` The chat surface matches your page: it uses your page
+  accent colour, and shows a Book a time button in the header when Bookings
+  is on.
+- Added `platform` MakerBay's own assistant now answers on makerbay.app -
+  the product, demonstrated by the product.
+
 ## 2.3.0 - 2026-08-24
 
 - Changed `platform` Workspace addresses are now memorable: a new workspace

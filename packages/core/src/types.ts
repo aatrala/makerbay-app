@@ -26,6 +26,12 @@ export interface TenantRow {
   lastWebhookAt?: string
   lastWebhookType?: string
   lastWebhookLive?: boolean
+  // Stripe Connect state, written only by the payments module. payoutsEnabled
+  // is the single flag every public surface checks before showing a pay
+  // button - no onboarded account, no button, never a dead control.
+  stripeAccountId?: string
+  payoutsEnabled?: boolean
+  connectOnboardedAt?: string
 }
 
 export interface UserRow {

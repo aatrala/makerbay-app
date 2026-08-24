@@ -1,9 +1,26 @@
 # Spec: Payments (Stripe Connect)
 
-Status: **specified, not built**. Version target: payments-api 1.0.0.
-Blocked on: the owner enabling Connect in the Stripe dashboard (one-time,
-manual - Stripe asks the platform account holder to accept the Connect
-terms and pick a platform profile before any Connect API call succeeds).
+Status: **SHIPPED 2026-08-24** as `modules/payments` (payments-api 1.0.0).
+As-built deltas from the plan below:
+
+- Invoice payment + quote deposits shipped; **booking deposits deferred**
+  (they need pending-booking semantics; revisit with demand).
+- Stripe events reach the module via the EXISTING billing webhook (one
+  endpoint, one signing secret): billing-webhook verifies the signature and
+  forwards `checkout.session.completed` / `account.updated` onto the bus as
+  `makerbay.stripe` events; an EventBridge rule targets the payments Lambda.
+  Fulfilment emits `payment.received`, which the quotes Lambda consumes to
+  mark invoices paid / stamp quote deposits.
+- The pay button is gated by `tenant.payoutsEnabled` everywhere public - no
+  Stripe connected, no button.
+- Operational requirements on the Stripe dashboard: (1) add
+  `checkout.session.completed` and `account.updated` to the existing webhook
+  endpoint's events; (2) if the platform key is a RESTRICTED key (rk_), it
+  needs Accounts Write, Account Links Write, Checkout Sessions Write,
+  Payment Intents Write and Refunds Write scopes - Connect account creation
+  fails cleanly with `more_permissions_required` until then.
+
+The original plan, kept for the reasoning:
 
 ## 1. What this is
 

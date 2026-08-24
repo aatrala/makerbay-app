@@ -4,7 +4,7 @@
   "tagline": "Turn a job enquiry into a priced quote the same day",
   "status": "live",
   "version": {
-    "api": "1.1.0",
+    "api": "1.2.0",
     "web": "1.2.0"
   },
   "routes": [

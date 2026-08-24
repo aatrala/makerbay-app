@@ -1,0 +1,60 @@
+{
+  "id": "payments",
+  "name": "Get paid",
+  "tagline": "Card payment on your quotes and invoices, straight to your bank",
+  "status": "live",
+  "version": {
+    "api": "1.0.0",
+    "web": "1.0.0"
+  },
+  "routes": [
+    "/v1/payments/*",
+    "/v1/public/payments/*"
+  ],
+  "meteredMetrics": [
+    "payment.received",
+    "payment.refunded"
+  ],
+  "entitlementKey": "payments",
+  "pricing": "free",
+  "dependsOn": [
+    "contacts",
+    "quotes"
+  ],
+  "roadmap": {
+    "order": 10,
+    "note": "Shipped for invoices and quote deposits via Stripe. Booking deposits follow. MakerBay adds no fee on top of Stripe's in this release."
+  },
+  "marketing": {
+    "summary": "Connect your bank once through Stripe, and your invoices and accepted quotes grow a real Pay button. The money goes to your account, the invoice marks itself paid, and nobody has to read out card numbers over the phone.",
+    "audience": "Any business tired of chasing bank transfers after the work is done.",
+    "features": [
+      {
+        "title": "Pay button on invoices",
+        "body": "The invoice page your customer already has gains a Pay online button. Card, wallet - whatever Stripe supports in your country."
+      },
+      {
+        "title": "Deposits on accepted quotes",
+        "body": "Set a deposit percentage and an accepted quote asks for it on the spot, while the customer is still saying yes."
+      },
+      {
+        "title": "Marks itself paid",
+        "body": "When the money lands, the invoice flips to paid on its own - the webhook is the source of truth, never the button press."
+      }
+    ],
+    "faq": [
+      {
+        "q": "What does it cost?",
+        "a": "Stripe's standard processing fee, and nothing from us on top in this release. If that changes it will change for new payments, with notice, never retroactively."
+      },
+      {
+        "q": "Where does the money go?",
+        "a": "Directly to the bank account you connect through Stripe. MakerBay never holds your funds."
+      },
+      {
+        "q": "What if I have not connected Stripe?",
+        "a": "Then no pay buttons appear anywhere - your quotes and invoices work exactly as before. We never show a customer a button that does nothing."
+      }
+    ]
+  }
+}

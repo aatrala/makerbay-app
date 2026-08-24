@@ -1,7 +1,9 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import {
+  ddb as ddbRaw,
   emitUsage,
   findApiKeyByHash,
   getEffectiveEntitlement,
@@ -28,6 +30,7 @@ import {
   updateSourceStatus,
   type MessageRow,
   type SourceRow,
+  businessFacts,
 } from './db'
 import {
   buildCitations,
@@ -237,12 +240,22 @@ async function publicRoute(
   // Display config only — instructions are the tenant's private prompt.
   if (method === 'GET' && path === '/v1/public/assistant/config') {
     const config = await getConfig(resolved.tenantId)
+    // The page's accent colour wins when set, so the chat surface and the
+    // business page read as one thing, not two products.
+    const presence = await ddbRaw.send(
+      new GetCommand({ TableName: process.env.TABLE_PRESENCECONFIG!, Key: { tenantId: resolved.tenantId } }),
+    ).catch(() => undefined)
+    const accent = String(presence?.Item?.accentColor ?? '')
+    const bookingEnt = await getEffectiveEntitlement(resolved.tenantId, 'booking')
     return json(200, {
       assistant: {
         name: config.name,
         greeting: config.greeting,
-        brandColor: config.brandColor,
+        brandColor: /^#[0-9a-fA-F]{6}$/.test(accent) ? accent : config.brandColor,
         slug: resolved.slug,
+        // Lets the chat surface offer a real Book a time action instead of
+        // the assistant describing one in prose.
+        bookingEnabled: bookingEnt.enabled,
       },
     })
   }
@@ -277,16 +290,20 @@ async function chat(
 
   const config = await getConfig(tenantId)
   const history = await getSessionMessages(tenantId, sessionId, 10)
-  const chunks = await retrieveChunks(tenantId, message)
+  const [chunks, tenantRow] = await Promise.all([
+    retrieveChunks(tenantId, message),
+    getTenant(tenantId),
+  ])
+  const facts = await businessFacts(tenantId, tenantRow?.name ?? '')
 
   let answer: string
   let fallback = false
   let tokens = 0
-  if (chunks.length === 0) {
+  if (chunks.length === 0 && !facts) {
     answer = config.fallbackMessage
     fallback = true
   } else {
-    const generated = await generateAnswer(config, chunks, history, message)
+    const generated = await generateAnswer(config, chunks, history, message, facts)
     answer = generated.text
     fallback = generated.fallback
     tokens = generated.inputTokens + generated.outputTokens

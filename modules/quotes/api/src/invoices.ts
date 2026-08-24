@@ -215,6 +215,7 @@ export async function publicInvoiceView(
   tenantId: string,
   businessName: string,
   token: string,
+  payoutsEnabled = false,
 ): Promise<APIGatewayProxyResultV2> {
   const invoice = await findInvoiceByToken(tenantId, token)
   if (!invoice || invoice.status === 'draft') return json(404, { error: 'not_found' })
@@ -222,6 +223,8 @@ export async function publicInvoiceView(
   return json(200, {
     business: businessName,
     theme: (config as { invoiceTheme?: string }).invoiceTheme ?? 'classic',
+    // A pay button appears only when it would actually work.
+    payable: payoutsEnabled && invoice.status === 'sent',
     invoice: {
       label: invoiceLabel(invoice),
       status: invoice.status,

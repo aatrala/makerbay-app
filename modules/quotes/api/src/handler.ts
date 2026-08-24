@@ -48,6 +48,19 @@ import {
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
+interface PaymentReceivedEvent {
+  'detail-type': string
+  detail: {
+    tenantId: string
+    paymentId: string
+    kind: 'invoice' | 'quote_deposit'
+    refId: string
+    amountCents: number
+    currency: string
+    contactId?: string
+  }
+}
+
 const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
   statusCode,
   headers: { 'content-type': 'application/json' },
@@ -58,7 +71,16 @@ const CHAT = 'https://chat.makerbay.app'
 const APP = 'https://app.makerbay.app'
 const STATUSES: QuoteStatus[] = ['draft', 'sent', 'accepted', 'declined', 'expired', 'superseded']
 
-export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
+export const handler = async (
+  event: Event | PaymentReceivedEvent,
+): Promise<APIGatewayProxyResultV2 | void> => {
+  // A payment landed (verified webhook → payments module → bus). The money
+  // is fact; this branch makes the documents agree with it.
+  if ('detail-type' in event) {
+    if (event['detail-type'] === 'payment.received') await onPaymentReceived(event.detail)
+    return
+  }
+
   const method = event.requestContext.http.method
   const path = event.rawPath
 
@@ -147,11 +169,15 @@ async function resolvePublicTenant(key?: string, slug?: string) {
     // check. Secret keys are refused: a public page must never present one.
     if (!found || found.type !== 'publishable') return undefined
     const tenant = await getTenant(found.tenantId)
-    return tenant ? { tenantId: tenant.tenantId, name: tenant.name } : undefined
+    return tenant
+      ? { tenantId: tenant.tenantId, name: tenant.name, payoutsEnabled: Boolean(tenant.payoutsEnabled) }
+      : undefined
   }
   if (slug) {
     const tenant = await getTenantBySlug(slug)
-    return tenant ? { tenantId: tenant.tenantId, name: tenant.name } : undefined
+    return tenant
+      ? { tenantId: tenant.tenantId, name: tenant.name, payoutsEnabled: Boolean(tenant.payoutsEnabled) }
+      : undefined
   }
   return undefined
 }
@@ -170,7 +196,7 @@ async function publicRoute(
   if (!resolved) return json(404, { error: 'not_found' })
 
   if (method === 'GET' && path === '/v1/public/quotes/invoice') {
-    return publicInvoiceView(resolved.tenantId, resolved.name, String(q.token ?? ''))
+    return publicInvoiceView(resolved.tenantId, resolved.name, String(q.token ?? ''), resolved.payoutsEnabled)
   }
 
   const match = path.match(/^\/v1\/public\/quotes\/([A-Za-z0-9_-]{20,})(\/respond)?$/)
@@ -185,9 +211,22 @@ async function publicRoute(
   const status = effectiveStatus(quote)
 
   if (method === 'GET' && !match[2]) {
+    // An accepted quote with a configured deposit and an onboarded Stripe
+    // account offers payment. depositPaidAt on the row is the paid check -
+    // written by the payment.received branch, never by a button press.
+    const pct = Number((config as { depositPercent?: number }).depositPercent ?? 0)
+    const depositPaid = Boolean((quote as { depositPaidAt?: string }).depositPaidAt)
+    const deposit = status === 'accepted' && pct > 0
+      ? {
+          percent: pct,
+          amountCents: Math.round(quote.totalCents * Math.min(pct, 100) / 100),
+          paid: depositPaid,
+          payable: resolved.payoutsEnabled && !depositPaid,
+        }
+      : null
     return json(200, {
       business: resolved.name,
-      quote: publicView(quote, status, config.taxLabel),
+      quote: { ...publicView(quote, status, config.taxLabel), deposit },
     })
   }
 
@@ -555,6 +594,50 @@ async function invoiceDetail(tenantId: string, invoiceId: string): Promise<APIGa
   })
 }
 
+/**
+ * Money landed (payments module, via the bus). Make the paperwork agree:
+ * an invoice payment marks the invoice paid through the same path as the
+ * manual button; a quote deposit is stamped onto the quote and the owner
+ * is told. Idempotent - the payments module only emits once per payment.
+ */
+async function onPaymentReceived(detail: PaymentReceivedEvent['detail']): Promise<void> {
+  const { tenantId, kind, refId } = detail
+  if (!tenantId || !refId) return
+  try {
+    if (kind === 'invoice') {
+      await patchInvoice(tenantId, refId, { status: 'paid' })
+      return
+    }
+    if (kind === 'quote_deposit') {
+      const quote = await getQuote(tenantId, refId)
+      if (!quote) return
+      await putQuote({
+        ...quote,
+        ...({ depositPaidAt: new Date().toISOString(), depositPaidCents: detail.amountCents } as Partial<QuoteRow>),
+        updatedAt: new Date().toISOString(),
+      })
+      const config = await getQuotesConfig(tenantId)
+      await appendContactEvent(tenantId, quote.contactId, {
+        moduleId: 'quotes',
+        title: `Paid the deposit on quote #${quote.number} - ${money(detail.amountCents, detail.currency)}`,
+        href: `/quotes/${quote.quoteId}`,
+      })
+      await sendEmail({
+        to: config.notifyEmail || '',
+        subject: `Deposit paid on quote #${quote.number}`,
+        text: [
+          `${quote.customerName ?? 'Your customer'} paid the ${money(detail.amountCents, detail.currency)} deposit on quote #${quote.number}.`,
+          '',
+          `Quote: ${APP}/quotes/${quote.quoteId}`,
+        ].join('\n'),
+      })
+    }
+  } catch (err) {
+    console.error('payment.received handling failed', { tenantId, kind, refId, err })
+    throw err
+  }
+}
+
 async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const b = body(event)
   const existing = await getQuotesConfig(tenantId)
@@ -575,6 +658,11 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
       b.paymentInstructions ?? (existing as { paymentInstructions?: string }).paymentInstructions ?? '',
     ).slice(0, 1000),
     dueDays: Math.min(Math.max(Number(b.dueDays ?? (existing as { dueDays?: number }).dueDays ?? 14) || 14, 1), 90),
+    // 0 means no deposit asked. Applies from the next acceptance.
+    depositPercent: Math.min(
+      Math.max(Number(b.depositPercent ?? (existing as { depositPercent?: number }).depositPercent ?? 0) || 0, 0),
+      100,
+    ),
   } as typeof existing
   await putQuotesConfig(config)
   return json(200, { config })

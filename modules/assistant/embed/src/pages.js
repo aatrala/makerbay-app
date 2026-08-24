@@ -277,8 +277,18 @@
 
       var stateBlock
       if (q.status === 'accepted') {
+        var depositBlock = ''
+        if (q.deposit && q.deposit.paid) {
+          depositBlock = '<p class="q-state ok">Deposit of ' + money(q.deposit.amountCents, q.currency) + ' paid. Thank you.</p>'
+        } else if (q.deposit && q.deposit.payable) {
+          depositBlock =
+            '<div class="q-actions"><button class="primary" id="paydeposit">Pay the ' +
+            money(q.deposit.amountCents, q.currency) + ' deposit</button></div>' +
+            '<p class="hint">Secure card payment via Stripe. The money goes straight to ' + esc(business) + '.</p>' +
+            '<p class="form-err" id="pay-err"></p>'
+        }
         stateBlock = '<p class="q-state ok">Accepted' + (q.customerName ? ' by ' + esc(q.customerName) : '') + '. ' +
-          esc(business) + ' has been told and will be in touch.</p>'
+          esc(business) + ' has been told and will be in touch.</p>' + depositBlock
       } else if (q.status === 'declined') {
         stateBlock = '<p class="q-state">This quote was declined.</p>'
       } else if (q.status === 'expired') {
@@ -329,6 +339,19 @@
       var declineBtn = document.getElementById('decline')
       if (declineBtn) declineBtn.addEventListener('click', function () {
         if (window.confirm('Decline this quote?')) respond('decline')
+      })
+      var payBtn = document.getElementById('paydeposit')
+      if (payBtn) payBtn.addEventListener('click', function () {
+        payBtn.disabled = true
+        payBtn.textContent = 'Opening secure payment…'
+        post(API + '/v1/public/payments/session', { slug: slug, kind: 'quote_deposit', token: token })
+          .then(function (r) {
+            if (r.status === 200 && r.data.url) { location.href = r.data.url; return }
+            payBtn.disabled = false
+            payBtn.textContent = 'Try again'
+            document.getElementById('pay-err').textContent =
+              (r.data && r.data.message) || 'Payment could not be started. Try again.'
+          })
       })
     }).catch(function () { fail('This quote could not be loaded right now.') })
   }
@@ -500,9 +523,34 @@
           '<tr class="i-total"><td>Total' + (inv.paidAt ? ' (paid)' : ' due') + '</td><td class="num">' + money(inv.totalCents, inv.currency) + '</td></tr>' +
           '</tfoot></table>' +
           (inv.notes ? '<p class="q-notes">' + esc(inv.notes) + '</p>' : '') +
+          (res.data.payable
+            ? '<p class="i-print"><button class="primary" id="paynow">Pay ' + money(inv.totalCents, inv.currency) + ' online</button></p>' +
+              '<p class="hint">Secure card payment via Stripe, straight to ' + esc(business) + '. This page shows Paid once the payment lands.</p>' +
+              '<p class="form-err" id="pay-err"></p>'
+            : '') +
           (inv.paymentInstructions && !inv.paidAt ? '<div class="i-pay">' + esc(inv.paymentInstructions) + '</div>' : '') +
           '<p class="i-print"><button class="ghost" id="print">Print or save as PDF</button></p>' +
           '</div></div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
+
+        if (params.get('paid') === 'pending' && !inv.paidAt) {
+          var note = document.createElement('p')
+          note.className = 'q-state ok'
+          note.textContent = 'Payment received - this page will show Paid once the bank confirms, usually within a minute.'
+          app.querySelector('.inv').insertBefore(note, app.querySelector('.inv').firstChild)
+        }
+        var payNow = document.getElementById('paynow')
+        if (payNow) payNow.addEventListener('click', function () {
+          payNow.disabled = true
+          payNow.textContent = 'Opening secure payment…'
+          post(API + '/v1/public/payments/session', { slug: slug, kind: 'invoice', token: token })
+            .then(function (r) {
+              if (r.status === 200 && r.data.url) { location.href = r.data.url; return }
+              payNow.disabled = false
+              payNow.textContent = 'Try again'
+              document.getElementById('pay-err').textContent =
+                (r.data && r.data.message) || 'Payment could not be started. Try again.'
+            })
+        })
 
         document.getElementById('print').addEventListener('click', function () { window.print() })
       })

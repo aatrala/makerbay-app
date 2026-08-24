@@ -770,7 +770,16 @@ function PriceList() {
                 <input id="inv-due" type="number" min={1} max={90} value={config.dueDays ?? 14}
                   onChange={(e) => setConfig({ ...config, dueDays: Number(e.target.value) })} />
               </div>
+              <div className="grow">
+                <label htmlFor="q-deposit">Deposit on acceptance (%)</label>
+                <input id="q-deposit" type="number" min={0} max={100} value={config.depositPercent ?? 0}
+                  onChange={(e) => setConfig({ ...config, depositPercent: Number(e.target.value) })} />
+              </div>
             </div>
+            <p className="meta">
+              With a deposit set and Get paid connected, an accepted quote asks for the deposit by
+              card on the spot. 0 switches it off.
+            </p>
             <label htmlFor="inv-pay">How customers pay you</label>
             <textarea id="inv-pay" rows={2} value={config.paymentInstructions ?? ''}
               placeholder={'Bank transfer to BSB 000-000, account 12345678.\nOr PayID: 0400 000 000.'}

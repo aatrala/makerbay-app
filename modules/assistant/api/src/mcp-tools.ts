@@ -1,6 +1,6 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { emitUsage, getEffectiveEntitlement, getMonthUsage, ulid } from '@makerbay/core'
-import { getConfig, getSessionMessages, listSources, putMessage, putSource, updateSourceStatus } from './db'
+import { emitUsage, getEffectiveEntitlement, getMonthUsage, getTenant, ulid } from '@makerbay/core'
+import { businessFacts, getConfig, getSessionMessages, listSources, putMessage, putSource, updateSourceStatus } from './db'
 import { generateAnswer, retrieveChunks, startIngestion } from './rag'
 
 /**
@@ -54,12 +54,13 @@ export const assistantTools: McpTool[] = [
       const config = await getConfig(tenantId)
       const history = await getSessionMessages(tenantId, sessionId, 10)
       const chunks = await retrieveChunks(tenantId, question)
+      const facts = await businessFacts(tenantId, (await getTenant(tenantId))?.name ?? '')
 
       let answer = config.fallbackMessage
       let fallback = true
       let tokens = 0
-      if (chunks.length > 0) {
-        const generated = await generateAnswer(config, chunks, history, question)
+      if (chunks.length > 0 || facts) {
+        const generated = await generateAnswer(config, chunks, history, question, facts)
         answer = generated.text
         fallback = generated.fallback
         tokens = generated.inputTokens + generated.outputTokens
