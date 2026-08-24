@@ -12,7 +12,8 @@
   ],
   "meteredMetrics": [
     "missedcall.rescued",
-    "sms.sent"
+    "sms.sent",
+    "rescue.booked"
   ],
   "entitlementKey": null,
   "pricing": "free",
@@ -39,6 +40,10 @@
       {
         "title": "Nothing to answer, nothing to go wrong",
         "body": "No robot voice, no misheard address, no price quoted that you would not honour. Your customers speak to you, or they book."
+      },
+      {
+        "title": "You find out whether it worked",
+        "body": "Every rescued call is tracked through to whether it became a booking. Nobody in this category publishes that number, so most businesses are guessing about whether any of it pays."
       }
     ],
     "faq": [

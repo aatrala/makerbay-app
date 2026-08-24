@@ -834,3 +834,139 @@ Written down so the answer is evidence rather than enthusiasm:
    will not either — and that is a cheap test rather than an assumption.
 
 Until all three, missed-call rescue is the product.
+
+---
+
+# Part 7 — Negative signal, and a better source than the one I used
+
+Confirms the Part 4 deferral rather than changing it. Worth recording because it
+**upgrades the evidence** and adds three things that are actionable regardless
+of what we do about voice.
+
+## 41. Replacing my own citation
+
+Part 4 §21 leaned on a 6,000-person poll showing 31% would hang up on an AI. I
+flagged that the source sells human answering services. There is a better one:
+
+**Gartner, 9 July 2024, n≈5,728:**
+- **64% would prefer companies did not use AI for customer service**
+- **53% would consider switching to a competitor** if they learned a company was
+  going to use AI for customer service
+- **60% worry AI will make it harder to reach a person** — the top concern
+- 42% worry about wrong answers
+
+The 64% headline is verified. **The sub-figures were only confirmed through
+secondary sources that are themselves AI vendors**, so check Gartner directly
+before repeating them.
+
+That 60% is the most strategically useful number across all seven analyses:
+**what people actually fear is being walled off from a human, not AI as such.**
+It maps exactly onto the escalation-failure evidence, and it is why "the AI
+never has to be good, it only has to know when to stop" is the right design.
+
+## 42. The accent finding, now with a named case
+
+Part 4 argued from a McDonald's drive-thru precedent. There is a much closer
+one, and it is worse.
+
+**BBC News, ~19 August 2026: an AI GP receptionist cannot understand Yorkshire
+accents.** The product is EMMA by QuantumLoopAI, deployed across NHS practices
+including Rotherham. **Healthwatch Rotherham**, the statutory watchdog, found it
+responds poorly to regional accents and speech impediments.
+
+The consequence is behavioural, not just irritating: **some patients stopped
+using the phone and travelled to the surgery in person.** The watchdog went out
+to elderly, digitally-excluded and veterans' groups to tell them they can opt
+out.
+
+The vendor's rebuttal claims ">90% of patients reporting a positive
+improvement" — unaudited, no methodology, asserted directly against a watchdog
+finding. Treat it as marketing.
+
+**If broad Yorkshire defeats a production NHS-scale system in 2026, regional
+Australian and Indian-English phone audio is not a solved problem.** No vendor
+publishes accent-stratified error rates for phone-band audio.
+
+## 43. The demand side is organised against this
+
+Reddit threads where small business owners discuss adopting an AI receptionist
+carry upvote ratios of **0.29 to 0.59** — heavily downvoted by their own peers.
+The caller-side thread asking "do you hang up when the receptionist is AI?" sits
+at **0.95 with 168 votes**.
+
+Two corrections to received wisdom:
+
+- **It is not an age thing.** The corpus repeatedly falsifies this. Multiple
+  30-somethings say they ask for a human every time; one operator reports the
+  people it angered most were 35-year-olds who realised mid-sentence, while
+  older callers treated it like a talking answering machine.
+- **Jobber's own AI receptionist has a negative field review.** An operator who
+  ran it for a year calls it a "glorified answering machine" that mostly created
+  call-back tasks, and reports angry in-person conversations with customers
+  about it. That is the $29 competitor from Part 3, reviewed by a user.
+
+**And the counter-position is already appearing:** a home-repair business now
+advertises across its website that *a real person answers the phone*, and is
+reportedly winning clients defecting from over-automated competitors. If "a
+human answers" becomes a marketable differentiator in the trades, that is a
+demand-side pincer on the whole category.
+
+## 44. Three things worth taking regardless of voice
+
+**1. Billing transparency is an open attack surface.** Across AnswerConnect,
+Smith.ai and Ruby, the dominant one-star complaint is **not** AI quality. It is
+per-minute billing with unverifiable logs, silent overage escalation,
+"after-call work" as an unauditable billing unit, and email-only cancellation
+with 30-day notice. One reviewer reports a $300/month plan generating nearly
+$6,000 in a week without warning.
+
+**Any new entrant inherits that scar tissue.** Self-serve instant cancellation
+and a per-second auditable log are cheap and differentiating. We should hold
+ourselves to that across every module, not just voice.
+
+**2. There is no usable review base for AI-native vendors.** Goodcall has zero
+Capterra reviews; Numa has twelve, all five stars. Nobody can do vendor
+diligence in this category from review sites, which is part of why the search
+results are so thoroughly captured by competitor-authored "reviews".
+
+**3. The metric nobody publishes.** Every operator in the corpus who reasoned
+carefully arrived at the same one independently: **answered-call-to-confirmed-
+booking rate, against a voicemail baseline, on the same business.** It does not
+exist publicly. Whoever measures it credibly first owns the category's evidence
+base — and we would be unusually well placed to, because we own the diary and
+can see the confirmed booking.
+
+That is worth remembering as a *reason to run Rung 1 with proper measurement*,
+not just to ship it.
+
+## 45. A regulatory correction
+
+Two claims that circulate widely and are wrong:
+
+- **The FCC's February 2024 ruling does not cover inbound AI receptionists.** It
+  applies to AI that *initiates an outbound* call. A trade whose AI answers is
+  outside it; a trade whose AI dials out for reminders or reactivation is
+  squarely inside it, at $500–1,500 per call with no cap. **Outbound is exactly
+  where vendors push customers next**, which makes this a trap rather than a
+  footnote.
+- **California SB 1001 does not reach phone calls.** Its bot-disclosure duty is
+  defined for "online" communication — website, web application, digital
+  application. Compliance blogs cite it as though it covers voice. AB 2905 does
+  cover artificial voice, but again **outbound only**.
+
+This reinforces the Part 5 conclusion: our exposure is recording consent and
+consumer law, not AI-specific regulation — and it strengthens the case for
+Rung 1, where "reply and we will call you back" is a *human* callback rather
+than automated outbound dialling.
+
+## 46. What this changes
+
+Nothing in the decision. Rung 1 and Rung 2 remain the plan and the live agent
+remains deferred.
+
+What it changes is confidence and instrumentation: the deferral is now supported
+by a real Gartner study, a named regulatory watchdog finding with a behavioural
+outcome, and a negative field review of the exact $29 competitor we would have
+been fighting. And Rung 1 should ship **with the booking-conversion metric wired
+in from day one**, because that number is the thing the entire category is
+missing and we are unusually able to produce it.
