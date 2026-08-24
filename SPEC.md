@@ -1,6 +1,7 @@
 # MakerBay — Platform Core + Assistant Module Specification
 
-**Version:** 0.2 (draft for build; Module 4 reviews scope added 2026-08-23)
+**Version:** 0.3 (draft for build; reviews scope reconciled with the settled
+module portfolio in `modules/*/module.json`, 2026-08-24)
 **Date:** 2026-08-23
 **Domain:** makerbay.app
 **AWS account:** 953146692138 · profile `makerbay` · region `us-east-1`
@@ -20,9 +21,9 @@ the MakerBay dashboard, via REST API with tenant API keys, and later via MCP.
 1. **Platform core (thin):** tenancy, auth, entitlements, API keys, usage metering.
 2. **Module 1 — Assistant:** a RAG chatbot an SMB trains on its own documents and
    deploys as an embeddable widget, a hosted chat page, or an API.
-3. **Module 4 — Reviews (planned scope, not for immediate build):** review
-   requests, review monitoring, and AI reply drafting — scoped ahead of build
-   in §5 because it shapes the messaging module's requirements.
+3. **Reviews module (planned scope, not for immediate build):** review
+   requests, the embeddable review wall, and a later monitoring/AI-reply
+   stage — working scope in §5, aligned to `modules/reviews/module.json`.
 
 ### Goals
 
@@ -34,9 +35,11 @@ the MakerBay dashboard, via REST API with tenant API keys, and later via MCP.
 
 - Stripe billing integration — stub entitlements manually until first paying customer.
 - MCP server — the week after the assistant API stabilizes.
-- Additional modules — after assistant ships. Order per market research
-  (2026-08-23): booking (Module 2), messaging (Module 3), reviews (Module 4,
-  scoped in §5). Booking and messaging get their own specs when scheduled.
+- Additional modules — settled order lives in the `modules/*/module.json`
+  manifests (which drive makerbay.app/roadmap): Contacts (core, shipped) →
+  Requests → Bookings → Quotes → Reviews (§5). Messaging was dropped as a
+  module; help centre and lead-capture forms are features of Assistant and
+  Requests, not modules.
 - Custom domain email (SES) — when escalation/lead-capture ships.
 - Multi-region, WAF, provisioned capacity — per stage triggers in architecture notes.
 
@@ -212,13 +215,14 @@ docs/market-research.md, 2026-08).
 
 ---
 
-## 5. Module 4 — Reviews & Reputation (planned)
+## 5. Reviews module (planned)
 
-Module order per market research (2026-08-23): Module 2 booking, Module 3
-messaging, Module 4 reviews. Build trigger: after booking and messaging ship —
-review requests ride the messaging module's SMS/WhatsApp rails. An email-only
-mode (SES) can ship earlier if demand warrants; SES is already planned for
-escalation/lead-capture.
+Roadmap order 5, after Bookings and Quotes, because it needs a completed job
+or appointment to trigger from (`modules/reviews/module.json`, which is the
+source of truth where this section and the manifest differ). Depends on
+Contacts like every non-core module: review asks create or update contact
+records, never a side list. Delivery is email (SES) — SMS/WhatsApp rails went
+away when the messaging module was dropped from the portfolio.
 
 **Positioning:** $20-30/month flat vs. Podium/Birdeye at $300-600/month per
 location. Month-to-month, white-label, no contracts — the incumbents' loudest
@@ -227,45 +231,57 @@ traps.
 
 ### 5.1 Review requests
 
-- `POST /v1/reviews/requests` sends a review invite to a customer: SMS/WhatsApp
-  via the messaging module when enabled, email via SES otherwise.
-- MVP trigger: manual (dashboard button / API call). Later: automatic on
-  `booking.completed` events from Module 2 via the `makerbay` bus.
+- Triggered by real events, not an arbitrary schedule: completed-booking and
+  accepted-quote events on the `makerbay` bus create an ask for that contact.
+  Manual send (dashboard button / `POST /v1/reviews/requests`) also available.
+- Delivery: email via SES. **One reminder, then stop** — nagging costs the
+  review and the customer (manifest behavior).
 - Hosted ask page at `reviews.makerbay.app/{slug}`: tenant branding, star
   prompt, then the Google review link **and** a private-feedback box shown to
   every respondent. No rating gating (routing only happy customers to Google
   violates Google review policy); private feedback is captured alongside the
-  public option, never instead of it.
-- `ReviewRequests` table: requestId, tenantId, contact (name, phone/email),
-  channel, status (`queued` → `sent` → `clicked` → `completed`), sentAt.
-- Free plan limit: 20 requests/month. Metering event `reviews.request.sent`.
+  public option, never instead of it. This is also a public commitment in the
+  module FAQ.
+- `ReviewRequests` table: requestId, tenantId, contactId, status
+  (`queued` → `sent` → `reminded` → `clicked` → `completed`), sentAt.
+- Free plan limit: 20 requests/month. Metering metric `review.requested`
+  (metric names per the manifest's `meteredMetrics`; standard envelope).
 
-### 5.2 Review monitoring & AI replies
+### 5.2 Review wall, monitoring & AI replies
 
-- Google Business Profile only at MVP (the review surface SMBs care about);
-  per-tenant Google OAuth connection. Facebook/Yelp later.
-- `Reviews` table: reviewId, tenantId, source, rating, author, text, postedAt,
-  replyStatus, draftReply.
-- AI reply drafting reuses the assistant's Bedrock pipeline and the tenant's
-  persona/tone config; the owner approves every reply (MVP: copy to clipboard;
-  auto-post via the Google API later).
-- Metering events: `reviews.review.received`, `reviews.reply.posted`.
+- **Review wall (launch scope, in the manifest):** an embeddable wall of
+  collected reviews using the same one-line snippet as the assistant; a
+  review going live on the wall meters `review.published`.
+- **Google Business Profile monitoring + AI reply drafting (later stage, not
+  yet in the manifest):** per-tenant Google OAuth; `Reviews` table (reviewId,
+  tenantId, source, rating, author, text, postedAt, replyStatus, draftReply);
+  drafts reuse the assistant's Bedrock pipeline and the tenant's persona/tone
+  config, and the owner approves every reply (first cut: copy to clipboard;
+  auto-post via the Google API later). Promote into the manifest only if
+  first-party asks + the wall prove insufficient on their own.
 
 ### 5.3 API surface (v1)
+
+Manifest routes: `/v1/reviews/*` (authenticated) and `/v1/public/reviews/*`
+(ask page + wall).
 
 | Method & path | Auth | Purpose |
 |---|---|---|
 | `POST /v1/reviews/requests` | Cognito / secret key | Send review request |
 | `GET /v1/reviews/requests` | Cognito | List requests + statuses |
-| `GET /v1/reviews` | Cognito | List monitored reviews |
-| `POST /v1/reviews/{id}/reply-draft` | Cognito | AI draft reply |
-| `PUT /v1/reviews/config` / `GET` | Cognito | Template, send delay, quiet hours, Google connection |
+| `GET /v1/reviews` | Cognito | Collected (and later monitored) reviews |
+| `PUT /v1/reviews/config` / `GET` | Cognito | Template, send delay, reminder, ask-page + wall settings |
+| `GET /v1/public/reviews/{slug}` | publishable key | Ask page + review wall data |
+
+`POST /v1/reviews/{id}/reply-draft` arrives with the §5.2 monitoring stage.
 
 ### 5.4 Acceptance sketch
 
-Send a request → customer clicks through the hosted ask page → Google review
-posted → review appears in the dashboard with an AI-drafted reply awaiting
-approval → usage events land in the `Usage` table → tenant isolation holds.
+A completed booking emits its event → review ask email goes out (one
+reminder max) → customer lands on the hosted ask page → review captured and
+published to the wall, Google link offered → the ask and outcome appear on
+the contact's history in Contacts → usage events land in the `Usage` table →
+tenant isolation holds.
 
 ---
 
@@ -319,7 +335,7 @@ free plan politely refuses.
 4. **Sample knowledge docs** — 2–3 real PDFs/FAQs make demos meaningful;
    fixtures used otherwise.
 5. **Stripe** — not needed until post-M4.
-6. **Google Business Profile API access** — Module 4 (reviews) needs a Google
-   Cloud project approved for the Business Profile API plus per-tenant OAuth;
-   Google's approval lead time is unknown, so kick this off when the messaging
-   module is scheduled.
+6. **Google Business Profile API access** — the Reviews module's monitoring
+   stage (§5.2) needs a Google Cloud project approved for the Business
+   Profile API plus per-tenant OAuth; Google's approval lead time is unknown,
+   so kick this off when Reviews (roadmap order 5) is scheduled.
