@@ -3,12 +3,27 @@
   "name": "AI Assistant",
   "tagline": "Answers customer questions from your own documents",
   "status": "live",
-  "version": { "api": "1.2.0", "web": "1.3.0", "embed": "1.1.0" },
-  "routes": ["/v1/assistant/*", "/v1/public/assistant/*"],
-  "meteredMetrics": ["message", "tokens", "search", "ingest.documents"],
+  "version": {
+    "api": "1.3.0",
+    "web": "1.4.0",
+    "embed": "1.1.0"
+  },
+  "routes": [
+    "/v1/assistant/*",
+    "/v1/public/assistant/*"
+  ],
+  "meteredMetrics": [
+    "message",
+    "tokens",
+    "search",
+    "ingest.documents"
+  ],
   "entitlementKey": "assistant",
   "dependsOn": [],
-  "roadmap": { "order": 1, "note": "Shipped. Help centre and richer citations still to come." },
+  "roadmap": {
+    "order": 1,
+    "note": "Shipped, with a public help centre and citations that carry the passage the answer came from."
+  },
   "marketing": {
     "summary": "Upload your FAQ, price list or policies. MakerBay reads them and answers customer questions in your own words, with the source shown. When the answer is not in your documents it says so instead of inventing one.",
     "audience": "Any business that answers the same questions over and over: opening hours, pricing, returns, what you do and do not cover.",
@@ -20,6 +35,10 @@
       {
         "title": "Learns from your website",
         "body": "Point it at your site and it finds the pages worth reading. Add PDFs, Word files or pasted text alongside them."
+      },
+      {
+        "title": "A help centre, from the same documents",
+        "body": "Publish any source as a public page that Google can index. One set of documents answers in chat and reads as help articles."
       },
       {
         "title": "Three ways to use it",
@@ -38,6 +57,10 @@
       {
         "q": "Will it make things up?",
         "a": "No. It answers from your documents and nothing else. When the answer is not there it uses the fallback message you write, which is a good place to point people at a human."
+      },
+      {
+        "q": "Can I see where an answer came from?",
+        "a": "Yes. Every answer names its sources, and opening one shows the exact passage it drew on, with a link to the original page where there is one."
       },
       {
         "q": "How long does setup take?",

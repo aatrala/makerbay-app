@@ -2,14 +2,22 @@
   "id": "contacts",
   "name": "Contacts",
   "tagline": "The customer list every other module writes to",
-  "status": "in-development",
+  "status": "live",
   "core": true,
-  "version": { "api": "0.1.0", "web": "0.1.0" },
-  "routes": ["/v1/contacts/*"],
+  "version": {
+    "api": "1.0.0",
+    "web": "1.0.0"
+  },
+  "routes": [
+    "/v1/contacts/*"
+  ],
   "meteredMetrics": [],
   "entitlementKey": null,
   "dependsOn": [],
-  "roadmap": { "order": 1, "note": "Built first and included with every workspace. Modules that own their own separate customer list can never be joined up later." },
+  "roadmap": {
+    "order": 1,
+    "note": "Shipped and included with every workspace. Modules that own their own separate customer list can never be joined up later."
+  },
   "marketing": {
     "summary": "A light customer list - name, contact details, a status, a note, and the history of everything that person has done with you. It is not a CRM you have to feed by hand: your other modules fill it in as customers arrive.",
     "audience": "Every workspace. Included at no extra cost on every plan, because the modules above it are far less useful without it.",

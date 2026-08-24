@@ -1,19 +1,29 @@
 import type { DashboardModule, Me } from '@makerbay/web-kit'
 import { assistantDashboard, assistantFirstRun } from '@makerbay/assistant-web'
+import { contactsDashboard } from '@makerbay/contacts-web'
 
 /**
  * The only file that knows which module dashboards exist. Adding a module is
  * one import and one array entry; nothing else in the shell changes.
  */
-const ALL: DashboardModule[] = [assistantDashboard]
+const ALL: DashboardModule[] = [assistantDashboard, contactsDashboard]
 
-/** Only modules this workspace has switched on, in registration order. */
+/**
+ * Core modules ship with every workspace and are never entitlement-gated, so
+ * they are not in `me.entitlements` at all. Anything else has to be switched on.
+ */
+const CORE = new Set(['contacts'])
+
+/** Only modules this workspace can use, in registration order. */
 export const enabledModules = (me: Me): DashboardModule[] =>
-  ALL.filter((m) => me.entitlements?.modules[m.id]?.enabled)
+  ALL.filter((m) => CORE.has(m.id) || me.entitlements?.modules[m.id]?.enabled)
 
 /** Where to send someone after they land, preferring their first module. */
 export const landingPath = (me: Me, firstRun: boolean): string => {
-  const first = enabledModules(me)[0]
+  const modules = enabledModules(me)
+  // Core modules are always present, so they must never win the landing slot
+  // over the module the customer actually signed up for.
+  const first = modules.find((m) => !CORE.has(m.id)) ?? modules[0]
   if (!first) return '/usage'
   if (firstRun && first.id === 'assistant') return assistantFirstRun
   return first.nav[0].to

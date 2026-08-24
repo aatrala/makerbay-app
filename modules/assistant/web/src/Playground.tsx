@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, explain, streamChat } from '@makerbay/web-kit'
+import Citations, { type Citation } from './Citations'
 
 interface ChatMsg {
   role: 'user' | 'bot'
   text: string
-  citations?: Array<{ sourceId: string; name: string }>
+  citations?: Citation[]
   messageId?: string
   feedback?: 'up' | 'down'
   failed?: boolean
@@ -128,9 +129,7 @@ export default function Playground() {
           {messages.map((m, i) => (
             <div key={i} className={`msg ${m.role}${m.failed ? ' failed' : ''}`}>
               {m.text}
-              {m.citations && m.citations.length > 0 && (
-                <div className="cites">Sources: {m.citations.map((c) => c.name).join(', ')}</div>
-              )}
+              <Citations citations={m.citations} />
               {m.role === 'bot' && m.messageId && (
                 <div className="cites">
                   {m.feedback ? (

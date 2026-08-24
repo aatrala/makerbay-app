@@ -21,8 +21,19 @@ export interface SourceRow {
   fetchedAt?: string
   charCount?: number
   warning?: string
+  /** Published sources appear in the public help centre. Off by default. */
+  published?: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface Citation {
+  sourceId: string
+  name: string
+  /** The passage the answer came from, so a reader can check it. */
+  excerpt: string
+  /** Original page, when the source was scraped from the web. */
+  sourceUrl?: string
 }
 
 export interface MessageRow {
@@ -32,7 +43,7 @@ export interface MessageRow {
   sessionId: string
   role: 'user' | 'assistant'
   text: string
-  citations?: Array<{ sourceId: string; name: string; excerpt: string }>
+  citations?: Citation[]
   fallback?: boolean
   feedback?: 'up' | 'down'
 }
@@ -44,6 +55,10 @@ export interface AssistantConfigRow {
   instructions: string
   fallbackMessage: string
   brandColor: string
+  /** Help centre is opt-in: a workspace's documents are private by default. */
+  helpEnabled?: boolean
+  helpTitle?: string
+  helpIntro?: string
 }
 
 export const DEFAULT_CONFIG: Omit<AssistantConfigRow, 'tenantId'> = {
@@ -52,6 +67,9 @@ export const DEFAULT_CONFIG: Omit<AssistantConfigRow, 'tenantId'> = {
   instructions: '',
   fallbackMessage: "I don't have that information yet. Please contact the team directly.",
   brandColor: '#1a73e8',
+  helpEnabled: false,
+  helpTitle: '',
+  helpIntro: '',
 }
 
 // ── Sources ──────────────────────────────────────────────────────────────

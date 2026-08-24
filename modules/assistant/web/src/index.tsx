@@ -27,7 +27,7 @@ export const assistantDashboard: DashboardModule = {
     <>
       <Route path="/assistant/playground" element={<Playground />} />
       <Route path="/assistant/knowledge" element={<Knowledge />} />
-      <Route path="/assistant/behavior" element={<Behavior />} />
+      <Route path="/assistant/behavior" element={<Behavior me={me} />} />
       <Route path="/assistant/deploy" element={<DeployPage me={me} />} />
       <Route path="/assistant/conversations" element={<Conversations />} />
       <Route path="/assistant/insights" element={<Insights />} />

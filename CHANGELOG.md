@@ -9,6 +9,24 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 1.8.0 - 2026-08-24
+
+- Added `contacts` Contacts is live on every workspace: one customer list with
+  a status, a note and a history, filled in by your other modules instead of by
+  hand. Import the spreadsheet you already keep, export it whenever you like.
+- Added `contacts` The same person arriving from two places stays one person.
+  Matching is on email or phone, so a booking and a quote land on one record.
+- Added `assistant` A public help centre at help.makerbay.app/{slug}. Publish
+  any source you have already uploaded as a page Google can index, with a
+  sitemap you can submit to Search Console. Off by default, and each article is
+  published individually.
+- Added `assistant` Citations now carry the passage the answer came from, not
+  just the file name, with a link to the original page where there is one.
+- Added `platform` Email sending on our own domain, with DKIM signing and a
+  separate MAIL FROM subdomain, ready for Requests.
+- Fixed `platform` A billing type error that shipped because CDK bundles Lambda
+  code without typechecking it. `npm run typecheck` now covers every Lambda.
+
 ## 1.7.0 - 2026-08-23
 
 - Added `platform` A staff console at admin.makerbay.app: workspace list,

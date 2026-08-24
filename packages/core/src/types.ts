@@ -55,3 +55,40 @@ export interface CallerContext {
   scopes: string
   entitlements: string
 }
+
+// ── Contacts ─────────────────────────────────────────────────────────────
+// Core substrate: every workspace has these, no entitlement gates them.
+
+export type ContactStatus = 'new' | 'contacted' | 'active' | 'won' | 'lost'
+
+export interface ContactRow {
+  tenantId: string
+  contactId: string
+  name?: string
+  email?: string
+  phone?: string
+  status: ContactStatus
+  note?: string
+  tags?: string[]
+  /** Which module first created this contact. */
+  source?: string
+  createdAt: string
+  updatedAt: string
+  lastActivityAt?: string
+  /** GSI key for dedupe: tenantId#email:... or tenantId#phone:... */
+  identityKey?: string
+  /** Lowercased haystack, because DynamoDB contains() is case-sensitive. */
+  searchText?: string
+}
+
+export interface ContactEventRow {
+  pk: string
+  sk: string
+  tenantId: string
+  contactId: string
+  moduleId: string
+  title: string
+  body?: string
+  href?: string
+  at: string
+}

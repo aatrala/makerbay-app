@@ -55,6 +55,9 @@ interface TenantLike {
   stripeCustomerId?: string
   subscriptionStatus?: string
   currentPeriodEnd?: string
+  lastWebhookAt?: string
+  lastWebhookType?: string
+  lastWebhookLive?: boolean
 }
 
 async function summary(tenant: TenantLike): Promise<APIGatewayProxyResultV2> {

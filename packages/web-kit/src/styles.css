@@ -263,6 +263,36 @@ tr.expanded td { background: var(--bg); }
 .gaps { margin: 0; padding-left: 18px; }
 .gaps li { margin-bottom: 6px; color: var(--body); }
 
+
+/* ── Timeline ───────────────────────────────────────────────────────── */
+/* A record of what happened, newest first. Ordered list, because the order
+   carries meaning. */
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li {
+  position: relative; padding: 0 0 16px 18px;
+  border-left: 2px solid var(--line); margin-left: 4px;
+}
+.timeline li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.timeline li::before {
+  content: ''; position: absolute; left: -5px; top: 6px;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--line);
+}
+.timeline li:first-child::before { background: var(--accent); }
+.timeline p { margin: 2px 0 4px; }
+
+select.narrow { width: auto; min-width: 150px; flex: none; }
+
+
+/* ── Citations ──────────────────────────────────────────────────────── */
+.cites-label { color: var(--muted); }
+.cite-passage {
+  display: block; margin: 6px 0 2px; padding: 8px 10px;
+  background: var(--bg); border-left: 2px solid var(--accent);
+  border-radius: 0 4px 4px 0; font-size: 12.5px; line-height: 1.5;
+}
+.msg.user .cite-passage { background: #ffffff1f; border-left-color: #ffffff66; }
+.cite-passage q { font-style: italic; }
+
 /* ── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 860px) {
   .day-count { width: auto; font-size: 12px; }

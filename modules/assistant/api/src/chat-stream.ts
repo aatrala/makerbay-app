@@ -11,7 +11,7 @@ import {
   ulid,
 } from '@makerbay/core'
 import { getConfig, getSessionMessages, putMessage } from './db'
-import { classifyAnswer, retrieveChunks, streamAnswer } from './rag'
+import { buildCitations, classifyAnswer, retrieveChunks, streamAnswer } from './rag'
 
 // Provided by the Lambda Node runtime when the function is deployed with
 // RESPONSE_STREAM invoke mode.
@@ -135,13 +135,8 @@ const streamingHandler = async (
       send({ type: 'delta', text: answer })
     }
 
-    const citations = fallback
-      ? []
-      : [...new Map(chunks.map((c) => [c.sourceId, c])).values()].map((c) => ({
-          sourceId: c.sourceId,
-          name: c.sourceName,
-          excerpt: c.text.slice(0, 160),
-        }))
+    // Same citation shape as the non-streaming route, from one implementation.
+    const citations = fallback ? [] : buildCitations(chunks)
 
     const pk = `${tenantId}#${sessionId}`
     const common = { pk, tenantId, sessionId }

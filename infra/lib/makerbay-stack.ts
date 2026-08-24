@@ -11,6 +11,7 @@ import * as iam from 'aws-cdk-lib/aws-iam'
 import * as kms from 'aws-cdk-lib/aws-kms'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
+import * as ses from 'aws-cdk-lib/aws-ses'
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
@@ -76,6 +77,14 @@ export class MakerbayStack extends cdk.Stack {
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
     })
     const assistantConfig = table('AssistantConfig', 'tenantId')
+    // Contacts is core substrate: every module writes customer records here
+    // rather than keeping its own list, so they can be joined up later.
+    const contacts = table('Contacts', 'tenantId', 'contactId')
+    contacts.addGlobalSecondaryIndex({
+      indexName: 'byIdentity',
+      partitionKey: { name: 'identityKey', type: dynamodb.AttributeType.STRING },
+    })
+    const contactEvents = table('ContactEvents', 'pk', 'sk')
 
     // ── DNS + TLS ────────────────────────────────────────────────────────
     const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
@@ -87,6 +96,41 @@ export class MakerbayStack extends cdk.Stack {
       subjectAlternativeNames: [`*.${DOMAIN}`],
       validation: acm.CertificateValidation.fromDns(zone),
     })
+
+    // ── Email (SES) ──────────────────────────────────────────────────────
+    // Requests, Bookings and Quotes all need to send mail, and domain
+    // verification plus production access have a lead time measured in days,
+    // so this is set up before the module that needs it.
+    //
+    // publicHostedZone() writes the DKIM CNAMEs and the MAIL FROM records for
+    // us. A custom MAIL FROM subdomain means bounce handling and SPF align to
+    // mail.makerbay.app and never touch whatever the apex uses for real mail.
+    const publicZone = route53.PublicHostedZone.fromPublicHostedZoneAttributes(this, 'PublicZone', {
+      hostedZoneId: HOSTED_ZONE_ID,
+      zoneName: DOMAIN,
+    })
+    const emailConfigSet = new ses.ConfigurationSet(this, 'EmailConfigSet', {
+      configurationSetName: 'makerbay-transactional',
+      // Refuse to deliver rather than fall back to plaintext.
+      tlsPolicy: ses.ConfigurationSetTlsPolicy.REQUIRE,
+      reputationMetrics: true,
+    })
+    const emailIdentity = new ses.EmailIdentity(this, 'EmailIdentity', {
+      identity: ses.Identity.publicHostedZone(publicZone),
+      mailFromDomain: `mail.${DOMAIN}`,
+      configurationSet: emailConfigSet,
+    })
+    // Anything that sends mail gets this, rather than a blanket ses:* grant.
+    const sesSendPolicy = new iam.PolicyStatement({
+      actions: ['ses:SendEmail'],
+      resources: [
+        `arn:aws:ses:${this.region}:${this.account}:identity/${DOMAIN}`,
+        `arn:aws:ses:${this.region}:${this.account}:configuration-set/${emailConfigSet.configurationSetName}`,
+      ],
+    })
+    new cdk.CfnOutput(this, 'EmailIdentityName', { value: emailIdentity.emailIdentityName })
+    new cdk.CfnOutput(this, 'EmailConfigSetName', { value: emailConfigSet.configurationSetName })
+    new cdk.CfnOutput(this, 'EmailFromAddress', { value: `hello@${DOMAIN}` })
 
     // ── Knowledge storage (assistant module) ─────────────────────────────
     const knowledgeBucket = new s3.Bucket(this, 'KnowledgeBucket', {
@@ -284,6 +328,8 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_ENTITLEMENTS: entitlements.tableName,
       TABLE_USAGE: usage.tableName,
       TABLE_GRANTS: grants.tableName,
+      TABLE_CONTACTS: contacts.tableName,
+      TABLE_CONTACTEVENTS: contactEvents.tableName,
       EVENT_BUS: bus.eventBusName,
     }
 
@@ -293,6 +339,11 @@ export class MakerbayStack extends cdk.Stack {
       USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
     })
     const coreFn = fn('CoreApiFn', 'packages/core-api/src/handler.ts', tableEnv)
+    const contactsFn = fn('ContactsApiFn', 'modules/contacts/api/src/handler.ts', tableEnv, {
+      // A CSV import writes one row at a time; give it room for a real list.
+      timeoutSeconds: 29,
+      memorySize: 512,
+    })
     const assistantFn = fn(
       'AssistantApiFn',
       'modules/assistant/api/src/handler.ts',
@@ -358,7 +409,14 @@ export class MakerbayStack extends cdk.Stack {
       STAFF_CLIENT_ID: staffClient.userPoolClientId,
     }
     const adminAuthorizerFn = fn('AdminAuthorizerFn', 'packages/admin-api/src/authorizer.ts', adminEnv)
-    const adminApiFn = fn('AdminApiFn', 'packages/admin-api/src/handler.ts', adminEnv)
+    const adminApiFn = fn('AdminApiFn', 'packages/admin-api/src/handler.ts', {
+      ...adminEnv,
+      EMAIL_FROM: `hello@${DOMAIN}`,
+      EMAIL_CONFIG_SET: emailConfigSet.configurationSetName,
+    })
+    // Staff can send a test email so SES setup is verifiable rather than
+    // merely declared. The first real sender will be the Requests module.
+    adminApiFn.addToRolePolicy(sesSendPolicy)
 
     const usageAggregatorFn = fn('UsageAggregatorFn', 'packages/core-api/src/usage-aggregator.ts', {
       TABLE_USAGE: usage.tableName,
@@ -397,6 +455,7 @@ export class MakerbayStack extends cdk.Stack {
     for (const t of [tenants, users, apiKeys, entitlements, grants, usage]) t.grantReadWriteData(coreFn)
     bus.grantPutEventsTo(coreFn)
 
+    for (const t of [contacts, contactEvents]) t.grantReadWriteData(contactsFn)
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)
     bus.grantPutEventsTo(assistantFn)
@@ -502,6 +561,18 @@ export class MakerbayStack extends cdk.Stack {
       path: '/v1/core/{proxy+}',
       methods: routeMethods,
       integration: new HttpLambdaIntegration('CoreIntegration', coreFn),
+      authorizer,
+    })
+    httpApi.addRoutes({
+      path: '/v1/contacts',
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('ContactsIntegration', contactsFn),
+      authorizer,
+    })
+    httpApi.addRoutes({
+      path: '/v1/contacts/{proxy+}',
+      methods: routeMethods,
+      integration: new HttpLambdaIntegration('ContactsProxyIntegration', contactsFn),
       authorizer,
     })
     httpApi.addRoutes({
@@ -700,6 +771,73 @@ function handler(event) {
       recordName: 'www',
       target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(siteDistribution)),
     })
+
+    // ── Help centre: help.makerbay.app/{slug} ────────────────────────────
+    // Server-rendered by the assistant Lambda, not a client-side app: the
+    // whole point is that search engines index these pages, and a page that
+    // needs JavaScript to show its text indexes badly. CloudFront caches the
+    // rendered HTML so a crawl does not become a Lambda bill.
+    const helpRewrite = new cloudfront.Function(this, 'HelpRewrite', {
+      functionName: `makerbay-help-rewrite-${this.account}`,
+      comment: 'Maps help.makerbay.app/{slug}/{article} onto the public help API',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request
+  var parts = request.uri.split('/').filter(function (p) { return p.length > 0 })
+  var qs = {}
+
+  if (parts.length === 0) {
+    request.uri = '/v1/public/assistant/help'
+    request.querystring = {}
+    return request
+  }
+  if (parts.length === 1 && parts[0] === 'robots.txt') {
+    qs.robots = { value: '1' }
+  } else {
+    qs.slug = { value: parts[0] }
+    if (parts.length > 1) {
+      if (parts[1] === 'sitemap.xml') qs.sitemap = { value: '1' }
+      else if (parts[1] === 'robots.txt') qs.robots = { value: '1' }
+      else qs.article = { value: parts[1] }
+    }
+  }
+  request.uri = '/v1/public/assistant/help'
+  request.querystring = qs
+  return request
+}
+`),
+    })
+    const helpDistribution = new cloudfront.Distribution(this, 'HelpDistribution', {
+      defaultBehavior: {
+        origin: new origins.HttpOrigin(`api.${DOMAIN}`),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        // The slug and article live in the query string the function writes,
+        // so they must be part of the cache key.
+        cachePolicy: new cloudfront.CachePolicy(this, 'HelpCachePolicy', {
+          cachePolicyName: `makerbay-help-${this.account}`,
+          defaultTtl: cdk.Duration.minutes(5),
+          minTtl: cdk.Duration.seconds(0),
+          maxTtl: cdk.Duration.hours(24),
+          queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
+          enableAcceptEncodingGzip: true,
+          enableAcceptEncodingBrotli: true,
+        }),
+        functionAssociations: [
+          { function: helpRewrite, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
+        ],
+      },
+      domainNames: [`help.${DOMAIN}`],
+      certificate,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    })
+    new route53.ARecord(this, 'HelpAlias', {
+      zone,
+      recordName: 'help',
+      target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(helpDistribution)),
+    })
+    new cdk.CfnOutput(this, 'HelpUrl', { value: `https://help.${DOMAIN}` })
+    new cdk.CfnOutput(this, 'HelpDistributionId', { value: helpDistribution.distributionId })
 
     // ── Staff console: admin.makerbay.app ────────────────────────────────
     // Separate origin from the customer dashboard so a bug there can never

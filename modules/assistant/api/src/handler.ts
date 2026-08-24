@@ -29,7 +29,21 @@ import {
   type MessageRow,
   type SourceRow,
 } from './db'
-import { generateAnswer, getIngestionStatus, retrieveChunks, startIngestion } from './rag'
+import {
+  buildCitations,
+  generateAnswer,
+  getIngestionStatus,
+  retrieveChunks,
+  startIngestion,
+} from './rag'
+import {
+  renderArticle,
+  renderIndex,
+  renderNotFound,
+  renderRobots,
+  renderSitemap,
+  sourceIdFromSlug,
+} from './help'
 import { discoverPages, scrapePage } from './scrape'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
@@ -50,6 +64,9 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
   try {
     // Public widget/hosted-page surface runs without the authorizer, so it
     // must not read authorizer context.
+    // The help centre renders HTML, not JSON, so it dispatches before the
+    // JSON public routes rather than through them.
+    if (method === 'GET' && path.startsWith('/v1/public/assistant/help')) return await helpRoute(event)
     if (path.startsWith('/v1/public/assistant')) return await publicRoute(method, path, event)
 
     const ctx = event.requestContext.authorizer.lambda
@@ -85,6 +102,9 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'GET' && path === '/v1/assistant/config')
       return json(200, { config: await getConfig(tenantId) })
     if (method === 'PUT' && path === '/v1/assistant/config') return await updateConfig(tenantId, event)
+
+    const publishMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)\/publish$/)
+    if (method === 'POST' && publishMatch) return await setPublished(tenantId, publishMatch[1], event)
 
     if (method === 'GET' && path === '/v1/assistant/conversations')
       return await conversations(tenantId, event)
@@ -132,6 +152,71 @@ async function resolvePublicTenant(
     return { tenantId: tenant.tenantId, slug: tenant.slug }
   }
   return undefined
+}
+
+/**
+ * Public help centre, served at help.makerbay.app/{slug}. CloudFront rewrites
+ * the friendly path into this route, so `slug` and `article` arrive as query
+ * parameters. Errors render as HTML pages, never JSON: a crawler that gets a
+ * JSON body for an HTML request indexes nonsense.
+ */
+async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
+  const q = event.queryStringParameters ?? {}
+  const slug = String(q.slug ?? '').trim()
+  const article = String(q.article ?? '').trim()
+  const wantsSitemap = q.sitemap === '1'
+  const wantsRobots = q.robots === '1'
+
+  if (wantsRobots && !slug) return renderRobots()
+  if (!slug) return renderNotFound()
+
+  const tenant = await getTenantBySlug(slug)
+  if (!tenant) return renderNotFound()
+
+  const entitlement = await getEffectiveEntitlement(tenant.tenantId, 'assistant')
+  if (!entitlement.enabled) return renderNotFound()
+
+  const config = { ...DEFAULT_CONFIG, ...(await getConfig(tenant.tenantId)) }
+  if (!config.helpEnabled) return renderNotFound()
+
+  const published = (await listSources(tenant.tenantId))
+    .filter((s) => s.published && s.status === 'ready')
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  if (wantsRobots) return renderRobots(slug)
+  if (wantsSitemap) return renderSitemap(slug, published)
+
+  if (article) {
+    const sourceId = sourceIdFromSlug(article)
+    const source = published.find((s) => s.sourceId === sourceId)
+    if (!source) return renderNotFound()
+    const text = await sourceText(source)
+    if (!text) return renderNotFound()
+    return renderArticle(config, slug, source, text)
+  }
+
+  // Index: one short excerpt each, read in parallel and capped so a large
+  // help centre cannot blow the Lambda timeout.
+  const excerpts: Record<string, string> = {}
+  await Promise.all(
+    published.slice(0, 40).map(async (s) => {
+      excerpts[s.sourceId] = (await sourceText(s)).replace(/\s+/g, ' ').slice(0, 200)
+    }),
+  )
+  return renderIndex(config, slug, published, excerpts)
+}
+
+/** Extracted text for a source, or '' when it cannot be read. */
+async function sourceText(source: SourceRow): Promise<string> {
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET(), Key: source.s3Key }))
+    const full = (await obj.Body?.transformToString()) ?? ''
+    // Scraped pages are stored with a small provenance header; drop it.
+    const stripped = full.replace(/^(Source|Title|Fetched):.*\n/gm, '').trim()
+    return stripped.slice(0, 60000)
+  } catch {
+    return ''
+  }
 }
 
 async function publicRoute(
@@ -207,13 +292,7 @@ async function chat(
     tokens = generated.inputTokens + generated.outputTokens
   }
 
-  const citations = fallback
-    ? []
-    : [...new Map(chunks.map((c) => [c.sourceId, c])).values()].map((c) => ({
-        sourceId: c.sourceId,
-        name: c.sourceName,
-        excerpt: c.text.slice(0, 160),
-      }))
+  const citations = fallback ? [] : buildCitations(chunks)
 
   const now = new Date().toISOString()
   const pk = `${tenantId}#${sessionId}`
@@ -250,12 +329,20 @@ function objectKey(tenantId: string, sourceId: string, name: string): string {
 
 // Sidecar metadata is what makes multi-tenant retrieval filtering work —
 // every document carries its tenantId into the vector store.
-async function writeMetadataSidecar(key: string, tenantId: string, sourceId: string, name: string) {
+async function writeMetadataSidecar(
+  key: string,
+  tenantId: string,
+  sourceId: string,
+  name: string,
+  sourceUrl?: string,
+) {
   await s3.send(
     new PutObjectCommand({
       Bucket: BUCKET(),
       Key: `${key}.metadata.json`,
-      Body: JSON.stringify({ metadataAttributes: { tenantId, sourceId, sourceName: name } }),
+      Body: JSON.stringify({
+        metadataAttributes: { tenantId, sourceId, sourceName: name, ...(sourceUrl ? { sourceUrl } : {}) },
+      }),
       ContentType: 'application/json',
     }),
   )
@@ -310,7 +397,7 @@ async function createSource(
 
 ${page.text}`
     await s3.send(new PutObjectCommand({ Bucket: BUCKET(), Key: key, Body: stored, ContentType: 'text/plain' }))
-    await writeMetadataSidecar(key, tenantId, sourceId, page.title || name)
+    await writeMetadataSidecar(key, tenantId, sourceId, page.title || name, page.url)
     const row: SourceRow = {
       tenantId, sourceId, name: page.title || name, type: 'url', s3Key: key,
       status: 'processing', sizeBytes: stored.length, sourceUrl: page.url,
@@ -429,9 +516,29 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
     instructions: String(body.instructions ?? '').slice(0, 2000),
     fallbackMessage: String(body.fallbackMessage ?? DEFAULT_CONFIG.fallbackMessage).slice(0, 300),
     brandColor: /^#[0-9a-fA-F]{6}$/.test(String(body.brandColor)) ? body.brandColor : DEFAULT_CONFIG.brandColor,
+    helpEnabled: body.helpEnabled === true,
+    helpTitle: String(body.helpTitle ?? '').slice(0, 80),
+    helpIntro: String(body.helpIntro ?? '').slice(0, 300),
   }
   await putConfig(config)
   return json(200, { config })
+}
+
+/** Publishing is per source and opt-in: a document is private until asked. */
+async function setPublished(
+  tenantId: string,
+  sourceId: string,
+  event: Event,
+): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const source = await getSource(tenantId, sourceId)
+  if (!source) return json(404, { error: 'not_found' })
+  if (source.status !== 'ready' && body.published === true) {
+    return json(409, { error: 'not_ready', message: 'Wait until this source has finished processing.' })
+  }
+  const updated = { ...source, published: body.published === true, updatedAt: new Date().toISOString() }
+  await putSource(updated)
+  return json(200, { source: updated })
 }
 
 async function conversations(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {

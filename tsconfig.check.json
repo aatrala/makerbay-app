@@ -1,0 +1,17 @@
+{
+  "//": "Lambda code is bundled by CDK's esbuild, which does not typecheck. Without this, a type error ships and is only found at runtime. Run: npm run typecheck",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["modules/*/api/src/**/*.ts", "packages/*/src/**/*.ts"],
+  "exclude": ["packages/web-kit/**", "**/node_modules/**"]
+}

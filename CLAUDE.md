@@ -4,7 +4,9 @@
 
 - AWS account `953146692138`, CLI profile `makerbay`, region `us-east-1`.
 - Domain `makerbay.app` (Route 53). Subdomains: `app.` dashboard, `api.` API,
-  `chat.` hosted chat, `widget.` embed script, `mcp.` (future).
+  `chat.` hosted chat, `widget.` embed script, `mcp.` MCP server,
+  `admin.` staff console, `admin-api.`, `help.` public help centres,
+  `stream.` streaming chat.
 - $80/month AWS Budget `monthly-cost-80-usd` with email alerts is live — check
   Cost Explorer after infra changes.
 - Monorepo: npm workspaces. `infra/` (CDK), `packages/core/`, `modules/<name>/`,
@@ -14,6 +16,13 @@
 - Usage metering events on EventBridge bus `makerbay` are a stable contract:
   `{ tenantId, moduleId, metric, quantity, idempotencyKey, ts }`.
 - SPEC.md is the source of truth for milestones and acceptance criteria.
+  `modules/*/module.json` is the source of truth for the modules themselves -
+  it generates the marketing pages, the roadmap and the version endpoint.
+- Run `npm run typecheck` before any deploy. CDK bundles Lambda code with
+  esbuild, which does NOT typecheck, so without it a type error ships silently.
+- Contacts is core: always on, `entitlementKey: null`. Other modules attach
+  customers with `upsertContact` and `appendContactEvent` from `packages/core`
+  rather than keeping their own list.
 
 ## AWS Guidance
 

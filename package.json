@@ -14,5 +14,8 @@
   ],
   "engines": {
     "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.check.json"
   }
 }

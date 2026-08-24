@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb'
 import {
   ddb,
@@ -41,6 +42,8 @@ const PLANS: Record<string, Record<string, number>> = {
   pro: { messagesPerMonth: 100000, sources: 500, sourceBytes: 2 * 1024 * 1024 * 1024 },
 }
 
+const ses = new SESv2Client({})
+
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const staff = event.requestContext.authorizer.lambda
   const method = event.requestContext.http.method
@@ -61,11 +64,72 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     const revokePath = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/grants\/revoke$/)
     if (method === 'POST' && revokePath) return await revoke(staff, revokePath[1], event)
 
+    if (method === 'POST' && path === '/admin/v1/email/test') return await sendTestEmail(staff, event)
+
     return json(404, { error: 'not_found' })
   } catch (err) {
     console.error('admin error', { path, method, err })
     return json(500, { error: 'internal_error' })
   }
+}
+
+/**
+ * Proves the SES setup end to end: domain verified, DKIM signing, config set
+ * applied, and out of the sandbox. Staff-only, and it will only send to a
+ * staff member's own address so this can never become an open relay.
+ */
+async function sendTestEmail(staff: StaffContext, event: Event): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const to = String(body.to ?? staff.staffEmail ?? '').trim().toLowerCase()
+  if (!to.includes('@')) return json(400, { error: 'recipient_required' })
+  if (to !== (staff.staffEmail ?? '').toLowerCase()) {
+    await audit(staff, 'email.test', '-', { to }, 'denied')
+    return json(403, {
+      error: 'self_only',
+      message: 'A test email can only be sent to your own staff address.',
+    })
+  }
+
+  const from = process.env.EMAIL_FROM!
+  try {
+    await ses.send(
+      new SendEmailCommand({
+        FromEmailAddress: from,
+        Destination: { ToAddresses: [to] },
+        ConfigurationSetName: process.env.EMAIL_CONFIG_SET,
+        Content: {
+          Simple: {
+            Subject: { Data: 'MakerBay email test' },
+            Body: {
+              Text: {
+                Data: [
+                  'This is a test from the MakerBay staff console.',
+                  '',
+                  `Sent from ${from} at ${new Date().toISOString()}.`,
+                  'If it arrived, DKIM signing and the configuration set are working.',
+                  'Check the raw headers for a DKIM pass.',
+                ].join('\n'),
+              },
+            },
+          },
+        },
+      }),
+    )
+  } catch (err) {
+    const name = (err as { name?: string }).name ?? 'unknown'
+    await audit(staff, 'email.test', '-', { to, error: name }, 'error')
+    // The sandbox is the overwhelmingly likely cause; say so plainly.
+    return json(502, {
+      error: 'send_failed',
+      message:
+        name === 'MessageRejected'
+          ? 'SES rejected the message. The account is probably still in the sandbox, where you can only send to verified addresses.'
+          : `SES refused the request (${name}).`,
+    })
+  }
+
+  await audit(staff, 'email.test', '-', { to })
+  return json(200, { sent: to, from })
 }
 
 /**

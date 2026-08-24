@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, explain, Notice, Skeleton } from '@makerbay/web-kit'
+import { Link } from 'react-router-dom'
+import { api, explain, Notice, Skeleton, type Me } from '@makerbay/web-kit'
 
 interface Config {
   name: string
@@ -7,9 +8,12 @@ interface Config {
   instructions: string
   fallbackMessage: string
   brandColor: string
+  helpEnabled?: boolean
+  helpTitle?: string
+  helpIntro?: string
 }
 
-export default function Behavior() {
+export default function Behavior({ me }: { me: Me }) {
   const [config, setConfig] = useState<Config | null>(null)
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -23,6 +27,11 @@ export default function Behavior() {
 
   const set = (k: keyof Config) => (e: { target: { value: string } }) => {
     setConfig((c) => (c ? { ...c, [k]: e.target.value } : c))
+    setSaved(false)
+  }
+
+  const toggle = (k: keyof Config) => (e: { target: { checked: boolean } }) => {
+    setConfig((c) => (c ? { ...c, [k]: e.target.checked } : c))
     setSaved(false)
   }
 
@@ -80,6 +89,63 @@ export default function Behavior() {
           </form>
         )}
       </div>
+
+      {config && <HelpCentre config={config} me={me} set={set} toggle={toggle} save={save} busy={busy} />}
     </>
+  )
+}
+
+/**
+ * The help centre turns knowledge into public, indexable pages. It is off by
+ * default and every article is published individually: a workspace's
+ * documents are private until they say otherwise, twice.
+ */
+function HelpCentre({ config, me, set, toggle, save, busy }: {
+  config: Config
+  me: Me
+  set: (k: keyof Config) => (e: { target: { value: string } }) => void
+  toggle: (k: keyof Config) => (e: { target: { checked: boolean } }) => void
+  save: (e: FormEvent) => void
+  busy: boolean
+}) {
+  const url = `https://help.makerbay.app/${me.tenant?.slug ?? ''}`
+  return (
+    <div className="card">
+      <h2>Public help centre</h2>
+      <p>
+        Turn the documents you have already uploaded into public help pages that Google can index.
+        Nothing is published until you switch this on <em>and</em> mark each article as published
+        under <Link to="/assistant/knowledge">Knowledge</Link>.
+      </p>
+
+      <form onSubmit={save}>
+        <label className="pick">
+          <input type="checkbox" checked={config.helpEnabled ?? false} onChange={toggle('helpEnabled')} />
+          <span>Publish a help centre at <code>{url}</code></span>
+        </label>
+
+        {config.helpEnabled && (
+          <>
+            <label htmlFor="h-title">Help centre title</label>
+            <input id="h-title" value={config.helpTitle ?? ''} onChange={set('helpTitle')}
+              placeholder={`${config.name} help centre`} />
+
+            <label htmlFor="h-intro">Introduction</label>
+            <input id="h-intro" value={config.helpIntro ?? ''} onChange={set('helpIntro')}
+              placeholder="Answers to the questions we are asked most often." />
+
+            <p className="meta">
+              Submit <code>{url}/sitemap.xml</code> to Google Search Console so your articles are
+              found. Each page links back to your assistant for anything it does not cover.
+            </p>
+            <p className="mt">
+              <a className="btn ghost" href={url} target="_blank" rel="noopener">Open my help centre</a>
+            </p>
+          </>
+        )}
+
+        <div className="mt"><button disabled={busy}>{busy ? 'Saving…' : 'Save help centre settings'}</button></div>
+      </form>
+    </div>
   )
 }

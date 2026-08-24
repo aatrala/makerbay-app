@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { api, explain, Empty, Notice, Skeleton, bytes, when } from '@makerbay/web-kit'
 
 interface Source {
@@ -11,6 +12,7 @@ interface Source {
   sourceUrl?: string
   fetchedAt?: string
   warning?: string
+  published?: boolean
   createdAt: string
 }
 
@@ -136,6 +138,14 @@ export default function Knowledge() {
       setNote(`Re-fetched — ${r.charCount.toLocaleString()} characters of text.`)
     })
 
+  const publish = (id: string, next: boolean) =>
+    void run(async () => {
+      await api('POST', `/v1/assistant/sources/${id}/publish`, { published: next })
+      setNote(next
+        ? 'Published. It will appear in your help centre within a few minutes.'
+        : 'Unpublished. It is no longer public.')
+    })
+
   const remove = (id: string, label: string) => {
     if (!confirm(`Remove "${label}"? Your assistant will stop answering from it.`)) return
     void run(async () => {
@@ -254,7 +264,7 @@ export default function Knowledge() {
           <div className="scroll-x">
             <table>
               <thead>
-                <tr><th>Name</th><th>Type</th><th>Status</th><th>Added</th><th><span className="visually-hidden">Actions</span></th></tr>
+                <tr><th>Name</th><th>Type</th><th>Status</th><th>Public</th><th>Added</th><th><span className="visually-hidden">Actions</span></th></tr>
               </thead>
               <tbody>
                 {sources.map((s) => (
@@ -266,6 +276,14 @@ export default function Knowledge() {
                     </td>
                     <td>{s.type === 'url' ? 'web page' : s.type}</td>
                     <td><span className={`chip ${s.status}`}>{s.status.replace('_', ' ')}</span></td>
+                    <td className="nowrap">
+                      <label className="pick">
+                        <input type="checkbox" checked={s.published ?? false} disabled={busy || s.status !== 'ready'}
+                          onChange={(e) => publish(s.sourceId, e.target.checked)}
+                          aria-label={`Publish ${s.name} to the help centre`} />
+                        <span className="meta">{s.published ? 'published' : 'private'}</span>
+                      </label>
+                    </td>
                     <td className="nowrap">{when(s.createdAt)}</td>
                     <td className="nowrap">
                       <button className="ghost" onClick={() => openPreview(s.sourceId)}>Preview</button>{' '}
@@ -279,7 +297,11 @@ export default function Knowledge() {
           </div>
         )}
         {loaded && sources.length > 0 && (
-          <p className="meta mt">Processing usually takes a minute or two. This list updates itself.</p>
+          <p className="meta mt">
+            Processing usually takes a minute or two. This list updates itself. Ticking
+            <strong> public</strong> publishes that source as an article in your help centre —
+            switch the help centre on under <Link to="/assistant/behavior">Behavior</Link> first.
+          </p>
         )}
       </div>
 

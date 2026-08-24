@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, explain, Empty, Notice, Skeleton, when } from '@makerbay/web-kit'
+import Citations, { type Citation } from './Citations'
 
 interface SessionRow {
   sessionId: string
@@ -16,7 +17,7 @@ interface Message {
   sk: string
   role: 'user' | 'assistant'
   text: string
-  citations?: Array<{ name: string }>
+  citations?: Citation[]
   fallback?: boolean
   feedback?: 'up' | 'down'
 }
@@ -139,9 +140,7 @@ export default function Conversations() {
                             <div key={m.sk} className="transcript-turn">
                               <div className={`msg ${m.role === 'user' ? 'user' : 'bot'}`}>
                                 {m.text}
-                                {m.citations && m.citations.length > 0 && (
-                                  <div className="cites">Sources: {m.citations.map((c) => c.name).join(', ')}</div>
-                                )}
+                                <Citations citations={m.citations} />
                               </div>
                               {m.role === 'assistant' && (m.fallback || m.feedback === 'down') && (
                                 <button className="ghost mt-sm"
