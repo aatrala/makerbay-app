@@ -99,7 +99,9 @@ export default function Billing() {
   // at the wrong endpoint, which is silent until an invoice goes missing.
   const modeMismatch = webhook.lastLive !== null && testMode !== null && webhook.lastLive === testMode
   const pro = plans.find((p) => p.id === 'pro')!
+  const genie = plans.find((p) => p.id === 'genie')
   const onPro = plan.id === 'pro'
+  const onGenie = plan.id === 'genie'
   const pct = Math.min(100, Math.round((usage.messages / Math.max(1, usage.includedMessages)) * 100))
 
   return (
@@ -169,7 +171,7 @@ export default function Billing() {
         )}
       </div>
 
-      {!onPro && (
+      {!onPro && !onGenie && (
         <div className="card">
           <h2>Upgrade to {pro.name} — everything switched on</h2>
           <p>
@@ -189,6 +191,24 @@ export default function Billing() {
             Monthly includes pay-as-you-go beyond the message allowance at{' '}
             {money(pro.overageCentsPerMessage)} each. Annual pauses politely at the allowance
             instead — no surprise catch-up bills.
+          </p>
+        </div>
+      )}
+
+      {genie && !onGenie && (
+        <div className="card">
+          <h2>Upgrade to {genie.name} — your business, run from a conversation</h2>
+          <p>
+            Everything in Trade, plus Genie with 2,500 messages a month: briefings, answers with
+            your real numbers, and actions — send a quote, chase an invoice, block out time —
+            each behind a card only you can confirm. Month to month, cancel any time.
+          </p>
+          <button onClick={() => void go('/v1/core/billing/checkout', { plan: 'genie' })} disabled={busy}>
+            {busy ? 'Opening Stripe…' : `${money(genie.monthlyPriceCents)} / month`}
+          </button>
+          <p className="meta mt">
+            Every plan includes a Genie taster — 25 messages a month on Free, 250 on Trade — so
+            you can try it before upgrading.
           </p>
         </div>
       )}

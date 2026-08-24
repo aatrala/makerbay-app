@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { logout, type DashboardModule, type Me } from '@makerbay/web-kit'
+import { api, logout, type DashboardModule, type Me } from '@makerbay/web-kit'
 
 /**
  * The shell: one sidebar link per module (sub-pages render as tabs above the
@@ -46,8 +46,23 @@ export default function Shell({ me, modules, stripeMode }: {
 }) {
   const [open, setOpen] = useState(false)
   const [acctOpen, setAcctOpen] = useState(false)
+  const [waiting, setWaiting] = useState(0)
   const acctRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
+
+  // The bottom-nav badge: how many requests wait on the owner. Refreshed on
+  // navigation - a count a minute stale is fine; a red dot that lies is not.
+  const hasRequests = modules.some((m) => m.id === 'requests')
+  useEffect(() => {
+    if (!hasRequests) return
+    let stale = false
+    void api('GET', '/v1/requests')
+      .then((r) => {
+        if (!stale) setWaiting((r.counts?.new ?? 0) + (r.counts?.open ?? 0))
+      })
+      .catch(() => {})
+    return () => { stale = true }
+  }, [location.pathname, hasRequests])
 
   // Navigating on a phone should close the menu, not leave it covering the page.
   useEffect(() => { setOpen(false); setAcctOpen(false) }, [location.pathname])
@@ -140,6 +155,29 @@ export default function Shell({ me, modules, stripeMode }: {
         )}
         <Outlet />
       </main>
+
+      {/* Phone thumb-nav: the three screens a tradie opens between jobs, and
+          More for the rest. Hidden on wide screens by CSS. */}
+      <nav className="bottomnav" aria-label="Quick navigation">
+        <NavLink to="/requests" className="bn">
+          <Icon id="requests" />
+          <span>Requests</span>
+          {waiting > 0 && <span className="bnbadge">{waiting > 99 ? '99+' : waiting}</span>}
+        </NavLink>
+        <NavLink to="/booking/diary" className="bn">
+          <Icon id="booking" />
+          <span>Diary</span>
+        </NavLink>
+        <NavLink to="/quotes" className="bn">
+          <Icon id="quotes" />
+          <span>Quotes</span>
+        </NavLink>
+        <button type="button" className="bn" aria-expanded={open}
+          onClick={() => { setOpen(!open); window.scrollTo({ top: 0 }) }}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M4 12h16 M4 17h16" /></svg>
+          <span>More</span>
+        </button>
+      </nav>
     </div>
   )
 }

@@ -25,6 +25,12 @@ export type BookingStatus = 'confirmed' | 'cancelled' | 'completed' | 'noshow'
 export interface BookingRow {
   tenantId: string
   bookingId: string
+  /**
+   * A 'block' is owner-reserved time (school run, supplier visit) stored as a
+   * booking row so every free-slot and conflict check treats it as taken
+   * without knowing it exists. Absent means a real appointment.
+   */
+  kind?: 'block'
   contactId: string
   serviceId: string
   serviceName: string
@@ -155,5 +161,11 @@ export async function countBookingsThisMonth(tenantId: string): Promise<number> 
   const from = new Date(Date.now() - 86_400_000).toISOString()
   const to = new Date(Date.now() + 400 * 86_400_000).toISOString()
   const rows = await bookingsBetween(tenantId, from, to)
-  return rows.filter((b) => b.createdAt.startsWith(monthStart)).length
+  // Blocks are the owner's own time, not customers - they never count
+  // against the monthly booking cap.
+  return rows.filter((b) => !b.kind && b.createdAt.startsWith(monthStart)).length
+}
+
+export async function deleteBooking(tenantId: string, bookingId: string): Promise<void> {
+  await ddb.send(new DeleteCommand({ TableName: Tables.bookings(), Key: { tenantId, bookingId } }))
 }

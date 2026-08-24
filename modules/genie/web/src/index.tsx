@@ -3,6 +3,7 @@ import { Route } from 'react-router-dom'
 import { api, explain, Notice, type DashboardModule } from '@makerbay/web-kit'
 
 interface Msg { role: 'user' | 'assistant'; text: string }
+interface Pending { actionId: string; summary: string }
 
 /**
  * Genie: the owner's conversational view of the whole business. Chips are
@@ -32,6 +33,7 @@ function GeniePage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [remaining, setRemaining] = useState<number | null>(null)
+  const [pending, setPending] = useState<Pending | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,6 +57,7 @@ function GeniePage() {
       .then((r) => {
         setMessages((m) => [...m, { role: 'assistant', text: r.text }])
         setRemaining(r.remaining ?? null)
+        setPending(r.pendingAction ?? null)
         if (r.sessionId && r.sessionId !== sessionId) {
           setSessionId(r.sessionId)
           sessionStorage.setItem('mb.genieSession', r.sessionId)
@@ -62,6 +65,20 @@ function GeniePage() {
       })
       .catch((e) => setError(explain(e)))
       .finally(() => setBusy(false))
+  }
+
+  const decide = (confirm: boolean) => {
+    if (!pending || busy) return
+    setBusy(true); setError('')
+    void api('POST', `/v1/genie/actions/${pending.actionId}/${confirm ? 'confirm' : 'decline'}`, {})
+      .then((r) => {
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          text: confirm ? (r.receipt ?? 'Done.') : `Left alone: ${pending.summary}`,
+        }])
+      })
+      .catch((e) => setError(explain(e)))
+      .finally(() => { setPending(null); setBusy(false) })
   }
 
   const submit = (e: FormEvent) => { e.preventDefault(); ask(input) }
@@ -73,7 +90,8 @@ function GeniePage() {
       <p>
         Your whole business, asked out loud. Genie reads your real records — the diary, the
         inbox, the money, the reviews, the activity trail — and answers with the numbers.
-        <span className="meta"> Read-only for now: acting on things ships next, behind your explicit confirmation.</span>
+        <span className="meta"> It can also send quotes and invoices, manage bookings and block out
+        time — every action behind a card only you can confirm.</span>
       </p>
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
@@ -88,6 +106,16 @@ function GeniePage() {
           {messages.map((m, i) => (
             <div key={i} className={`gmsg ${m.role}`}>{m.text}</div>
           ))}
+          {pending && !busy && (
+            <div className="gaction">
+              <p className="gaction-summary">{pending.summary}</p>
+              <div className="row">
+                <button type="button" onClick={() => decide(true)}>Confirm</button>
+                <button type="button" className="ghost" onClick={() => decide(false)}>Not now</button>
+              </div>
+              <p className="meta">Nothing happens until you confirm. The card expires in 10 minutes.</p>
+            </div>
+          )}
           {busy && <div className="gmsg assistant thinking">Checking your records…</div>}
         </div>
 

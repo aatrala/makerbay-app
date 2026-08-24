@@ -322,6 +322,32 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
   .facts { grid-template-columns: 1fr; gap: 2px 0; }
   .facts dd { margin-bottom: 8px; }
   .trunc { max-width: 22ch; }
+  /* Room for the thumb nav so the last card is never hidden behind it. */
+  .main { padding-bottom: 84px; }
+  .bottomnav { display: grid; }
+}
+
+/* ── Bottom thumb-nav (phones only; the media query reveals it) ──────── */
+.bottomnav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--sidebar); border-top: 1px solid #44403c;
+  padding: 4px 0 max(4px, env(safe-area-inset-bottom));
+}
+.bottomnav .bn {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 0 4px; color: var(--sidebar-text); font-size: 11px; line-height: 1;
+  background: none; border: none; border-radius: 0; cursor: pointer;
+}
+.bottomnav .bn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.bottomnav .bn:hover { text-decoration: none; color: #fff; }
+.bottomnav .bn.active { color: #fff; font-weight: 600; }
+.bnbadge {
+  position: absolute; top: 2px; right: calc(50% - 22px);
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--accent, #c2410c); color: #fff; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
 }
 
 /* ── Checklist (Your page, and any module with a setup path) ─────────── */
@@ -407,6 +433,9 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
 .gmsg.user { align-self: flex-end; background: var(--accent, #c2410c); color: #fff; border-bottom-right-radius: 4px; }
 .gmsg.assistant { align-self: flex-start; background: var(--bg, #faf9f7); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .gmsg.thinking { color: var(--muted); font-style: italic; }
+.gaction { align-self: flex-start; max-width: 88%; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--accent, #c2410c); background: var(--bg, #faf9f7); }
+.gaction-summary { margin: 0 0 10px; font-weight: 600; line-height: 1.45; }
+.gaction .meta { margin: 8px 0 0; }
 .genie-chips { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; flex-shrink: 0; scrollbar-width: none; }
 .genie-chips .chip {
   flex: none; border: 1px solid var(--line); background: #fff; color: var(--ink);

@@ -10,7 +10,7 @@ import {
   setTenantBilling,
   type CallerContext,
 } from '@makerbay/core'
-import { ANNUAL_PRICE_CENTS, isTestMode, METER_EVENT_NAME, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
+import { ANNUAL_PRICE_CENTS, GENIE_PRODUCT_KEY, isTestMode, METER_EVENT_NAME, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -197,6 +197,39 @@ async function proPrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
   return { base, metered, product }
 }
 
+/**
+ * Find or create the Genie product and its monthly base price. Genie is
+ * Trade plus the copilot, so a Genie subscription carries this base and the
+ * same metered assistant-messages price - one meter, one allowance,
+ * whichever tier.
+ */
+async function geniePrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
+  const plan = PLANS.genie
+  const baseLookup = `${GENIE_PRODUCT_KEY}-base`
+  const existing = await stripe.prices.list({ lookup_keys: [baseLookup], limit: 5 })
+  let base = existing.data.find((p) => p.lookup_key === baseLookup)
+
+  const products = await stripe.products.search({ query: `metadata['key']:'${GENIE_PRODUCT_KEY}'` })
+  let product = products.data[0]
+  if (!product) {
+    product = await stripe.products.create({
+      name: 'MakerBay Genie',
+      description: 'Everything in Trade, plus Genie: your business run from a conversation - 2,500 Genie messages a month, actions behind your confirmation.',
+      metadata: { key: GENIE_PRODUCT_KEY },
+    })
+  }
+  if (!base) {
+    base = await stripe.prices.create({
+      product: product.id,
+      currency: 'usd',
+      unit_amount: plan.monthlyPriceCents,
+      recurring: { interval: 'month' },
+      lookup_key: baseLookup,
+    })
+  }
+  return { base, product }
+}
+
 /** The annual base: two months free, no metered item (see ANNUAL_PRICE_CENTS). */
 async function annualPrice(
   stripe: Awaited<ReturnType<typeof stripeClient>>,
@@ -218,6 +251,7 @@ async function annualPrice(
 async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayProxyResultV2> {
   const body = JSON.parse(event.body ?? '{}')
   const interval: 'month' | 'year' = body.interval === 'year' ? 'year' : 'month'
+  const wantGenie = body.plan === 'genie'
   const stripe = await stripeClient()
   const { base, metered, product } = await proPrices(stripe)
 
@@ -233,10 +267,13 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
 
   // Annual carries the base alone: Stripe cannot mix a yearly base with
   // monthly metering, and the honest alternative to overage is a pause at
-  // the allowance, not a catch-up bill at renewal.
-  const lineItems = interval === 'year'
-    ? [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
-    : [{ price: base.id, quantity: 1 }, { price: metered.id }]
+  // the allowance, not a catch-up bill at renewal. Genie is month-to-month
+  // for now - it is new, and nobody should prepay a year of it.
+  const lineItems = wantGenie
+    ? [{ price: (await geniePrices(stripe)).base.id, quantity: 1 }, { price: metered.id }]
+    : interval === 'year'
+      ? [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
+      : [{ price: base.id, quantity: 1 }, { price: metered.id }]
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',

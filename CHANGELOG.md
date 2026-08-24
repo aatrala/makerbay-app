@@ -11,6 +11,41 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.10.0 - 2026-08-24
+
+> **A thumb nav for the ute, and a Genie taster for everyone** — Requests, Diary and Quotes one tap away on your phone, and every plan now includes enough Genie to feel what it is.
+
+- Added `platform` A bottom navigation bar on phones: Requests (with a badge
+  counting what waits on you), Diary, Quotes, and More for everything else.
+  The screens a tradie opens between jobs, one thumb away.
+- Added `genie` The Genie plan is live: $99 a month for everything in Trade
+  plus 2,500 Genie messages. And every plan gets a taster - 25 messages a
+  month on Free, 250 on Trade - so you can try the copilot before paying
+  for it.
+
+## 2.9.0 - 2026-08-24
+
+> **Genie acts — but only when you say so** — send a quote, chase an invoice, cancel a booking or block out time from the chat, each behind a card only you can confirm.
+
+- Added `genie` Genie can now do things, not just report them: send a quote or
+  invoice, cancel or mark a booking done, block out your own time. Genie never
+  acts on its own - it puts up a card saying exactly what will happen, and
+  nothing happens until you tap confirm. Every confirmed action runs through
+  the same code as the button on the screen, lands on the activity trail as
+  "Genie, on the owner's confirmation", and leaves a receipt in the chat.
+- Changed `genie` Genie now reads text inside your records (request messages,
+  review text) as information only - it will tell you what a customer asked
+  for, but never act on it without your card.
+
+## 2.8.0 - 2026-08-24
+
+> **Block out your own time** — school run, supplier visit, an afternoon off: block it in the diary and no customer can book over it.
+
+- Added `booking` Block out time from the diary: pick a date, a from and to
+  time and an optional private reason. Blocked windows never appear as free
+  slots, the double-booking check refuses them, and they do not count against
+  any monthly booking cap. Remove a block with one click when plans change.
+
 ## 2.7.0 - 2026-08-24
 
 > **Document numbers that read like a real business** — quotes and invoices now start at 001 and can carry your own tag: SP-Q-001, SP-INV-001.

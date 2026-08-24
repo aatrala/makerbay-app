@@ -22,6 +22,8 @@ interface Service {
 
 interface Booking {
   bookingId: string
+  /** 'block' rows are the owner's own reserved time, not a customer. */
+  kind?: 'block'
   contactId: string
   serviceName: string
   startsAt: string
@@ -50,6 +52,8 @@ function Diary() {
   const [timezone, setTimezone] = useState('UTC')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [block, setBlock] = useState({ date: '', from: '', to: '', reason: '' })
+  const [blockOpen, setBlockOpen] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -70,11 +74,31 @@ function Diary() {
     })()
   }
 
+  const addBlock = (e: FormEvent) => {
+    e.preventDefault()
+    void (async () => {
+      setBusy(true); setError('')
+      try {
+        await api('POST', '/v1/booking/blocks', block)
+        setBlock({ date: '', from: '', to: '', reason: '' }); setBlockOpen(false)
+        await load()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+  }
+
+  const removeBlock = (id: string) => {
+    void (async () => {
+      setBusy(true); setError('')
+      try { await api('DELETE', `/v1/booking/blocks/${id}`); await load() }
+      catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+  }
+
   const upcoming = (bookings ?? []).filter(
     (b) => b.status === 'confirmed' && new Date(b.startsAt).getTime() > Date.now(),
   )
   const past = (bookings ?? []).filter(
-    (b) => b.status !== 'confirmed' || new Date(b.startsAt).getTime() <= Date.now(),
+    (b) => b.kind !== 'block' && (b.status !== 'confirmed' || new Date(b.startsAt).getTime() <= Date.now()),
   )
 
   const table = (rows: Booking[], showActions: boolean) => (
@@ -84,7 +108,19 @@ function Diary() {
           <tr><th>When</th><th>Who</th><th>What</th><th>Status</th>{showActions && <th><span className="visually-hidden">Actions</span></th>}</tr>
         </thead>
         <tbody>
-          {rows.map((b) => (
+          {rows.map((b) => b.kind === 'block' ? (
+            <tr key={b.bookingId}>
+              <td className="nowrap">{dt(b.startsAt, timezone)} – {new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(b.endsAt))}</td>
+              <td><span className="meta">your time</span></td>
+              <td>{b.serviceName}</td>
+              <td><span className="chip awaiting_upload">blocked</span></td>
+              {showActions && (
+                <td className="nowrap">
+                  <button className="ghost" disabled={busy} onClick={() => removeBlock(b.bookingId)}>Remove</button>
+                </td>
+              )}
+            </tr>
+          ) : (
             <tr key={b.bookingId}>
               <td className="nowrap">{dt(b.startsAt, timezone)}</td>
               <td>
@@ -122,7 +158,40 @@ function Diary() {
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
       <div className="card">
-        <h2>Coming up</h2>
+        <div className="row">
+          <h2 className="grow">Coming up</h2>
+          <button className="ghost" onClick={() => setBlockOpen(!blockOpen)}>
+            {blockOpen ? 'Close' : 'Block out time'}
+          </button>
+        </div>
+        {blockOpen && (
+          <form onSubmit={addBlock} className="mt">
+            <div className="row">
+              <div>
+                <label htmlFor="blk-date">Date</label>
+                <input id="blk-date" type="date" required value={block.date}
+                  onChange={(e) => setBlock({ ...block, date: e.target.value })} />
+              </div>
+              <div>
+                <label htmlFor="blk-from">From</label>
+                <input id="blk-from" type="time" required value={block.from}
+                  onChange={(e) => setBlock({ ...block, from: e.target.value })} />
+              </div>
+              <div>
+                <label htmlFor="blk-to">To</label>
+                <input id="blk-to" type="time" required value={block.to}
+                  onChange={(e) => setBlock({ ...block, to: e.target.value })} />
+              </div>
+              <div className="grow">
+                <label htmlFor="blk-reason">Reason (only you see it)</label>
+                <input id="blk-reason" value={block.reason} placeholder="School run"
+                  onChange={(e) => setBlock({ ...block, reason: e.target.value })} />
+              </div>
+              <button disabled={busy}>Block</button>
+            </div>
+            <p className="meta">Customers cannot book over blocked time. Times are in {timezone.replace('_', ' ')}.</p>
+          </form>
+        )}
         {!bookings ? <Skeleton rows={4} /> : upcoming.length === 0 ? (
           <Empty title="Nothing booked yet"
             action={<Link className="btn" to="/booking/services">Set up what you offer</Link>}>

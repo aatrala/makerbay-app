@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 import type Stripe from 'stripe'
 import { emitEvent, putStripeGrant, setModuleEntitlement, setTenantBilling } from '@makerbay/core'
-import { FREE_MODULE_BASELINES, PLANS, stripeClient, TRADE_BUNDLE, webhookSecret } from './stripe-client'
+import { FREE_MODULE_BASELINES, GENIE_ALLOWANCES, GENIE_PRODUCT_KEY, PLANS, stripeClient, TRADE_BUNDLE, webhookSecret } from './stripe-client'
 
 /**
  * Stripe subscription lifecycle. The request is authenticated by its
@@ -35,9 +35,13 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           console.warn('subscription without tenantId', sub.id)
           break
         }
-        // Only an active or trialing subscription grants Trade.
+        // Only an active or trialing subscription grants a paid tier. The
+        // Genie base price's lookup key marks the higher tier.
         const entitled = ['active', 'trialing'].includes(sub.status)
-        const plan = entitled ? PLANS.pro : PLANS.free
+        const isGenie = sub.items?.data.some((i) =>
+          i.price?.lookup_key?.startsWith(GENIE_PRODUCT_KEY),
+        ) ?? false
+        const plan = entitled ? (isGenie ? PLANS.genie : PLANS.pro) : PLANS.free
         const item = sub.items?.data.find((i) => i.price?.recurring?.usage_type === 'metered')
         // Annual subscriptions carry no metered item: the assistant pauses at
         // the included allowance instead of billing overage (no catch-up
@@ -81,9 +85,22 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           // Free modules (presence) need no on-switch - the grant alone
           // carries the pro tier that opens their paid extras.
         }
+        // The genie module rides the Genie tier. Its entitlement row flips
+        // with the subscription; below the tier the module handler falls
+        // back to the taster allowance on its own.
+        if (isGenie) {
+          await setModuleEntitlement(tenantId, 'genie', {
+            enabled: entitled,
+            plan: plan.id,
+            limits: { genieMessagesPerMonth: GENIE_ALLOWANCES.genie },
+          })
+        }
         const grantTargets = [
           { moduleId: 'assistant', limits: assistantLimits },
           ...TRADE_BUNDLE,
+          ...(isGenie
+            ? [{ moduleId: 'genie', limits: { genieMessagesPerMonth: GENIE_ALLOWANCES.genie } }]
+            : []),
         ]
         for (const g of grantTargets) {
           try {

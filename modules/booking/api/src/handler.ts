@@ -28,6 +28,7 @@ import {
   blocking,
   bookingsBetween,
   countBookingsThisMonth,
+  deleteBooking,
   deleteService,
   findByCancelToken,
   getBooking,
@@ -41,7 +42,7 @@ import {
   type BookingStatus,
   type ServiceRow,
 } from './db'
-import { displayTime, openDates, slotStillFree, slotsFor } from './slots'
+import { displayTime, openDates, slotStillFree, slotsFor, zoned } from './slots'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -87,6 +88,10 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
 
     const bk = path.match(/^\/v1\/booking\/bookings\/([0-9A-Z]{26})$/)
     if (method === 'PATCH' && bk) return await patchBooking(tenantId, bk[1], event)
+
+    if (method === 'POST' && path === '/v1/booking/blocks') return await createBlock(tenantId, event)
+    const blk = path.match(/^\/v1\/booking\/blocks\/([0-9A-Z]{26})$/)
+    if (method === 'DELETE' && blk) return await removeBlock(tenantId, blk[1])
 
     return json(404, { error: 'not_found' })
   } catch (err) {
@@ -515,6 +520,9 @@ async function patchBooking(tenantId: string, bookingId: string, event: Event): 
   const b = body(event)
   const existing = await getBooking(tenantId, bookingId)
   if (!existing) return json(404, { error: 'not_found' })
+  if (existing.kind === 'block') {
+    return json(409, { error: 'is_block', message: 'A blocked-out time has no status - remove it instead.' })
+  }
   const status = STATUSES.includes(b.status as BookingStatus) ? (b.status as BookingStatus) : undefined
   if (!status) return json(400, { error: 'unknown_status' })
 
@@ -560,6 +568,54 @@ async function patchBooking(tenantId: string, bookingId: string, event: Event): 
     })
   }
   return json(200, { booking: row })
+}
+
+/**
+ * Owner-reserved time. The block is a booking row, so slot offers and the
+ * write-time conflict check refuse the window with no extra code paths.
+ * Times arrive as wall-clock in the business timezone, like opening hours.
+ */
+async function createBlock(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
+  const b = body(event)
+  const date = String(b.date ?? '')
+  const from = String(b.from ?? '')
+  const to = String(b.to ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(from) || !/^\d{2}:\d{2}$/.test(to)) {
+    return json(400, { error: 'bad_time', message: 'Give a date and a from/to time, like 13:00 to 15:00.' })
+  }
+
+  const config = await getBookingConfig(tenantId)
+  const startsAt = zoned(date, from, config.timezone)
+  const endsAt = zoned(date, to, config.timezone)
+  if (endsAt.getTime() <= startsAt.getTime()) {
+    return json(400, { error: 'bad_time', message: 'The end time has to be after the start.' })
+  }
+
+  const now = new Date().toISOString()
+  const row: BookingRow = {
+    tenantId,
+    bookingId: ulid(),
+    kind: 'block',
+    contactId: '',
+    serviceId: '',
+    serviceName: b.reason ? String(b.reason).slice(0, 80) : 'Blocked out',
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    status: 'confirmed',
+    cancelToken: linkToken(),
+    source: 'dashboard',
+    createdAt: now,
+    updatedAt: now,
+  }
+  await putBooking(row)
+  return json(201, { block: row })
+}
+
+async function removeBlock(tenantId: string, bookingId: string): Promise<APIGatewayProxyResultV2> {
+  const existing = await getBooking(tenantId, bookingId)
+  if (!existing || existing.kind !== 'block') return json(404, { error: 'not_found' })
+  await deleteBooking(tenantId, bookingId)
+  return json(200, { deleted: bookingId })
 }
 
 async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {

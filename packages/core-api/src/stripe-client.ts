@@ -99,7 +99,23 @@ export const PLANS: Record<string, PlanDefinition> = {
     overageCentsPerMessage: 2,
     limits: { messagesPerMonth: 100000, sources: 500, sourceBytes: 2 * 1024 * 1024 * 1024 },
   },
+  genie: {
+    id: 'genie',
+    name: 'Genie',
+    monthlyPriceCents: 9900,
+    includedMessages: 2000,
+    overageCentsPerMessage: 2,
+    limits: { messagesPerMonth: 100000, sources: 500, sourceBytes: 2 * 1024 * 1024 * 1024 },
+  },
 }
+
+/**
+ * Genie message allowances by tier. Every tier gets a taste - enough to
+ * feel what a business copilot is, small enough that living with it means
+ * upgrading. The genie module handler applies the taster caps at runtime;
+ * only the Genie tier writes a grant.
+ */
+export const GENIE_ALLOWANCES = { free: 25, pro: 250, genie: 2500 } as const
 
 /** Annual: two months free, and no metered overage - the plan pauses at the
  * allowance instead (Stripe cannot mix a yearly base with monthly metering,
@@ -126,5 +142,6 @@ export const FREE_MODULE_BASELINES: Record<string, Record<string, number>> = {
 }
 
 export const PRO_PRODUCT_KEY = 'makerbay-assistant-pro'
+export const GENIE_PRODUCT_KEY = 'makerbay-genie'
 /** Billing Meter event name. Metered prices must be backed by a meter. */
 export const METER_EVENT_NAME = 'makerbay_assistant_messages'
