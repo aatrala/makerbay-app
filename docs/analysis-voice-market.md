@@ -752,3 +752,85 @@ not because a specific AI law compels it.**
   without EU customers; the Art 50(2) requirement to machine-readably mark
   synthetic audio is unsolved at 8kHz telephony and is a reason not to sell into
   the EU at all.
+
+---
+
+# Part 6 — The Australian market, and the one gap worth remembering
+
+Recorded for whenever this is revisited. It does not change the Part 4
+deferral; it sharpens what would have to be true to reverse it.
+
+## 36. Australia is already crowded
+
+At least a dozen AU-serving AI receptionist vendors have public pricing:
+Sophiie ($99–819/mo, self-reporting **1,600+ businesses and 750,000+ calls**),
+AiDial ($149–449), Valory ($149–1,299 plus **$990 setup**), Skedy ($250–1,250
+ex GST), ai-reception.au ($299–1,299 inc GST), OneBookPlus ($104 effective),
+Aussie Business AI ($199–399), Never Miss a Call (from $250).
+
+Two structural notes:
+
+- **The human incumbents are fewer than they look.** OfficeHQ, Virtual
+  Headquarters and Virtual Reception publish an *identical* plan ladder at
+  identical price points with identical product names. Almost certainly one
+  operator behind several brands — inferred from price identity, not verified
+  against a registry.
+- **The incumbent has already responded.** OfficeHQ has shipped a hybrid AI
+  product that escalates to its own human receptionists, which is the natural
+  incumbent defence. It has not published a price for it.
+
+Human answering anchors at **$25–49/month plus $2.45–3.99 per call**; AI entry
+sits at **$79–299/month**. The crossover is roughly **20–40 calls a month**.
+
+## 37. The gap, stated by a competitor about itself
+
+Skedy — the most explicitly tradie-focused AU vendor — says this in its own FAQ:
+
+> *"Does Skedy book jobs or generate quotes? **Not today.** Skedy answers calls,
+> captures booking or quote requests, forwards urgent calls, and hands the
+> details to your team so a person can follow up."*
+
+That is the gap, admitted by the vendor best placed to close it. **They take a
+message; they do not book.** Booking needs a real diary with real availability,
+which is the thing we already have and they do not.
+
+It does not reverse the deferral — a booking that arrives 1.5 seconds late is
+still a booking the caller hung up on. But **if the latency picture changes,
+this is the wedge**, and it is worth re-checking rather than re-deriving.
+
+## 38. A vendor being honest, which is rare enough to note
+
+Skedy's FAQ also says, about the statistic its entire category runs on:
+
+> *"There's no reliable Australian figure, and a precise '1 in 3' isn't
+> something anyone can source... The honest answer is to do the maths on your
+> own job value rather than trust a headline figure."*
+
+A vendor arguing against its own marketing interest is the most credible source
+encountered across six analyses of this market. It also independently confirms
+Part 4 §24: **the missed-call statistics everyone quotes do not exist.**
+
+## 39. The demographic is moving our way
+
+ABS, released 18 August 2026: **2,814,778 actively trading businesses** in
+Australia. **Non-employing businesses grew 4.8% in 2025-26** — the fastest of
+any size band, with a net 28,127 businesses moving *from* employing *to*
+non-employing. Construction business count grew 3.4%.
+
+The sole operator with nobody to answer the phone is the fastest-growing
+business category in the country. Directional, not sized — the absolute
+construction and non-employing counts are in data cubes that were not retrieved,
+so this does not support a TAM figure.
+
+## 40. What would have to change to revisit voice
+
+Written down so the answer is evidence rather than enthusiasm:
+
+1. **Real-call median latency under 1,200ms** on a platform we could actually
+   use. Today the best measured is 1,296ms.
+2. **Consumer sentiment stabilising or reversing.** Every measure moved against
+   AI phone agents over the six months to April 2026.
+3. **Rungs 1 and 2 selling.** If missed-call rescue does not sell, conversation
+   will not either — and that is a cheap test rather than an assumption.
+
+Until all three, missed-call rescue is the product.
