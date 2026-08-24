@@ -11,6 +11,24 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.14.0 - 2026-08-25
+
+> **One page, several addresses — and a real browser behind the crawler** — extra addresses forward to your page, and JavaScript-built websites can finally be read into your knowledge base.
+
+- Added `presence` Extra public addresses on paid plans: 3 in total on
+  Trade, 5 on Genie. Each extra address 301-forwards to your main page -
+  forwarding, never duplicating, so your page's search standing stays in
+  one place. Managed under Your page → Your address; availability checks,
+  the workspace picker and address changes all respect them.
+- Fixed `assistant` Websites that draw their pages with JavaScript can now
+  be added as knowledge: when a page's HTML comes back empty, a real
+  headless browser runs the page and reads what it renders - after the
+  existing markdown-twin and framework-data rescues. Pages that genuinely
+  have no text still say so honestly.
+- Fixed `platform` Error messages across the dashboard now show the
+  server's actual explanation ("this page builds its content with
+  JavaScript...") instead of a generic "could not be read".
+
 ## 2.13.0 - 2026-08-24
 
 > **Genie for every workspace, and chips that know your business** — the copilot now shows up on every plan, quick questions adapt to what you actually run, and the help centre gets its own tab.

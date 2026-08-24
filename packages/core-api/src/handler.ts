@@ -5,17 +5,21 @@ import {
   recordAudit,
   freeModuleLimits,
   freeModules,
+  claimSlugAlias,
   createTenant,
   deleteApiKey,
   generateApiKey,
   getEntitlements,
   getMonthUsage,
+  getSlugAlias,
   getTenant,
   getTenantBySlug,
   getUser,
   isValidSlug,
   listGrants,
+  listSlugAliases,
   listApiKeys,
+  releaseSlugAlias,
   putApiKey,
   MODULES,
   PLATFORM_VERSION,
@@ -84,6 +88,10 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && enableMatch) return await enableModule(ctx, enableMatch[1])
     if (method === 'GET' && path === '/v1/core/workspace/slug') return await checkSlug(event)
     if (method === 'PATCH' && path === '/v1/core/workspace') return await patchWorkspace(ctx, event)
+    if (method === 'GET' && path === '/v1/core/workspace/aliases') return await getAliases(ctx)
+    if (method === 'POST' && path === '/v1/core/workspace/aliases') return await addAlias(ctx, event)
+    const aliasDel = path.match(/^\/v1\/core\/workspace\/aliases\/([a-z0-9-]{3,40})$/)
+    if (method === 'DELETE' && aliasDel) return await removeAlias(ctx, aliasDel[1])
     if (method === 'GET' && path === '/v1/core/activity') return await activity(ctx, event)
     if (method === 'GET' && path === '/v1/core/usage') return await usage(ctx)
     if (method === 'GET' && path === '/v1/core/version') {
@@ -151,7 +159,7 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
 async function pickSlug(name: string): Promise<string> {
   for (const candidate of slugCandidates(name)) {
     if (!isValidSlug(candidate)) continue
-    if (!(await getTenantBySlug(candidate))) return candidate
+    if (!(await getTenantBySlug(candidate)) && !(await getSlugAlias(candidate))) return candidate
   }
   return `w-${ulid().slice(-8).toLowerCase()}`
 }
@@ -166,8 +174,119 @@ async function checkSlug(event: Event): Promise<APIGatewayProxyResultV2> {
       message: 'Use 3-40 lowercase letters, numbers and single hyphens. Some names are reserved.',
     })
   }
-  const taken = await getTenantBySlug(slug)
+  const taken = (await getTenantBySlug(slug)) ?? (await getSlugAlias(slug))
   return json(200, { slug, available: !taken, reason: taken ? 'taken' : undefined })
+}
+
+/**
+ * How many public addresses a workspace may hold in total, primary included.
+ * Free stays at one; Trade carries three; the Genie tier five. Extra
+ * addresses 301 to the primary - a rebrand or the short name on the van
+ * keeps working without splitting the page's search standing.
+ */
+async function aliasAllowance(tenantId: string): Promise<number> {
+  const [grants, entitlements] = await Promise.all([
+    listGrants(tenantId),
+    getEntitlements(tenantId),
+  ])
+  const now = new Date().toISOString()
+  const live = grants.filter((g) => g.status === 'active' && (!g.expiresAt || g.expiresAt > now))
+  const genieTier =
+    entitlements.modules.genie?.enabled === true ||
+    live.some((g) => g.moduleId === 'genie')
+  if (genieTier) return 5
+  const trade =
+    entitlements.modules.assistant?.plan === 'pro' ||
+    live.some((g) => g.moduleId === 'assistant' && g.planTier === 'pro')
+  return trade ? 3 : 1
+}
+
+async function getAliases(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {
+  const tenantId = await requireOwner(ctx)
+  if (!tenantId) return json(403, { error: 'owner_required' })
+  const [aliases, max] = await Promise.all([listSlugAliases(tenantId), aliasAllowance(tenantId)])
+  return json(200, {
+    aliases: aliases.map((a) => ({ slug: a.slug, createdAt: a.createdAt })),
+    // The primary slug occupies one of the total.
+    max: Math.max(0, max - 1),
+  })
+}
+
+async function addAlias(ctx: CallerContext, event: Event): Promise<APIGatewayProxyResultV2> {
+  const tenantId = await requireOwner(ctx)
+  if (!tenantId) return json(403, { error: 'owner_required' })
+  const body = JSON.parse(event.body ?? '{}')
+  const slug = String(body.slug ?? '').trim().toLowerCase()
+  if (!isValidSlug(slug)) {
+    return json(400, {
+      error: 'invalid_slug',
+      message: 'Use 3-40 lowercase letters, numbers and single hyphens. Some names are reserved.',
+    })
+  }
+
+  const [aliases, max, tenant] = await Promise.all([
+    listSlugAliases(tenantId),
+    aliasAllowance(tenantId),
+    getTenant(tenantId),
+  ])
+  if (max <= 1) {
+    return json(402, {
+      error: 'plan_required',
+      message: 'Extra addresses come with the Trade plan (3 in total) and Genie (5). Your current address keeps working.',
+    })
+  }
+  if (aliases.length >= max - 1) {
+    return json(409, {
+      error: 'limit_reached',
+      message: `Your plan carries ${max} addresses in total. Remove one to add another.`,
+    })
+  }
+  if (tenant?.slug === slug) {
+    return json(409, { error: 'is_primary', message: 'That is already your main address.' })
+  }
+  if (await getTenantBySlug(slug)) {
+    return json(409, { error: 'slug_taken', message: 'That address is already in use.' })
+  }
+
+  try {
+    await claimSlugAlias(slug, tenantId)
+  } catch (err) {
+    if ((err as { name?: string }).name === 'ConditionalCheckFailedException') {
+      return json(409, { error: 'slug_taken', message: 'That address is already in use.' })
+    }
+    throw err
+  }
+  await recordAudit({
+    tenantId,
+    actor: { type: 'user', id: ctx.userId ?? '', label: ctx.email || undefined },
+    origin: 'ui',
+    action: 'workspace.alias_added',
+    moduleId: 'platform',
+    summary: `Extra address makerbay.app/p/${slug} added - it forwards to /p/${tenant?.slug}`,
+  })
+  return json(201, { slug })
+}
+
+async function removeAlias(ctx: CallerContext, slug: string): Promise<APIGatewayProxyResultV2> {
+  const tenantId = await requireOwner(ctx)
+  if (!tenantId) return json(403, { error: 'owner_required' })
+  try {
+    await releaseSlugAlias(slug, tenantId)
+  } catch (err) {
+    if ((err as { name?: string }).name === 'ConditionalCheckFailedException') {
+      return json(404, { error: 'not_found' })
+    }
+    throw err
+  }
+  await recordAudit({
+    tenantId,
+    actor: { type: 'user', id: ctx.userId ?? '', label: ctx.email || undefined },
+    origin: 'ui',
+    action: 'workspace.alias_removed',
+    moduleId: 'platform',
+    summary: `Extra address makerbay.app/p/${slug} removed - links to it stopped working`,
+  })
+  return json(200, { removed: slug })
 }
 
 async function patchWorkspace(ctx: CallerContext, event: Event): Promise<APIGatewayProxyResultV2> {
@@ -194,6 +313,15 @@ async function patchWorkspace(ctx: CallerContext, event: Event): Promise<APIGate
       const taken = await getTenantBySlug(slug)
       if (taken && taken.tenantId !== tenantId) {
         return json(409, { error: 'slug_taken', message: 'That address is already in use.' })
+      }
+      // An alias holds the name too - even this workspace's own (release it
+      // first rather than silently having primary and alias collide).
+      const alias = await getSlugAlias(slug)
+      if (alias && alias.tenantId !== tenantId) {
+        return json(409, { error: 'slug_taken', message: 'That address is already in use.' })
+      }
+      if (alias && alias.tenantId === tenantId) {
+        await releaseSlugAlias(slug, tenantId)
       }
       await updateTenantSlug(tenantId, slug)
       await recordAudit({

@@ -5,6 +5,7 @@ import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import {
   ddb,
   getEffectiveEntitlement,
+  getSlugAlias,
   getTenant,
   getTenantBySlug,
   getUser,
@@ -101,8 +102,26 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
   const slug = String(event.queryStringParameters?.slug ?? '').trim()
   if (!slug) return html(404, renderNotFound())
 
-  const tenant = await getTenantBySlug(slug)
-  if (!tenant) return html(404, renderNotFound())
+  let tenant = await getTenantBySlug(slug)
+  if (!tenant) {
+    // An extra address 301s to the primary - redirect, never serve, so two
+    // URLs never carry the same page and split its search standing.
+    const alias = await getSlugAlias(slug.toLowerCase())
+    if (alias) {
+      tenant = await getTenantBySlug((await getTenant(alias.tenantId))?.slug ?? '')
+      if (tenant) {
+        return {
+          statusCode: 301,
+          headers: {
+            location: `https://makerbay.app/p/${tenant.slug}`,
+            'cache-control': 'public, max-age=300',
+          },
+          body: '',
+        }
+      }
+    }
+    return html(404, renderNotFound())
+  }
 
   const config = await getPresenceConfig(tenant.tenantId)
   // Unpublished means 404, not a placeholder: a half-finished page indexed by

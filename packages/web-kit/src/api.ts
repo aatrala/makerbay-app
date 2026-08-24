@@ -83,7 +83,7 @@ async function refreshSession(): Promise<boolean> {
 // ── API ──────────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string) {
+  constructor(public status: number, public code: string, public detail?: string) {
     super(code)
   }
 }
@@ -102,7 +102,13 @@ export async function api(method: string, path: string, body?: unknown, retried 
   }
   if (r.status === 401) { logout(); throw new ApiError(401, 'unauthorized') }
   const data = await r.json().catch(() => ({}))
-  if (!r.ok) throw new ApiError(r.status, data.error ?? `http_${r.status}`)
+  if (!r.ok) {
+    throw new ApiError(
+      r.status,
+      data.error ?? `http_${r.status}`,
+      typeof data.message === 'string' && data.message ? data.message : undefined,
+    )
+  }
   return data
 }
 
@@ -193,6 +199,8 @@ export function explain(err: unknown, fallback = 'Something went wrong. Try agai
   const code = err instanceof ApiError ? err.code : err instanceof Error ? err.message : ''
   if (MESSAGES[code]) return MESSAGES[code]
   if (err instanceof ApiError && err.status >= 500) return 'Our side had a problem with that. Try again in a moment.'
+  // The server took the trouble to write a human sentence - show it.
+  if (err instanceof ApiError && err.detail) return err.detail
   // An unmapped code is still better than nothing, but never show a bare slug.
   return code && !/^(http_\d+|[a-z_]+)$/.test(code) ? code : fallback
 }

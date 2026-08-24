@@ -1,5 +1,8 @@
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
+import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda'
+
+const lambda = new LambdaClient({})
 
 /**
  * Fetch a page the user has pointed us at and reduce it to readable text.
@@ -46,7 +49,7 @@ function isPrivateAddress(ip: string): boolean {
   return false
 }
 
-async function assertPublicUrl(raw: string): Promise<URL> {
+export async function assertPublicUrl(raw: string): Promise<URL> {
   let url: URL
   try {
     url = new URL(raw)
@@ -258,13 +261,24 @@ export async function scrapePage(rawUrl: string): Promise<ScrapedPage> {
   }
 
   // The visible HTML is nearly empty - almost always a JavaScript-drawn page.
-  // Two honest rescues before giving up: a markdown twin, then Next.js data.
+  // Three honest rescues before giving up: a markdown twin, Next.js data,
+  // then a real headless browser.
   const md = await markdownFallback(finalUrl)
   if (md) return md
 
   const fromNextData = nextDataText(body)
   if (fromNextData.length >= 200) {
     return { url: finalUrl, title: title || finalUrl, text: fromNextData, charCount: fromNextData.length }
+  }
+
+  const rendered = await renderedFallback(finalUrl)
+  if (rendered && rendered.text.length >= 200) {
+    return {
+      url: finalUrl,
+      title: rendered.title || title || finalUrl,
+      text: rendered.text,
+      charCount: rendered.text.length,
+    }
   }
 
   return {
@@ -274,6 +288,30 @@ export async function scrapePage(rawUrl: string): Promise<ScrapedPage> {
     charCount: text.length,
     // Saying so beats storing an empty document silently.
     warning: 'looks_javascript_rendered',
+  }
+}
+
+/**
+ * Ask the Chromium worker to actually run the page. The worker re-validates
+ * the URL and refuses private addresses; a failed render just means the
+ * static verdict stands.
+ */
+async function renderedFallback(url: string): Promise<{ title: string; text: string } | undefined> {
+  const fnName = process.env.RENDER_FN_NAME
+  if (!fnName) return undefined
+  try {
+    const r = await lambda.send(
+      new InvokeCommand({ FunctionName: fnName, Payload: JSON.stringify({ url }) }),
+    )
+    const out = JSON.parse(Buffer.from(r.Payload ?? []).toString() || '{}') as {
+      html?: string
+      error?: string
+    }
+    if (!out.html) return undefined
+    return extractText(out.html)
+  } catch (err) {
+    console.warn('rendered fallback failed', { url, err: String(err) })
+    return undefined
   }
 }
 

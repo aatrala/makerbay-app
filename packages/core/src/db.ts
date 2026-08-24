@@ -55,6 +55,61 @@ export async function getTenantBySlug(slug: string): Promise<TenantRow | undefin
   return tenant
 }
 
+// ── Slug aliases ─────────────────────────────────────────────────────────
+// Extra public addresses that 301 to the primary slug. One row per alias,
+// keyed by the alias itself so claiming is a conditional put - the same
+// uniqueness guarantee the primary slug gets from its GSI.
+
+export interface SlugAliasRow {
+  slug: string
+  tenantId: string
+  createdAt: string
+}
+
+const aliasTable = () => process.env.TABLE_SLUGALIASES!
+
+export async function getSlugAlias(slug: string): Promise<SlugAliasRow | undefined> {
+  const r = await ddb.send(new GetCommand({ TableName: aliasTable(), Key: { slug } }))
+  return r.Item as SlugAliasRow | undefined
+}
+
+export async function listSlugAliases(tenantId: string): Promise<SlugAliasRow[]> {
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: aliasTable(),
+      IndexName: 'byTenant',
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+    }),
+  )
+  return (r.Items ?? []) as SlugAliasRow[]
+}
+
+/** Claims atomically; throws ConditionalCheckFailedException when taken. */
+export async function claimSlugAlias(slug: string, tenantId: string): Promise<SlugAliasRow> {
+  const row: SlugAliasRow = { slug, tenantId, createdAt: new Date().toISOString() }
+  await ddb.send(
+    new PutCommand({
+      TableName: aliasTable(),
+      Item: row,
+      ConditionExpression: 'attribute_not_exists(slug)',
+    }),
+  )
+  return row
+}
+
+export async function releaseSlugAlias(slug: string, tenantId: string): Promise<void> {
+  await ddb.send(
+    new DeleteCommand({
+      TableName: aliasTable(),
+      Key: { slug },
+      // Only the owner releases their alias - never someone else's.
+      ConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+    }),
+  )
+}
+
 /** The abuse kill switch. Staff-console only; every call is audited there. */
 export async function setTenantStatus(
   tenantId: string,

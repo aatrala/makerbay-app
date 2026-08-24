@@ -12,7 +12,7 @@ import * as kms from 'aws-cdk-lib/aws-kms'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
 import * as ses from 'aws-cdk-lib/aws-ses'
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
+import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import * as route53 from 'aws-cdk-lib/aws-route53'
@@ -58,6 +58,14 @@ export class MakerbayStack extends cdk.Stack {
     tenants.addGlobalSecondaryIndex({
       indexName: 'bySlug',
       partitionKey: { name: 'slug', type: dynamodb.AttributeType.STRING },
+    })
+    // Extra public addresses that 301 to the primary slug. Redirect, never
+    // serve: two URLs carrying the same page would read as duplicate content
+    // to Google and hurt the local SEO the page exists for.
+    const slugAliases = table('SlugAliases', 'slug')
+    slugAliases.addGlobalSecondaryIndex({
+      indexName: 'byTenant',
+      partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
     })
     const users = table('Users', 'userId')
     const apiKeys = table('ApiKeys', 'tenantId', 'keyId')
@@ -397,6 +405,7 @@ export class MakerbayStack extends cdk.Stack {
 
     const tableEnv = {
       TABLE_TENANTS: tenants.tableName,
+      TABLE_SLUGALIASES: slugAliases.tableName,
       TABLE_USERS: users.tableName,
       TABLE_APIKEYS: apiKeys.tableName,
       TABLE_ENTITLEMENTS: entitlements.tableName,
@@ -612,6 +621,35 @@ export class MakerbayStack extends cdk.Stack {
       },
       { timeoutSeconds: 29, memorySize: 512 },
     )
+    // Headless Chromium for JavaScript-drawn pages. Its own function because
+    // the browser needs x86_64 (sparticuz ships no arm build), two gigabytes
+    // and a cold start no API function should pay. Invoked by the assistant
+    // only after every static extraction has come back empty.
+    const scrapeRenderFn = new NodejsFunction(this, 'ScrapeRenderFn', {
+      entry: path.join(repoRoot, 'modules/assistant/api/src/render-worker.ts'),
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.X86_64,
+      memorySize: 2048,
+      timeout: cdk.Duration.seconds(45),
+      // A dedicated two-package lockfile: bundling runs npm ci against it,
+      // and against the monorepo lock that would mean installing every
+      // workspace's dependencies into the staging directory.
+      projectRoot: repoRoot,
+      depsLockFilePath: path.join(repoRoot, 'modules/assistant/api/render-deps/package-lock.json'),
+      bundling: {
+        minify: false,
+        target: 'node22',
+        // sparticuz/chromium is ESM-only, so the bundle must be ESM too; the
+        // banner restores require() for the CommonJS packages it pulls in.
+        format: OutputFormat.ESM,
+        banner: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+        // The Chromium binary cannot be inlined by esbuild - ship the real
+        // packages in node_modules instead.
+        nodeModules: ['@sparticuz/chromium', 'puppeteer-core'],
+      },
+    })
+    assistantFn.addEnvironment('RENDER_FN_NAME', scrapeRenderFn.functionName)
+    scrapeRenderFn.grantInvoke(assistantFn)
     // Streaming chat. API Gateway cannot stream a response, so this runs
     // behind a Lambda Function URL in RESPONSE_STREAM mode and is fronted by
     // CloudFront so it still answers on our own domain.
@@ -742,7 +780,7 @@ export class MakerbayStack extends cdk.Stack {
     // ── Grants ───────────────────────────────────────────────────────────
     // tenants: the authorizer refuses suspended workspaces (the kill switch).
     for (const t of [tenants, users, apiKeys, entitlements, grants]) t.grantReadData(authorizerFn)
-    for (const t of [tenants, users, apiKeys, entitlements, grants, usage]) t.grantReadWriteData(coreFn)
+    for (const t of [tenants, users, apiKeys, entitlements, grants, usage, slugAliases]) t.grantReadWriteData(coreFn)
     bus.grantPutEventsTo(coreFn)
 
     for (const t of [contacts, contactEvents]) t.grantReadWriteData(contactsFn)
@@ -852,7 +890,7 @@ export class MakerbayStack extends cdk.Stack {
     bus.grantPutEventsTo(rescueProcessorFn)
     rescueProcessorFn.addToRolePolicy(sesSendPolicy)
     // Read-only views: presence renders what other modules own, never writes it.
-    for (const t of [bookingServices, bookingConfig, assistantConfig, reviews, visibilityConfig, quotesConfig, tenants, users, entitlements, grants]) {
+    for (const t of [bookingServices, bookingConfig, assistantConfig, reviews, visibilityConfig, quotesConfig, tenants, users, entitlements, grants, slugAliases]) {
       t.grantReadData(presenceFn)
     }
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)

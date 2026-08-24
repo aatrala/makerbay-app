@@ -1,0 +1,9 @@
+{
+  "name": "render-deps",
+  "private": true,
+  "description": "Lockfile scope for the ScrapeRenderFn bundle only - CDK's npm ci installs from here, not from the monorepo lock (which would pull every workspace's dependencies into the bundling temp).",
+  "dependencies": {
+    "@sparticuz/chromium": "^149.0.0",
+    "puppeteer-core": "^25.8.0"
+  }
+}

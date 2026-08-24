@@ -395,6 +395,95 @@ function AddressCard({ pageUrl, onChanged }: { pageUrl: string; onChanged: () =>
           </p>
         </form>
       )}
+      <AliasList primary={currentSlug} />
+    </div>
+  )
+}
+
+/**
+ * Extra addresses: each one 301-redirects to the primary, so an old trading
+ * name or the short name on the van keeps working without splitting the
+ * page's search standing across two URLs.
+ */
+function AliasList({ primary }: { primary: string }) {
+  const [aliases, setAliases] = useState<Array<{ slug: string }> | null>(null)
+  const [max, setMax] = useState(0)
+  const [input, setInput] = useState('')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api('GET', '/v1/core/workspace/aliases')
+      setAliases(r.aliases ?? []); setMax(r.max ?? 0)
+    } catch { setAliases([]) }
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const run = (fn: () => Promise<void>) =>
+    void (async () => {
+      setBusy(true); setError(''); setNote('')
+      try { await fn(); await load() } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  const add = (e: FormEvent) => {
+    e.preventDefault()
+    const slug = input.trim().toLowerCase()
+    if (!slug) return
+    run(async () => {
+      await api('POST', '/v1/core/workspace/aliases', { slug })
+      setInput('')
+      setNote(`makerbay.app/p/${slug} now forwards to your page.`)
+    })
+  }
+
+  if (!aliases) return null
+
+  return (
+    <div className="mt">
+      <h3>Extra addresses</h3>
+      <p className="meta">
+        Old trading name, a rebrand, the short name on the van - each extra address forwards
+        visitors to makerbay.app/p/{primary}.
+      </p>
+      {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      {aliases.map((a) => (
+        <div className="row mt" key={a.slug}>
+          <input className="grow" readOnly value={`makerbay.app/p/${a.slug}`}
+            onFocus={(e) => e.target.select()} aria-label={`Extra address ${a.slug}`} />
+          <button className="ghost" disabled={busy}
+            onClick={() => {
+              if (window.confirm(`Remove makerbay.app/p/${a.slug}? Links to it stop working.`)) {
+                run(async () => { await api('DELETE', `/v1/core/workspace/aliases/${a.slug}`) })
+              }
+            }}>
+            Remove
+          </button>
+        </div>
+      ))}
+
+      {max === 0 ? (
+        <p className="meta mt">
+          Extra addresses come with the Trade plan (3 in total) and Genie (5).{' '}
+          <Link to="/billing">See plans</Link>
+        </p>
+      ) : aliases.length >= max ? (
+        <p className="meta mt">All {max + 1} of your plan's addresses are in use.</p>
+      ) : (
+        <form onSubmit={add}>
+          <div className="row mt">
+            <span className="meta nowrap">makerbay.app/p/</span>
+            <input className="grow" value={input} placeholder="old-trading-name"
+              onChange={(e) => setInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+              maxLength={40} aria-label="New extra address" />
+            <button disabled={busy || !input.trim()}>{busy ? 'Adding…' : 'Add'}</button>
+          </div>
+          <p className="meta">{aliases.length} of {max} extra addresses used.</p>
+        </form>
+      )}
     </div>
   )
 }
