@@ -29,11 +29,17 @@ aws cognito-idp admin-create-user --user-pool-id <STAFF_POOL_ID> --username staf
    request, so a Cognito user without a row gets nothing:
 
 ```bash
-aws dynamodb put-item --table-name <STAFF_TABLE> --item '{"staffSub":{"S":"<sub from admin-create-user output>"},"email":{"S":"staff@example.com"},"role":{"S":"support"},"active":{"BOOL":true}}' --profile makerbay
+aws dynamodb put-item --table-name makerbay-staff --item '{"staffSub":{"S":"<sub from admin-create-user output>"},"email":{"S":"staff@example.com"},"role":{"S":"support"},"status":{"S":"active"},"createdAt":{"S":"<now ISO>"}}' --profile makerbay
 ```
 
-Off-boarding is the reverse order: flip `active` to false in the table first
-(takes effect on their next request), then disable the Cognito user.
+Off-boarding is the reverse order: set `status` to `disabled` in the table
+first (takes effect on their next request), then disable the Cognito user.
+
+Lost or expired temp password (the account exists but sign-in fails):
+
+```bash
+aws cognito-idp admin-create-user --user-pool-id us-east-1_KX5f3Cw0g --username staff@example.com --message-action RESEND --profile makerbay
+```
 
 Lost authenticator: there is no self-service path on purpose. Verify the
 person out-of-band, then:

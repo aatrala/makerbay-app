@@ -41,6 +41,88 @@ interface Detail {
 
 const DAYS = [7, 14, 30, 90, 365]
 
+/**
+ * Read-only assistant conversations for "the AI answered wrong" tickets.
+ * Loaded only on request and audited server-side on every view - reading
+ * customer conversations is not a casual browse.
+ */
+function ConversationViewer({ tenantId }: { tenantId: string }) {
+  const [sessions, setSessions] = useState<Array<{
+    sessionId: string; count: number; lastAt: string; preview: string; thumbsDown: number
+  }> | null>(null)
+  const [open, setOpen] = useState<{ sessionId: string; messages: Array<{ role: string; text: string; feedback: string | null }> } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadList = () => {
+    setBusy(true); setError('')
+    void adminApi('GET', `/admin/v1/tenants/${tenantId}/conversations`)
+      .then((r) => setSessions(r.sessions ?? []))
+      .catch((e) => setError(explainAdmin(e)))
+      .finally(() => setBusy(false))
+  }
+  const loadOne = (sessionId: string) => {
+    setBusy(true); setError('')
+    void adminApi('GET', `/admin/v1/tenants/${tenantId}/conversations?sessionId=${sessionId}`)
+      .then((r) => setOpen({ sessionId, messages: r.messages ?? [] }))
+      .catch((e) => setError(explainAdmin(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="card">
+      <h2>Assistant conversations</h2>
+      <p className="hint">
+        Read-only, for wrong-answer tickets. Thumbs-down sessions sort first. Every view is
+        written to the audit log.
+      </p>
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {!sessions ? (
+        <button className="ghost" onClick={loadList} disabled={busy}>
+          {busy ? 'Loading…' : 'Load recent conversations'}
+        </button>
+      ) : sessions.length === 0 ? (
+        <p className="meta">No conversations in the recent window.</p>
+      ) : (
+        <div className="scroll-x">
+          <table>
+            <thead><tr><th>Last activity</th><th>Messages</th><th>Preview</th><th /></tr></thead>
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s.sessionId}>
+                  <td className="nowrap">{s.lastAt ? when(s.lastAt) : '—'}</td>
+                  <td className="nowrap">
+                    {s.count}{s.thumbsDown > 0 && <span className="chip failed" style={{ marginLeft: 6 }}>{s.thumbsDown} 👎</span>}
+                  </td>
+                  <td className="meta trunc" style={{ maxWidth: 320 }}>{s.preview}</td>
+                  <td className="nowrap">
+                    <button className="ghost" disabled={busy} onClick={() => loadOne(s.sessionId)}>Read</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {open && (
+        <div className="mt">
+          <div className="row">
+            <h2 className="grow" style={{ fontSize: 14 }}>Session <code>{open.sessionId.slice(0, 12)}…</code></h2>
+            <button className="ghost" onClick={() => setOpen(null)}>Close</button>
+          </div>
+          {open.messages.map((m, i) => (
+            <p key={i} style={{ margin: '6px 0' }}>
+              <strong>{m.role === 'user' ? 'Customer' : 'Assistant'}:</strong>{' '}
+              {m.text}
+              {m.feedback === 'down' && <span className="chip failed" style={{ marginLeft: 6 }}>👎</span>}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TenantDetail() {
   const { tenantId = '' } = useParams()
   const [data, setData] = useState<Detail | null>(null)
@@ -330,6 +412,8 @@ export default function TenantDetail() {
           </div>
         </form>
       </div>
+
+      <ConversationViewer tenantId={tenantId} />
 
       <div className="card">
         <h2>Usage this month</h2>

@@ -708,6 +708,11 @@ export class MakerbayStack extends cdk.Stack {
       ...tableEnv,
       TABLE_STAFF: staffDirectory.tableName,
       TABLE_ADMINAUDIT: adminAudit.tableName,
+      // The tenant 360 and the conversation viewer read these; without the
+      // names in env the reads fail silently into "unknown".
+      TABLE_SOURCES: sources.tableName,
+      TABLE_PRESENCECONFIG: presenceConfig.tableName,
+      TABLE_CONVERSATIONS: conversations.tableName,
       STAFF_POOL_ID: staffPool.userPoolId,
       STAFF_CLIENT_ID: staffClient.userPoolClientId,
     }
@@ -962,8 +967,21 @@ export class MakerbayStack extends cdk.Stack {
     // Suspend/unsuspend writes the tenant status field - nothing else.
     tenants.grantWriteData(adminApiFn)
     staffDirectory.grantReadData(adminAuthorizerFn)
-    // PutItem only: this Lambda cannot rewrite or delete its own audit trail.
-    adminAudit.grant(adminApiFn, 'dynamodb:PutItem')
+    // PutItem plus Query only: the Lambda can append to and read its audit
+    // trail but never rewrite or delete it.
+    adminAudit.grant(adminApiFn, 'dynamodb:PutItem', 'dynamodb:Query')
+    // SES suppression list: the answer to "why do my emails not arrive" for
+    // one address, and the audited way off the list after a fixed bounce.
+    adminApiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'ses:GetSuppressedDestination',
+          'ses:ListSuppressedDestinations',
+          'ses:DeleteSuppressedDestination',
+        ],
+        resources: ['*'],
+      }),
+    )
 
     usage.grantReadWriteData(usageAggregatorFn)
 

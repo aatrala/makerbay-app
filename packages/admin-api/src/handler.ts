@@ -1,5 +1,10 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
-import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
+import {
+  DeleteSuppressedDestinationCommand,
+  GetSuppressedDestinationCommand,
+  SESv2Client,
+  SendEmailCommand,
+} from '@aws-sdk/client-sesv2'
 import {
   AdminResetUserPasswordCommand,
   CognitoIdentityProviderClient,
@@ -81,6 +86,15 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
 
     const susp = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/(suspend|unsuspend)$/)
     if (method === 'POST' && susp) return await setSuspension(staff, susp[1], susp[2] === 'suspend', event)
+
+    if (method === 'GET' && path === '/admin/v1/audit') return await auditLog(event)
+
+    if (method === 'GET' && path === '/admin/v1/email/suppression') return await suppressionLookup(staff, event)
+    const unsup = path.match(/^\/admin\/v1\/email\/suppression\/(.+)$/)
+    if (method === 'DELETE' && unsup) return await suppressionRemove(staff, decodeURIComponent(unsup[1]))
+
+    const convs = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/conversations$/)
+    if (method === 'GET' && convs) return await conversations(staff, convs[1], event)
 
     return json(404, { error: 'not_found' })
   } catch (err) {
@@ -311,6 +325,125 @@ async function resetPassword(staff: StaffContext, userId: string, event: Event):
   }
   await audit(staff, 'user.reset_password', '-', { userId, reason })
   return json(200, { reset: userId, note: 'Cognito emailed the user a reset code.' })
+}
+
+/** G8: the staff audit trail, one month per request, newest first. */
+async function auditLog(event: Event): Promise<APIGatewayProxyResultV2> {
+  const month = /^\d{4}-\d{2}$/.test(String(event.queryStringParameters?.month))
+    ? String(event.queryStringParameters?.month)
+    : new Date().toISOString().slice(0, 7)
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: process.env.TABLE_ADMINAUDIT!,
+      KeyConditionExpression: 'pk = :p',
+      ExpressionAttributeValues: { ':p': `AUDIT#${month}` },
+      ScanIndexForward: false,
+      Limit: 200,
+    }),
+  )
+  return json(200, {
+    month,
+    entries: (r.Items ?? []).map((e) => ({
+      ts: e.ts, staffEmail: e.staffEmail, action: e.action,
+      targetTenantId: e.targetTenantId, detail: e.detail, result: e.result,
+    })),
+  })
+}
+
+/**
+ * G5: is this address on the SES suppression list, and the audited way off
+ * it. A bounced address stays suppressed until removed - the single most
+ * common reason "my customer never got the email".
+ */
+async function suppressionLookup(staff: StaffContext, event: Event): Promise<APIGatewayProxyResultV2> {
+  const email = String(event.queryStringParameters?.email ?? '').trim().toLowerCase()
+  if (!email.includes('@')) return json(400, { error: 'email_required' })
+  try {
+    const r = await ses.send(new GetSuppressedDestinationCommand({ EmailAddress: email }))
+    await audit(staff, 'email.suppression_lookup', '-', { email, suppressed: true })
+    return json(200, {
+      email,
+      suppressed: true,
+      reason: r.SuppressedDestination?.Reason ?? null,
+      since: r.SuppressedDestination?.LastUpdateTime?.toISOString() ?? null,
+    })
+  } catch (err) {
+    if ((err as { name?: string }).name === 'NotFoundException') {
+      await audit(staff, 'email.suppression_lookup', '-', { email, suppressed: false })
+      return json(200, { email, suppressed: false })
+    }
+    throw err
+  }
+}
+
+async function suppressionRemove(staff: StaffContext, email: string): Promise<APIGatewayProxyResultV2> {
+  const addr = email.trim().toLowerCase()
+  if (!addr.includes('@')) return json(400, { error: 'email_required' })
+  try {
+    await ses.send(new DeleteSuppressedDestinationCommand({ EmailAddress: addr }))
+  } catch (err) {
+    if ((err as { name?: string }).name === 'NotFoundException') {
+      return json(404, { error: 'not_suppressed', message: 'That address is not on the suppression list.' })
+    }
+    throw err
+  }
+  await audit(staff, 'email.suppression_removed', '-', { email: addr })
+  return json(200, { removed: addr, note: 'If the mailbox bounces again it will be re-suppressed automatically.' })
+}
+
+/**
+ * G6: read-only conversation viewer for "the AI answered wrong" tickets.
+ * Reading customer conversations is sensitive, so every view is audited.
+ * View-as-tenant stays read-only through this API on purpose - real
+ * impersonation would break the pool-separation guarantee.
+ */
+async function conversations(staff: StaffContext, tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
+  const sessionId = String(event.queryStringParameters?.sessionId ?? '')
+  if (sessionId) {
+    const r = await ddb.send(
+      new QueryCommand({
+        TableName: process.env.TABLE_CONVERSATIONS!,
+        KeyConditionExpression: 'pk = :p',
+        ExpressionAttributeValues: { ':p': `${tenantId}#${sessionId}` },
+        Limit: 50,
+      }),
+    )
+    await audit(staff, 'conversations.view', tenantId, { sessionId })
+    return json(200, {
+      sessionId,
+      messages: (r.Items ?? []).map((m) => ({
+        role: m.role, text: m.text, ts: m.ts ?? m.createdAt ?? null, feedback: m.feedback ?? null,
+      })),
+    })
+  }
+
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: process.env.TABLE_CONVERSATIONS!,
+      IndexName: 'byTenant',
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+      ScanIndexForward: false,
+      Limit: 300,
+    }),
+  )
+  // Group the recent window into session summaries, thumbs-down first.
+  const sessions = new Map<string, { sessionId: string; count: number; lastAt: string; preview: string; thumbsDown: number }>()
+  for (const m of r.Items ?? []) {
+    const sid = String(m.pk ?? '').split('#')[1] ?? ''
+    if (!sid) continue
+    const s = sessions.get(sid) ?? { sessionId: sid, count: 0, lastAt: '', preview: '', thumbsDown: 0 }
+    s.count++
+    const ts = String(m.ts ?? m.createdAt ?? '')
+    if (ts > s.lastAt) { s.lastAt = ts; s.preview = String(m.text ?? '').slice(0, 120) }
+    if (m.feedback === 'down') s.thumbsDown++
+    sessions.set(sid, s)
+  }
+  await audit(staff, 'conversations.list', tenantId, {})
+  return json(200, {
+    sessions: [...sessions.values()].sort((a, b) =>
+      b.thumbsDown - a.thumbsDown || b.lastAt.localeCompare(a.lastAt)).slice(0, 40),
+  })
 }
 
 /**

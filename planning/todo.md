@@ -142,12 +142,34 @@ any accent a business chooses stays readable.
 "Book a time" button inside the card is white-on-red. (Hard-refresh if
 your browser cached the old stylesheet.)
 
+### 45 — Page structure: help/FAQ sub-pages, products, draggable components 💬
+Design discussion open. Three variants delivered (A one-page / B hub &
+sub-pages / C hybrid, recommended) - see the mockups sent 2026-08-25 and
+the discussion message. Premium packaging, versioning and FAQ content
+model proposed. **Waiting on your variant pick + answers before spec.**
+
+### 46 — Admin portal login + pending admin spec ✅
+Login: your staff account existed but the temp password was lost - a
+fresh one is in your inbox (from Cognito). Sign in at admin.makerbay.app
+→ set a real password → scan the TOTP QR. Admin P1 shipped the same day:
+SES suppression lookup/removal (Email page), read-only conversation
+viewer (workspace page, audited), staff audit log page, and scripted
+privacy export/delete (scripts/privacy-export.mjs / privacy-delete.mjs).
+Also fixed: the tenant 360's page/source fields were silently blank
+(missing env). **Test:** sign in → Workspaces → open one → "Load recent
+conversations"; Email → suppression check; Audit log nav item.
+
+### 47 — Captcha / spam protection for booking + assistant 💬
+Recommendation written (AWS WAF Bot Control + targeted CAPTCHA vs
+Turnstile); see discussion message. Waiting on your pick.
+
 ## Approved queue (on me)
 
-1. **Voice latency probe** — Stage 1 of spec-voice-live-agent.md (~1
-   week, <$100): Connect instance + DID + Nova 2 Sonic handler, real
-   recorded calls against the <1,200ms median gate. Next dedicated
-   session; you step in on AWS support blockers.
+1. **Voice latency probe** — IN PROGRESS (Stage 1 started 2026-08-25):
+   Connect instance `makerbay-voice-probe` ACTIVE, probe DID claimed
+   **+1 (414) 219-1295** (~$1.20/mo + usage). Next: contact flow + KVS
+   media streaming + Nova 2 Sonic bridge, then scripted dual-channel
+   test calls against the <1,200ms median / <900ms p95 gate.
 
 ## Awaiting your decision 💬
 

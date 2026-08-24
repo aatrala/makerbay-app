@@ -11,6 +11,18 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.15.0 - 2026-08-25
+
+> **The support console grows its second layer** — suppression lookups, a read-only conversation viewer, the staff audit log on screen, and scripted privacy export/delete.
+
+- Added `platform` Staff console P1: check and clear an address on the SES
+  suppression list (the usual answer to "my customer never got the email"),
+  read a workspace's assistant conversations read-only for wrong-answer
+  tickets (thumbs-down sessions first, every view audited), and browse the
+  append-only staff audit log by month. Privacy requests get scripted,
+  double-confirmed export and delete covering every table and the knowledge
+  store.
+
 ## 2.14.0 - 2026-08-25
 
 > **One page, several addresses — and a real browser behind the crawler** — extra addresses forward to your page, and JavaScript-built websites can finally be read into your knowledge base.

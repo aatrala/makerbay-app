@@ -5,6 +5,7 @@ import SignIn from './pages/SignIn'
 import Tenants from './pages/Tenants'
 import TenantDetail from './pages/TenantDetail'
 import Email from './pages/Email'
+import Audit from './pages/Audit'
 
 interface Whoami {
   staff: { staffEmail?: string; staffSub: string }
@@ -38,6 +39,7 @@ export default function App() {
             <div className="navlabel">Staff</div>
             <Link className={location.pathname === '/' ? 'active' : ''} to="/">Workspaces</Link>
             <Link className={location.pathname === '/email' ? 'active' : ''} to="/email">Email</Link>
+            <Link className={location.pathname === '/audit' ? 'active' : ''} to="/audit">Audit log</Link>
           </nav>
           <div className="spacer" />
           <div className="modebadge staff">STAFF CONSOLE</div>
@@ -53,6 +55,7 @@ export default function App() {
           <Route path="/" element={<Tenants />} />
           <Route path="/tenants/:tenantId" element={<TenantDetail />} />
           <Route path="/email" element={<Email staffEmail={who?.staff.staffEmail} />} />
+          <Route path="/audit" element={<Audit />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
