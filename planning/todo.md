@@ -1,91 +1,158 @@
-# MakerBay — Status Board
+# MakerBay — Issue Tracker & Status Board
 
-Updated 2026-08-24 (late evening). One line per item; details live in the
-specs and CHANGELOG. Issue numbers refer to the running issue stream.
+Location: `makerbay-app/planning/todo.md` (inside the app repo).
+Updated 2026-08-25. One section per issue with a manual test you can run.
+Issues 1-25 predate this tracker (earlier sessions); the numbered log
+below starts where the current stream picks up.
 
-## Latest batch (issues 38-42, v2.13.0)
+Legend: ✅ live and verified · 🔶 live, founder test welcome · ⏳ in
+progress · 💬 awaiting your decision · ⛔ blocked
 
-| # | Item | Status |
-|---|------|--------|
-| 38 | Genie visible in every account (taster merged into /me); dynamic module-aware chips in Genie; business-specific chips (top service, service areas) in the chat widget | Live |
-| 39 | Preview section: segmented Desktop/Phone switch, Refresh + Open aligned in one control group, phone bezel frame, responsive heights | Live |
-| 40 | Connect domain "not functioning" root-caused: the founder's personal workspace is on Free - the 402 Presence-Pro gate refused the PUT (no bug in the domain flow; nothing was created). Fixed twice: founder workspace seeded with a Presence Pro comp (scripts/seed-founder-grants.mjs), and the card now shows the plan requirement BEFORE typing instead of erroring after submit | Live |
-| 41 | Multiple slugs per workspace (3 on Trade / 5 on Genie, upsell on Free), 301-redirect design. Verified: /p/southside-plumbing 301s to /p/makerbay-demo | Live |
-| 43 | JS-rendered sites unreadable as knowledge. Fixed with a headless-Chromium render Lambda (fallback after static/markdown/Next-data rescues) + error messages now show the server's real reason. Verified on greenlightyourapp.com: 27 chars refused → 2153 chars ingested | Live |
-| 42 | Help centre not findable - it was buried at the bottom of Assistant → Behavior. Now its own "Help centre" tab in the Assistant nav | Live |
+## Issue log
 
-Founder workspace (Aatral Arasu, slug aatralarasu) now carries founder comps:
-presence pro + genie pro 2500, seeded 2026-08-24.
+### 26 — Assistant widget shows who you're chatting with ✅
+Business identity header (photo, name, open/closed label) + quick chips.
+**Test:** open chat.makerbay.app/?slug=makerbay-demo → header shows
+"Southside Plumbing" with photo; chips row under the greeting.
 
-## Shipped and verified
+### 27 — Sidebar redesign (Variant A) + phase 2 bottom nav ✅
+Grouped Work/Grow nav, icons, account popover, tabs above screens; on
+phones a bottom bar: Requests (badge), Diary, Quotes, More.
+**Test:** app.makerbay.app on desktop → 12-row sidebar; on your phone →
+bottom bar with a count badge on Requests.
 
-| # | Item | Status |
-|---|------|--------|
-| — | Contacts, Requests, Bookings, Quotes+Invoices, Reviews, Presence, Assistant (RAG chat + embed), Payments (Stripe Connect), Voice rescue (pending AWS enablement), Usage metering, Audit trail + Activity page | Live |
-| 26 | Assistant widget: business identity header + quick chips | Live |
-| 27 | Sidebar redesign Variant A + **phase 2 mobile bottom nav** (Requests badge / Diary / Quotes / More) | Live |
-| 28 | App version in app + marketing site, linking to changelog | Live |
-| 29 | Edit page URL slug inline on Your page | Live |
-| 30 | Help centre redesign + **owner article curation** (edit title/description/category per article, Rewrite with AI) | Live |
-| 31 | Marketing screenshots consistent theming | Live |
-| 32 | Booking form layout in chat widget (CSS leak) | Fixed |
-| 33 | Share page + QR codes | Live |
-| 34 | Connect-domain flow fixes, proven on demo.makerbay.app | Fixed |
-| 35 | Test-mode billing badge | Live |
-| 36 | Genie v1 read-only + /me grant merge | Live |
-| 37 | Documents start at 001 + configurable prefix (SP-Q-001). Verified live: existing numbers untouched, new quote = SP-Q-005, public pages serve labels | Live |
-| — | **Busy blocks**: block out owner time from the diary; slots refuse it, cap ignores it. Verified live (13:00-15:00 block removed exactly those slots) | Live |
-| — | **Genie phase 2 writes**: send quote/invoice, cancel/complete booking, block time — server-held confirmation cards, executed via module APIs with the owner's own token, receipts + audit trail. Verified e2e (propose → confirm → diary; replay refused) | Live |
-| — | **Genie plan commercialized**: $99/mo Stripe product (Trade bundle + 2500 Genie msgs), taster allowances 25 free / 250 Trade applied at runtime, Billing upgrade card | Live |
-| — | **Admin console P0**: find-by-email, Tenant 360 (webhook health, Connect state, users, page/domain, source count), audited password resets, suspend/unsuspend enforced in slug resolution + authorizer, docs/runbook-support.md | Deployed 2026-08-24 |
-| — | Pricing Variant A + roadmap/changelog Variant B on site | Live |
-| — | Old demo CloudFront distribution E1NIGMQRWW00GS | Deleted 2026-08-24 |
+### 28 — App version visible, linking to release notes ✅
+**Test:** app → account popover (bottom of sidebar) → "v2.14.0 ·
+Changelog"; marketing site footer shows the version too.
 
-## Next up (approved, on me)
+### 29 — Edit the page URL slug ✅
+**Test:** app → Your page → Your address → Edit → type a new address →
+availability check runs as you type.
 
-1. **Voice latency probe** (Stage 1, ~1 week, <$100 — spec-voice-live-agent.md):
-   one Connect instance + DID + Nova 2 Sonic handler, dual-channel recorded
-   PSTN calls. Gate: median <1,200ms AND p95 turn <900ms. Next dedicated
-   session; founder steps in on AWS support blockers.
+### 30 — Help centre redesign + auto-generated article meta ✅
+**Test:** help.makerbay.app/makerbay-demo → grouped articles with real
+titles; search appears at 4+ articles.
 
-## Needs founder input
+### 31 — Marketing screenshots consistent theming ✅
+**Test:** makerbay.app → screenshots share one palette.
 
-- **WhatsApp surface for Genie** — what it is: the owner texts their Genie on
-  WhatsApp ("what's tomorrow?", "chase INV-003") instead of opening the app;
-  same briefings and confirmation cards, in the channel tradies already live
-  in. Costs: WhatsApp Business API number, Meta business verification, and
-  per-conversation fees (~USD 0.5-8c each). Say go and it queues behind the
-  voice probe; otherwise stays parked.
-- **Admin P1 scope** — spec G5-G8 (~4-5 days): SES suppression list view +
-  removal, read-only conversation viewer for wrong-AI-answer tickets,
-  scripted audited privacy export/delete, audit log reader page. Recommended
-  before the first 100 customers; pick any subset.
+### 32 — Booking form broken inside chat widget ✅
+Global CSS leak fixed (scoped to the composer).
+**Test:** chat → "Book a time" → pick service/day/slot → the your-details
+form fields stack vertically.
 
-## Blocked on founder (quick)
+### 33 — Share page + QR codes ✅
+**Test:** app → Your page → Share → per-network steps + share buttons;
+QR blocks with print-size download on Your page and Share.
 
-- **Stripe restricted key scopes** — add write scopes (Accounts, Account
-  Links, Checkout Sessions, Payment Intents, Refunds, and now Products +
-  Prices + Subscriptions for the Genie plan product) to the rk_live key; add
-  `checkout.session.completed` + `account.updated` to the webhook endpoint.
-  Then I verify Connect onboarding + a live payment + Genie checkout e2e.
+### 34 — Connect domain flow broken ✅
+URL normalization, alias release on remove, honest alias-busy message,
+unique caller references. Proven with demo.makerbay.app remove→re-add.
+**Test:** https://demo.makerbay.app loads the Southside Plumbing page.
+
+### 35 — Hide live-billing text in production ✅
+**Test:** sidebar shows a TEST BILLING badge only while Stripe is in
+test mode; no live-mode banner ever.
+
+### 36 — Genie not visible/accessible ✅
+Root cause: /me ignored manual grants. Fixed; Genie v1 shipped.
+**Test:** app → Grow → Genie → ask "give me my morning briefing".
+
+### 37 — Documents start at 001 + prefix ✅
+Counters seed zero; per-tenant docPrefix (SP → SP-Q-001, SP-INV-001)
+on emails, public pages, Stripe lines, Genie. Existing numbers kept.
+**Test:** Quotes → Price list → Quote settings → "Document prefix";
+create a draft quote → list shows SP-Q-00x.
+
+### 38 — Dynamic options in assistant + Genie; Genie missing for aatrala ✅
+Genie now appears for EVERY account (taster: 25/mo Free, 250 Trade;
+your account carries a full 2,500 comp). Genie chips adapt to your
+modules; widget chips include your top service + "Do you cover my area?".
+**Test:** sign in as aatrala@gmail.com → Genie in the Grow section;
+chips reflect enabled modules. Widget: open the demo chat → a chip
+named after the top service.
+
+### 39 — Preview buttons alignment + page polish ✅
+Segmented Desktop/Phone switch, Refresh + Open in one aligned group,
+phone bezel frame, responsive heights.
+**Test:** app → Your page → Preview card → toggle Desktop/Phone; on a
+narrow window the controls wrap without overlapping.
+
+### 40 — Connect domain "not functioning" (test.bluebasketlabs.com) ✅
+Root cause: your personal workspace was Free — the Presence-Pro gate
+refused before anything ran. Your workspace now carries a Presence Pro
+comp, and the card states the plan requirement BEFORE you type.
+**Test:** as aatrala@gmail.com → Your page → Your own domain → enter
+test.bluebasketlabs.com → add the two DNS records it shows at your DNS
+provider → Check status until Live (cert usually issues in minutes).
+
+### 41 — Multiple slugs per workspace ✅
+Extra addresses that 301-redirect to the primary (3 total on Trade, 5 on
+Genie, upsell on Free). Redirect-not-serve keeps Google's view of your
+page on one URL.
+**Test:** Your page → Your address → Extra addresses → add one → open
+makerbay.app/p/<alias> → lands on your main address. Live proof:
+/p/southside-plumbing → /p/makerbay-demo.
+
+### 42 — Help centre feature not findable ✅
+It was buried at the bottom of Assistant → Behavior. Now its own tab.
+**Test:** as aatrala@gmail.com → Assistant → Help centre tab → enable
+toggle, title, intro, link to your public help pages.
+
+### 43 — URL scraping fails on JS-built sites (greenlightyourapp.com) ✅
+Two fixes: a headless-Chromium render Lambda now runs pages whose HTML
+comes back empty (after markdown-twin and framework-data rescues), and
+error messages show the server's real reason instead of "could not be
+read".
+**Test:** Assistant → Knowledge → website discover on
+greenlightyourapp.com → pick the /docs pages → they add with real
+titles (first page takes ~10s while the browser cold-starts).
+
+## Approved queue (on me)
+
+1. **Voice latency probe** — Stage 1 of spec-voice-live-agent.md (~1
+   week, <$100): Connect instance + DID + Nova 2 Sonic handler, real
+   recorded calls against the <1,200ms median gate. Next dedicated
+   session; you step in on AWS support blockers.
+
+## Awaiting your decision 💬
+
+- **WhatsApp surface for Genie** — text your Genie on WhatsApp instead
+  of opening the app; same briefings + confirmation cards. Costs: WABA
+  number, Meta verification, per-conversation fees. Parked until you say go.
+- **Admin console P1** — SES suppression viewer, read-only conversation
+  viewer, scripted privacy export/delete, audit log reader (~4-5 days).
+  Recommended before ~100 customers; pick any subset.
+
+## Blocked on you (quick) ⛔
+
+- **Stripe restricted key scopes** — add write scopes: Accounts, Account
+  Links, Checkout Sessions, Payment Intents, Refunds, **Products, Prices,
+  Subscriptions** (Genie plan product is created via API on first
+  checkout). Add `checkout.session.completed` + `account.updated` to the
+  webhook. Then I verify Connect onboarding + live payment + Genie
+  checkout end to end.
+- **Disk space** — your C: drive hit 100% full on 2026-08-25 (broke three
+  deploys). I freed ~12GB from the npm cache; please clear more when you
+  can.
 
 ## External waits
 
-- Chime SDK Voice enablement (AWS support case) — gates voice rescue go-live.
-- SES production access.
-- SMS origination identity registration.
+- Chime SDK Voice enablement (AWS support case) — gates voice go-live.
+- SES production access. SMS origination identity registration.
 
 ## On hold (deliberate)
 
-- Marketplace (revisit ~1000 customers). Booking deposits. WhatsApp Genie
-  (pending founder read on the note above). Admin P1 (pending scope pick).
-- Ops hygiene (root → IAM Identity Center, alarms, CI, Cost Explorer) —
-  founder will revisit; worth a look after this week's five deploys.
+- Marketplace (~1000 customers). Booking deposits. Ops hygiene (root →
+  IAM Identity Center — would also stop the AWS session expiring
+  mid-deploy — alarms, CI, Cost Explorer check).
 
-## Notes
+## Standing facts
 
-- Suspension enforcement caveat: authorizer results are cached per header, so
-  a suspension bites on public pages immediately but on the dashboard within
-  a few minutes. Documented in runbook-support.md.
-- First staff account needs the CLI bootstrap in runbook-support.md (the
-  console has no self-serve staff signup, by design).
+- Releases: CHANGELOG.md (2.14.0). Platform 1.24.0.
+- Founder workspace (aatralarasu) comps: Presence Pro + Genie 2500,
+  seeded via scripts/seed-founder-grants.mjs.
+- Demo workspace (makerbay-demo / Southside Plumbing): docPrefix SP,
+  custom domain demo.makerbay.app, slug alias southside-plumbing,
+  deposit 20%, Genie grant.
+- Support runbook: docs/runbook-support.md (staff bootstrap is CLI-only).
