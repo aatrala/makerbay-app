@@ -1,6 +1,6 @@
 import { Route } from 'react-router-dom'
 import type { DashboardModule } from '@makerbay/web-kit'
-import Behavior from './Behavior'
+import Behavior, { HelpCentrePage } from './Behavior'
 import Conversations from './Conversations'
 import DeployPage from './DeployPage'
 import Insights from './Insights'
@@ -19,6 +19,7 @@ export const assistantDashboard: DashboardModule = {
     { to: '/assistant/playground', label: 'Playground' },
     { to: '/assistant/knowledge', label: 'Knowledge' },
     { to: '/assistant/behavior', label: 'Behavior' },
+    { to: '/assistant/help', label: 'Help centre' },
     { to: '/assistant/deploy', label: 'Deploy' },
     { to: '/assistant/conversations', label: 'Conversations' },
     { to: '/assistant/insights', label: 'Insights' },
@@ -28,6 +29,7 @@ export const assistantDashboard: DashboardModule = {
       <Route path="/assistant/playground" element={<Playground />} />
       <Route path="/assistant/knowledge" element={<Knowledge />} />
       <Route path="/assistant/behavior" element={<Behavior me={me} />} />
+      <Route path="/assistant/help" element={<HelpCentrePage me={me} />} />
       <Route path="/assistant/deploy" element={<DeployPage me={me} />} />
       <Route path="/assistant/conversations" element={<Conversations />} />
       <Route path="/assistant/insights" element={<Insights />} />

@@ -1,7 +1,20 @@
 # MakerBay — Status Board
 
-Updated 2026-08-24 (evening). One line per item; details live in the specs
-and CHANGELOG. Issue numbers refer to the running issue stream.
+Updated 2026-08-24 (late evening). One line per item; details live in the
+specs and CHANGELOG. Issue numbers refer to the running issue stream.
+
+## Latest batch (issues 38-42, v2.13.0)
+
+| # | Item | Status |
+|---|------|--------|
+| 38 | Genie visible in every account (taster merged into /me); dynamic module-aware chips in Genie; business-specific chips (top service, service areas) in the chat widget | Live |
+| 39 | Preview section: segmented Desktop/Phone switch, Refresh + Open aligned in one control group, phone bezel frame, responsive heights | Live |
+| 40 | Connect domain "not functioning" root-caused: the founder's personal workspace is on Free - the 402 Presence-Pro gate refused the PUT (no bug in the domain flow; nothing was created). Fixed twice: founder workspace seeded with a Presence Pro comp (scripts/seed-founder-grants.mjs), and the card now shows the plan requirement BEFORE typing instead of erroring after submit | Live |
+| 41 | Multiple slugs per workspace (3 on Trade / 5 on Genie, upsell on Free) | Proposal sent, awaiting go |
+| 42 | Help centre not findable - it was buried at the bottom of Assistant → Behavior. Now its own "Help centre" tab in the Assistant nav | Live |
+
+Founder workspace (Aatral Arasu, slug aatralarasu) now carries founder comps:
+presence pro + genie pro 2500, seeded 2026-08-24.
 
 ## Shipped and verified
 

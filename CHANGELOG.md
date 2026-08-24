@@ -11,6 +11,26 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.13.0 - 2026-08-24
+
+> **Genie for every workspace, and chips that know your business** — the copilot now shows up on every plan, quick questions adapt to what you actually run, and the help centre gets its own tab.
+
+- Changed `genie` Genie appears in every workspace's sidebar now, not just
+  the Genie plan - the taster (25 messages a month on Free, 250 on Trade)
+  was already there; now the door is too. Quick chips adapt to the modules
+  you run: bookings, unpaid invoices, money this week, reviews, block out
+  time, your page.
+- Changed `assistant` The chat widget's quick chips now include your own
+  business: your top service by name and "Do you cover my area?" when you
+  have service areas - answered by the assistant from your knowledge, not a
+  canned card.
+- Added `assistant` The help centre has its own tab under Assistant instead
+  of hiding at the bottom of Behavior.
+- Changed `presence` The custom-domain card now says up front when a plan
+  does not include it, instead of refusing after you type your domain. The
+  page preview got a cleaner header (device switch, Refresh, Open) and a
+  proper phone frame.
+
 ## 2.12.0 - 2026-08-24
 
 > **Support that answers on the first look** — staff can now find any account by email, see its whole state on one screen, send password resets, and pull the kill switch on abuse.

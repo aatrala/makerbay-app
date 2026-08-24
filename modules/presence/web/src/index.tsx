@@ -270,31 +270,30 @@ function PagePage() {
           </div>
 
           <div className="card">
-            <div className="row">
-              <h2 className="grow">Preview</h2>
-              <div className="tabs">
-                <button className={previewMode === 'desktop' ? 'on' : ''} onClick={() => setPreviewMode('desktop')}>Desktop</button>
-                <button className={previewMode === 'mobile' ? 'on' : ''} onClick={() => setPreviewMode('mobile')}>Phone</button>
+            <div className="preview-head">
+              <h2>Preview</h2>
+              <div className="preview-controls">
+                <div className="tabs seg">
+                  <button type="button" className={previewMode === 'desktop' ? 'on' : ''}
+                    onClick={() => setPreviewMode('desktop')}>Desktop</button>
+                  <button type="button" className={previewMode === 'mobile' ? 'on' : ''}
+                    onClick={() => setPreviewMode('mobile')}>Phone</button>
+                </div>
+                <button type="button" className="ghost" onClick={() => setPreviewNonce((n) => n + 1)}>Refresh</button>
+                <a className="btn ghost" href={pageUrl} target="_blank" rel="noopener">Open ↗</a>
               </div>
-              <button className="ghost" onClick={() => setPreviewNonce((n) => n + 1)}>Refresh</button>
             </div>
-            <p className="meta">The real live page, as a visitor sees it. Saves can take a couple of minutes to appear - the page is cached.</p>
-            <div style={{
-              display: 'flex', justifyContent: 'center', background: '#f5f5f4',
-              borderRadius: 10, padding: 16, border: '1px solid #e7e5e4',
-            }}>
-              <iframe
-                title="Page preview"
-                src={`${pageUrl}?preview=${previewNonce}`}
-                style={{
-                  width: previewMode === 'mobile' ? 375 : '100%',
-                  maxWidth: '100%',
-                  height: 560,
-                  border: '1px solid #d6d3d1',
-                  borderRadius: previewMode === 'mobile' ? 24 : 8,
-                  background: '#fff',
-                }}
-              />
+            <p className="meta">
+              The real live page, as a visitor sees it. Saves can take a couple of minutes to
+              appear — the page is cached.
+            </p>
+            <div className={`preview-stage${previewMode === 'mobile' ? ' phone' : ''}`}>
+              <div className={previewMode === 'mobile' ? 'phone-frame' : 'desktop-frame'}>
+                <iframe
+                  title="Page preview"
+                  src={`${pageUrl}?preview=${previewNonce}`}
+                />
+              </div>
             </div>
           </div>
         </>
@@ -406,6 +405,8 @@ interface DomainState {
   validation?: { name: string; value: string }
   target?: string
   message?: string
+  /** Whether this workspace may connect a domain; absent means legacy true. */
+  pro?: boolean
 }
 
 function DomainCard() {
@@ -457,6 +458,13 @@ function DomainCard() {
       {error && <Notice tone={proBlocked ? 'warn' : 'err'} onClose={() => setError('')}>{error}</Notice>}
 
       {!state ? <Skeleton rows={2} /> : !state.domain ? (
+        state.pro === false ? (
+          <Notice tone="warn">
+            <strong>Custom domains are part of Presence Pro</strong> — included in the Trade plan.
+            Your free makerbay.app page keeps working either way.{' '}
+            <Link to="/billing">See plans</Link>
+          </Notice>
+        ) : (
         <form onSubmit={add}>
           <div className="row">
             <input className="grow" value={input} placeholder="yourbusiness.com.au"
@@ -465,6 +473,7 @@ function DomainCard() {
           </div>
           <p className="meta">You will add two DNS records at your domain provider: one to prove you own it, one to point it here.</p>
         </form>
+        )
       ) : (
         <>
           <p>

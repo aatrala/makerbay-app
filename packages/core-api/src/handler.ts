@@ -265,6 +265,17 @@ async function me(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {
     if (modules[g.moduleId]?.enabled) continue
     modules[g.moduleId] = { enabled: true, plan: g.planTier, limits: g.limits }
   }
+  // Genie is for everyone: below a subscription or grant, the taster applies
+  // (25 messages a month on Free, 250 on Trade) - the genie API enforces the
+  // same caps, this just keeps the door visible.
+  if (!modules.genie?.enabled) {
+    const onTrade = modules.assistant?.plan === 'pro'
+    modules.genie = {
+      enabled: true,
+      plan: 'taster',
+      limits: { genieMessagesPerMonth: onTrade ? 250 : 25 },
+    }
+  }
   return json(200, { user, tenant, entitlements: { ...entitlements, modules } })
 }
 

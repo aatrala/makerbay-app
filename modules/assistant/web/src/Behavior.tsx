@@ -30,11 +30,6 @@ export default function Behavior({ me }: { me: Me }) {
     setSaved(false)
   }
 
-  const toggle = (k: keyof Config) => (e: { target: { checked: boolean } }) => {
-    setConfig((c) => (c ? { ...c, [k]: e.target.checked } : c))
-    setSaved(false)
-  }
-
   const save = async (e: FormEvent) => {
     e.preventDefault()
     if (!config) return
@@ -90,7 +85,60 @@ export default function Behavior({ me }: { me: Me }) {
         )}
       </div>
 
-      {config && <HelpCentre config={config} me={me} set={set} toggle={toggle} save={save} busy={busy} />}
+    </>
+  )
+}
+
+/**
+ * The help centre gets its own tab: buried at the bottom of Behavior nobody
+ * found it - the founder included (issue 42).
+ */
+export function HelpCentrePage({ me }: { me: Me }) {
+  const [config, setConfig] = useState<Config | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    void api('GET', '/v1/assistant/config')
+      .then((r) => setConfig(r.config))
+      .catch((e) => setError(explain(e)))
+  }, [])
+
+  const set = (k: keyof Config) => (e: { target: { value: string } }) => {
+    setConfig((c) => (c ? { ...c, [k]: e.target.value } : c))
+    setSaved(false)
+  }
+  const toggle = (k: keyof Config) => (e: { target: { checked: boolean } }) => {
+    setConfig((c) => (c ? { ...c, [k]: e.target.checked } : c))
+    setSaved(false)
+  }
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!config) return
+    setError(''); setBusy(true)
+    try {
+      const r = await api('PUT', '/v1/assistant/config', config)
+      setConfig(r.config)
+      setSaved(true)
+    } catch (err) {
+      setError(explain(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <h1>Help centre</h1>
+      <p>
+        Public, Google-indexable help pages built from the knowledge your assistant already has.
+      </p>
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {saved && <Notice tone="ok" onClose={() => setSaved(false)}>Saved.</Notice>}
+      {!config ? <div className="card"><Skeleton rows={5} /></div> : (
+        <HelpCentre config={config} me={me} set={set} toggle={toggle} save={save} busy={busy} />
+      )}
     </>
   )
 }

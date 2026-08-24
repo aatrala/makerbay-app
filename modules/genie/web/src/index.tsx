@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Route } from 'react-router-dom'
-import { api, explain, Notice, type DashboardModule } from '@makerbay/web-kit'
+import { api, explain, Notice, type DashboardModule, type Me } from '@makerbay/web-kit'
 
 interface Msg { role: 'user' | 'assistant'; text: string }
 interface Pending { actionId: string; summary: string }
@@ -9,8 +9,8 @@ interface Pending { actionId: string; summary: string }
  * Genie: the owner's conversational view of the whole business. Chips are
  * pre-baked questions with zero prompt ambiguity; the first slot is
  * context-aware (morning briefing before noon, tomorrow's bookings in the
- * evening) and the rest never move - muscle memory matters on a screen
- * opened ten times a day.
+ * evening) and the rest are drawn from the modules this workspace actually
+ * runs - a chip for a module you don't use is noise.
  */
 const firstChip = () => {
   const h = new Date().getHours()
@@ -19,14 +19,26 @@ const firstChip = () => {
   return { label: 'What happened today', q: 'What happened today?' }
 }
 
-const CHIPS = [
-  { label: "Today's bookings", q: 'What is in the diary today and tomorrow?' },
-  { label: 'Waiting on you', q: 'What is waiting on me - open requests and reviews to reply to?' },
-  { label: 'Unpaid invoices', q: 'Which invoices are unpaid, and who owes what?' },
-  { label: 'How are reviews?', q: 'How are my reviews looking?' },
-]
+const moduleChips = (me: Me | undefined) => {
+  const mods = me?.entitlements?.modules ?? {}
+  const on = (id: string) => mods[id]?.enabled !== false && mods[id] !== undefined
+  const out: Array<{ label: string; q: string }> = []
+  if (on('booking')) out.push({ label: "Today's bookings", q: 'What is in the diary today and tomorrow?' })
+  if (on('requests') || on('reviews')) {
+    out.push({ label: 'Waiting on you', q: 'What is waiting on me - open requests and reviews to reply to?' })
+  }
+  if (on('quotes')) out.push({ label: 'Unpaid invoices', q: 'Which invoices are unpaid, and who owes what?' })
+  if (on('payments')) out.push({ label: 'Money this week', q: 'What money came in this week, and what is still owed?' })
+  if (on('reviews')) out.push({ label: 'How are reviews?', q: 'How are my reviews looking?' })
+  if (on('booking')) out.push({ label: 'Block out time', q: 'I want to block out some time in my diary.' })
+  if (on('presence')) out.push({ label: 'My page', q: 'How is my public page set up, and what should I improve?' })
+  // Nothing enabled yet (brand-new workspace): still offer the basics.
+  return out.length ? out.slice(0, 5) : [
+    { label: 'What can you do?', q: 'What can you do for me?' },
+  ]
+}
 
-function GeniePage() {
+function GeniePage({ me }: { me?: Me }) {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sessionId, setSessionId] = useState<string>(() => sessionStorage.getItem('mb.genieSession') ?? '')
@@ -82,7 +94,8 @@ function GeniePage() {
   }
 
   const submit = (e: FormEvent) => { e.preventDefault(); ask(input) }
-  const chips = [firstChip(), ...CHIPS]
+  const first = firstChip()
+  const chips = [first, ...moduleChips(me).filter((c) => c.label !== first.label)]
 
   return (
     <div className="genie">
@@ -144,9 +157,9 @@ export const genieDashboard: DashboardModule = {
   id: 'genie',
   label: 'Genie',
   nav: [{ to: '/genie', label: 'Genie' }],
-  routes: () => (
+  routes: ({ me }) => (
     <>
-      <Route path="/genie" element={<GeniePage />} />
+      <Route path="/genie" element={<GeniePage me={me} />} />
     </>
   ),
 }

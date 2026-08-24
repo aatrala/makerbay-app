@@ -144,7 +144,12 @@ async function validationRecord(certArn: string): Promise<{ name: string; value:
 
 export async function getDomain(tenantId: string): Promise<APIGatewayProxyResultV2> {
   const config = await getPresenceConfig(tenantId)
-  if (!config.customDomain || !config.domainCertArn) return json(200, { domain: null })
+  if (!config.customDomain || !config.domainCertArn) {
+    // Reads are never gated, but the card needs to know whether a PUT would
+    // be - so the upgrade ask appears before typing, not after submitting.
+    const pro = !(await requirePro(tenantId))
+    return json(200, { domain: null, pro })
+  }
 
   // Fill in the validation record if the PUT could not see it yet.
   if (config.domainStatus === 'pending_validation' && !config.domainValidation) {

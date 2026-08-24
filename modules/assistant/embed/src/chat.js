@@ -115,6 +115,26 @@
       { label: 'Contact', show: Boolean(business.phone || business.email), act: function () { addCard(contactCard()) } },
       { label: 'About', show: Boolean(business.intro || business.headline), act: function () { addCard(aboutCard()) } },
     ]
+    // This business's own questions: the top service by name, and coverage
+    // when service areas exist. These go to the assistant - dynamic answers
+    // grounded in the knowledge base, not a static card.
+    var topService = business.services.length ? business.services[0] : null
+    if (topService && topService.name) {
+      defs.push({
+        label: String(topService.name),
+        show: true,
+        act: function () {
+          askAi('Tell me about "' + topService.name + '" - what does it include and what does it cost?')
+        },
+      })
+    }
+    if (Array.isArray(business.areas) && business.areas.length) {
+      defs.push({
+        label: 'Do you cover my area?',
+        show: true,
+        act: function () { askAi('Which areas do you service?') },
+      })
+    }
     defs.forEach(function (d) {
       if (!d.show) return
       var b = document.createElement('button')
@@ -125,6 +145,14 @@
       row.appendChild(b)
     })
     if (!row.children.length) row.remove()
+  }
+
+  /** A chip that asks the assistant rather than rendering a local card. */
+  function askAi(q) {
+    var input = document.getElementById('input')
+    if (!input) return
+    input.value = q
+    send({ preventDefault: function () {} })
   }
 
   function hasHours() {
