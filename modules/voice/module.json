@@ -1,7 +1,7 @@
 {
   "id": "voice",
-  "name": "Voice",
-  "tagline": "Answers the phone when you cannot",
+  "name": "Missed-call rescue",
+  "tagline": "A missed call becomes a booking instead of a lost job",
   "status": "planned",
   "version": {
     "api": "0.0.0",
@@ -11,40 +11,44 @@
     "/v1/voice/*"
   ],
   "meteredMetrics": [
-    "call.answered",
-    "call.minutes"
+    "missedcall.rescued",
+    "sms.sent"
   ],
-  "entitlementKey": "voice",
-  "pricing": "paid",
+  "entitlementKey": null,
+  "pricing": "free",
   "dependsOn": [
     "presence",
     "booking"
   ],
   "roadmap": {
     "order": 8,
-    "note": "Highest value and highest risk in the portfolio. Real per-minute cost, and a bad call is worse than voicemail. Under independent analysis."
+    "note": "The live voice agent this started as is deferred: measured on real calls every platform answers 1.3-1.7 seconds late, 31% of people say they would hang up on an AI, and Jobber and ServiceM8 already bundle one at $29. What survives is the part that was doing the work anyway - answering fast."
   },
   "marketing": {
-    "summary": "Forward your phone when the shop is shut or you are up a ladder. The call is answered, the question is handled from your own documents, and a booking or a callback lands in your diary.",
+    "summary": "When a call goes unanswered, the caller gets a text within seconds with a link to book themselves in, and you get the lead in your inbox. Most people who reach voicemail simply ring the next name on the list; this catches them before they do.",
     "audience": "Anyone whose hands are busy during the hours customers ring, and for whom a missed call is a lost job.",
     "features": [
       {
-        "title": "Answers instead of voicemail",
-        "body": "Most people do not leave a voicemail. They ring the next name on the list."
+        "title": "Faster than any voicemail",
+        "body": "The text goes out while they are still holding the phone. Speed is the whole mechanism - it is what makes a caller stop looking."
       },
       {
-        "title": "Knows your business",
-        "body": "Answers from the same documents your assistant uses, so the phone and the website say the same thing."
+        "title": "They book themselves in",
+        "body": "The link goes to your real availability, so the job lands in your diary without either of you making a call."
       },
       {
-        "title": "Fails safe",
-        "body": "When it is not sure, it takes a message and tells you - it never guesses on your behalf."
+        "title": "Nothing to answer, nothing to go wrong",
+        "body": "No robot voice, no misheard address, no price quoted that you would not honour. Your customers speak to you, or they book."
       }
     ],
     "faq": [
       {
-        "q": "Will it pretend to be a person?",
-        "a": "No. It says what it is. Customers mind being deceived far more than they mind talking to a machine that is useful."
+        "q": "Why not an AI that answers the phone?",
+        "a": "We looked at it seriously and decided against it for now. Every AI phone agent on the market answers about a second and a half late, which callers hear as a dropped line, and around a third of people say they would hang up on one. If it handles a call badly, your customer blames you, not us. A text that arrives in two seconds does most of the same job with none of that risk."
+      },
+      {
+        "q": "Does it record my calls?",
+        "a": "No. It reacts to a missed call; there is nothing to record and nothing to transcribe."
       }
     ]
   }

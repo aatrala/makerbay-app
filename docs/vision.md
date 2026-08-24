@@ -49,7 +49,7 @@ these work.
 | **b** | **Bookings** | Turns "are you free Thursday" into a confirmed appointment without a phone call. |
 | **c** | **Presence** — a page per business | The thing customers actually land on: who you are, what you do, when you are free, book now, ask anything. Auto-created, editable, at a slug. |
 | **d** | **Visibility** | Getting the business's own Google profile right, and collecting reviews at the moment a customer is most likely to leave one. Not a directory - see below. |
-| **e** | **Voice** | Answers the phone when the shop is shut or the person is up a ladder. Takes the booking or the callback. |
+| **e** | **Missed-call rescue** | A call goes unanswered, the caller instantly gets a text with a booking link, and the tradie gets the lead. The live voice agent it started as is deferred - see below. |
 
 ### Why these five and not others
 
@@ -70,14 +70,23 @@ helping a trade get it right plus collecting real reviews is genuinely valuable.
 (d) becomes features inside Presence, not a product. See
 `docs/analysis-search-visibility.md`.
 
-**(e) is the highest willingness to pay in the whole portfolio** and the highest
-risk. A missed call is real money; a voice agent that mishandles a customer is
-worse than voicemail. See §6.
+**(e) was investigated and the live voice agent is now deferred indefinitely.**
+Four analyses took it from promising to dead. Measured on real phone calls,
+every commercial platform answers 1.3-1.7 seconds late - above the threshold
+where a caller assumes the line dropped. Consumer sentiment moved against AI
+phone agents on every measured axis over six months, with 31% saying they would
+hang up. Jobber and ServiceM8 already bundle a receptionist at $29-32. And the
+failure lands on our customer's reputation, not ours.
+
+What replaces it is smaller and ships next week: **missed-call rescue** - an
+instant SMS with a booking link when a call goes unanswered. The mechanism doing
+the work was always speed-to-lead, not conversation. See
+`docs/analysis-voice-market.md` Part 4.
 
 ## 4. What is free, and the rule behind it
 
 **Free: Contacts, Requests, Quotes, the help centre, and the business page
-itself.** Paid: Assistant, Bookings, Voice, and placement in the directory.
+itself.** Paid: Assistant and Bookings.
 
 The rule, stated once so it can be applied to anything new:
 
@@ -147,11 +156,18 @@ page copy is the most likely route to being classified as scaled content abuse,
 and that would take every tenant's page down together. Presence carries hard
 indexing rules because of it.
 
-**Voice is the one that can damage a customer.** A bad answer in chat is
-ignored; a bad answer on the phone loses the job and embarrasses the tradie.
-Any version we ship has to fail safe — escalate, take a message, never bluff.
-The minimum viable version may well be "answer, take the details, text the
-tradie" rather than a full conversation. *Also under independent analysis.*
+**Voice was investigated and the answer was no.** Not "later" as a euphemism -
+the analysis produced a real reversal, and the reasoning is recorded so it can
+be revisited when the facts change rather than when enthusiasm returns.
+
+Two things from it apply beyond voice. Every headline number in that category
+turned out to be fabricated, including a "$7 billion lost to missed calls"
+figure that traces to a competitor's own press release. And Air.ai sold this
+exact product, was sued by the FTC for false earnings claims, and its founders
+are permanently banned from marketing business opportunities. Some of the trades
+we would sell to have already been burned by something that looked like us.
+
+**That is the argument for checkable claims everywhere, not just here.**
 
 **Payments need Stripe Connect.** "Receive payments" on the business page means
 money moving into the tradie's account, not ours. That is onboarding, identity
