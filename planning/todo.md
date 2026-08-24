@@ -10,7 +10,8 @@ specs and CHANGELOG. Issue numbers refer to the running issue stream.
 | 38 | Genie visible in every account (taster merged into /me); dynamic module-aware chips in Genie; business-specific chips (top service, service areas) in the chat widget | Live |
 | 39 | Preview section: segmented Desktop/Phone switch, Refresh + Open aligned in one control group, phone bezel frame, responsive heights | Live |
 | 40 | Connect domain "not functioning" root-caused: the founder's personal workspace is on Free - the 402 Presence-Pro gate refused the PUT (no bug in the domain flow; nothing was created). Fixed twice: founder workspace seeded with a Presence Pro comp (scripts/seed-founder-grants.mjs), and the card now shows the plan requirement BEFORE typing instead of erroring after submit | Live |
-| 41 | Multiple slugs per workspace (3 on Trade / 5 on Genie, upsell on Free) | Proposal sent, awaiting go |
+| 41 | Multiple slugs per workspace (3 on Trade / 5 on Genie, upsell on Free), 301-redirect design. Verified: /p/southside-plumbing 301s to /p/makerbay-demo | Live |
+| 43 | JS-rendered sites unreadable as knowledge. Fixed with a headless-Chromium render Lambda (fallback after static/markdown/Next-data rescues) + error messages now show the server's real reason. Verified on greenlightyourapp.com: 27 chars refused → 2153 chars ingested | Live |
 | 42 | Help centre not findable - it was buried at the bottom of Assistant → Behavior. Now its own "Help centre" tab in the Assistant nav | Live |
 
 Founder workspace (Aatral Arasu, slug aatralarasu) now carries founder comps:
