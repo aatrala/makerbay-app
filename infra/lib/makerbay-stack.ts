@@ -3,6 +3,10 @@ import * as cdk from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 import * as acm from 'aws-cdk-lib/aws-certificatemanager'
 import * as bedrock from 'aws-cdk-lib/aws-bedrock'
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch'
+import * as cloudwatchActions from 'aws-cdk-lib/aws-cloudwatch-actions'
+import * as sns from 'aws-cdk-lib/aws-sns'
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions'
 import * as cognito from 'aws-cdk-lib/aws-cognito'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as events from 'aws-cdk-lib/aws-events'
@@ -1007,6 +1011,56 @@ export class MakerbayStack extends cdk.Stack {
         allowHeaders: ['authorization', 'content-type'],
       },
     })
+    // Invisible abuse damping at zero cost (issue 47): stage-level throttling
+    // caps any single burst well below where Bedrock or SES bills could
+    // surprise, without a captcha in any customer's way. WAF + visible
+    // CAPTCHA stay on owner hold until the abuse alarms actually fire.
+    const defaultStage = httpApi.defaultStage?.node.defaultChild as apigwv2.CfnStage
+    defaultStage.defaultRouteSettings = {
+      throttlingRateLimit: 50,
+      throttlingBurstLimit: 100,
+    }
+
+    // The abuse tripwire (issue 47): when traffic or model usage jumps past
+    // anything organic, the founder gets an email the same hour - and THAT is
+    // the trigger to reach for WAF/CAPTCHA, not before.
+    const abuseAlerts = new sns.Topic(this, 'AbuseAlerts', {
+      topicName: 'makerbay-abuse-alerts',
+      displayName: 'MakerBay abuse alerts',
+    })
+    abuseAlerts.addSubscription(new snsSubscriptions.EmailSubscription('aatrala@gmail.com'))
+    const alarmEmail = new cloudwatchActions.SnsAction(abuseAlerts)
+
+    const bedrockSpike = new cloudwatch.Alarm(this, 'BedrockInvocationSpike', {
+      alarmName: 'makerbay-abuse-bedrock-invocations',
+      alarmDescription: 'Bedrock invocations spiked past organic volume - possible chat or Genie abuse. Check WAF or CAPTCHA next.',
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/Bedrock',
+        metricName: 'Invocations',
+        statistic: 'Sum',
+        period: cdk.Duration.hours(1),
+      }),
+      threshold: 2000,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    })
+    bedrockSpike.addAlarmAction(alarmEmail)
+
+    const apiSpike = new cloudwatch.Alarm(this, 'ApiRequestSpike', {
+      alarmName: 'makerbay-abuse-api-requests',
+      alarmDescription: 'API requests spiked past organic volume - possible scripted abuse of public endpoints.',
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/ApiGateway',
+        metricName: 'Count',
+        dimensionsMap: { ApiId: httpApi.apiId },
+        statistic: 'Sum',
+        period: cdk.Duration.hours(1),
+      }),
+      threshold: 50_000,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    })
+    apiSpike.addAlarmAction(alarmEmail)
 
     const authorizer = new HttpLambdaAuthorizer('TenantAuthorizer', authorizerFn, {
       responseTypes: [HttpLambdaResponseType.SIMPLE],

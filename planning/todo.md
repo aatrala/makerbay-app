@@ -148,6 +148,14 @@ sub-pages / C hybrid, recommended) - see the mockups sent 2026-08-25 and
 the discussion message. Premium packaging, versioning and FAQ content
 model proposed. **Waiting on your variant pick + answers before spec.**
 
+### 48 — Admin OTP without a connected authenticator app ✅
+Nothing needs connecting beforehand - the first sign-in IS the setup:
+after the temp password → new password steps, the console shows the TOTP
+enrolment screen. Install any authenticator app first (Google/Microsoft
+Authenticator, Authy, Bitwarden, 1Password), then scan. Shipped: that
+screen now renders a scannable QR code (the raw secret stays as the
+no-camera fallback) and says plainly that no prior setup is needed.
+
 ### 46 — Admin portal login + pending admin spec ✅
 Login: your staff account existed but the temp password was lost - a
 fresh one is in your inbox (from Cognito). Sign in at admin.makerbay.app
@@ -159,9 +167,30 @@ Also fixed: the tenant 360's page/source fields were silently blank
 (missing env). **Test:** sign in → Workspaces → open one → "Load recent
 conversations"; Email → suppression check; Audit log nav item.
 
-### 47 — Captcha / spam protection for booking + assistant 💬
-Recommendation written (AWS WAF Bot Control + targeted CAPTCHA vs
-Turnstile); see discussion message. Waiting on your pick.
+### 47 — Captcha / spam protection for booking + assistant ✅ (phase 1) / 🔶 owner hold (phase 2)
+**Analysis (2026-08-25):**
+- Exposure: the public POST endpoints (assistant chat, booking create,
+  request submit, review submit) can be scripted; the cost risk is
+  Bedrock invocations (chat/Genie) and SES sends, not data.
+- Existing damping already in place: per-tenant monthly message caps,
+  booking caps, and the $80 AWS budget alert. So the real gap is BURST
+  abuse inside a month.
+- Options considered: **AWS WAF** cannot attach to our HTTP API (v2) -
+  it would need a CloudFront front on api.makerbay.app (~$10-15/mo +
+  architecture change). **Cloudflare Turnstile** is the best invisible
+  captcha widget but adds a vendor and does not stop raw API calls.
+  **API Gateway stage throttling** is free, invisible, and caps any
+  burst platform-wide.
+**Decision (founder, 2026-08-25):** invisible + cheap now; alert email;
+implement heavier tools only when surprises actually appear.
+**Shipped (phase 1):** stage throttling 50 req/s (burst 100) on the API,
+SNS topic `makerbay-abuse-alerts` emailing aatrala@gmail.com, and two
+CloudWatch tripwires: Bedrock invocations >2,000/hour and API requests
+>50,000/hour. **Confirm the SNS subscription email when it arrives or
+alerts will not deliver.**
+**OWNER HOLD (phase 2, do not build until an alarm fires):** CloudFront
+front on the API + WAF Challenge/CAPTCHA, or Turnstile on the booking
+form. The alarm email is the trigger to revisit.
 
 ## Approved queue (on me)
 

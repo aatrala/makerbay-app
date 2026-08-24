@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import QRCode from 'qrcode'
 import {
   PASSWORD_RULES,
   completeMfaSetup,
@@ -9,6 +10,19 @@ import {
   submitMfa,
   type AuthStep,
 } from '../api'
+
+/** The otpauth QR every authenticator app scans - typing 52 base32
+ *  characters by hand is the alternative, and nobody should. */
+function TotpQr({ email, secret }: { email: string; secret: string }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    if (!ref.current || !secret) return
+    const uri = `otpauth://totp/${encodeURIComponent('MakerBay Staff')}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent('MakerBay Staff')}`
+    void QRCode.toCanvas(ref.current, uri, { width: 190, margin: 2 })
+  }, [email, secret])
+  if (!secret) return null
+  return <canvas ref={ref} style={{ display: 'block', margin: '10px auto', borderRadius: 8 }} />
+}
 
 export default function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [email, setEmail] = useState('')
@@ -123,9 +137,13 @@ export default function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
             {challenge === 'MFA_SETUP' ? (
               <>
                 <p>
-                  Add this secret to your authenticator app, then enter the six-digit code it shows.
-                  MFA is required on every staff account.
+                  You do not need anything set up beforehand — this screen IS the setup. Install any
+                  authenticator app (Google Authenticator, Microsoft Authenticator, Authy, or a
+                  password manager like Bitwarden/1Password), scan this code with it, then enter the
+                  six-digit code it shows. MFA is required on every staff account.
                 </p>
+                <TotpQr email={email} secret={step?.secretCode ?? ''} />
+                <p className="meta">No camera? Add the secret by hand instead:</p>
                 <pre className="code">{step?.secretCode}</pre>
               </>
             ) : (
