@@ -2,13 +2,36 @@
 
 Location: `makerbay-app/planning/todo.md` (inside the app repo).
 Updated 2026-08-25. One section per issue with a manual test you can run.
-Issues 1-25 predate this tracker (earlier sessions); the numbered log
-below starts where the current stream picks up.
 
 Legend: ✅ live and verified · 🔶 live, founder test welcome · ⏳ in
-progress · 💬 awaiting your decision · ⛔ blocked
+progress · 💬 awaiting your decision · ⛔ blocked · 📋 spec'd/deferred
 
-## Issue log
+## Issues 1-25 (earlier sessions, backfilled from the founder's ledger)
+
+| # | Issue | Status |
+|---|-------|--------|
+| 1-2 | Memorable + editable slugs | ✅ Shipped (see also 29, 41) |
+| 3-5 | Page design, no separate assistant page, preview + themes | ✅ Shipped |
+| 6 | Booking/availability/payment on page, mobile, checklist | ✅ Shipped. Booking deposits on the page stay deferred until a booking can be paid-before-created |
+| 7 | Header/footer cleanup | ✅ Shipped |
+| 8 | Quotes currency + theme preview | ✅ Shipped (preview now prefix-aware, see 37) |
+| 9 | greenlightyourapp import failure | ✅ Fixed then (10.5k chars via llms.txt); superseded by 43 - all its JS-built pages now import via the headless renderer |
+| 10 | Similar-issue sweep | ✅ Currency plumbing, import limits, greetings, accent on every surface |
+| 11-13 | Site priority order, FAQ categories, screenshots, personas | ✅ Shipped |
+| 14 | Demo assistant knowledge/defaults/theme/booking chat | ✅ Shipped + verified. The then-pending manual busy blocks have since shipped (2026-08-24): diary → "Block out time" |
+| 15 | Assistant on makerbay.app | ✅ Live (MakerBay HQ workspace powers it) |
+| 16 | Marketplace | 📋 Spec'd, deferred to ~1,000 customers as you directed |
+| 17 | Demo theme = site theme | ✅ Shipped (#c2410c everywhere) |
+| 18 | Tier pricing + PAYG | ✅ Live; Genie tier added on top (see 38/billing) |
+| 19 | Voice / Nova Sonic | 💬→⏳ You approved the ~1-week <$100 latency probe (2026-08-24); it is next in my queue as a dedicated session |
+| 20 | Admin panel supportability | ✅ P0 shipped (2026-08-24): find-by-email, tenant 360, password resets, suspend/reinstate kill switch + docs/runbook-support.md. P1 awaits your scope pick (see below) |
+| 21 | Docs/README refresh | ✅ Shipped |
+| 22 | Roadmap/changelog redesign | ✅ Variant B live |
+| 23 | Chat greeting / blue page / unclickable links | ✅ All fixed + verified |
+| 24 | Help centre access/theming | ✅ Accent sync shipped; discoverability finished under 42 (own tab) |
+| 25 | Slug editing | ✅ Works, UI-verified; discoverability link added |
+
+## Issues 26-43 (current stream)
 
 ### 26 — Assistant widget shows who you're chatting with ✅
 Business identity header (photo, name, open/closed label) + quick chips.
