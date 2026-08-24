@@ -1,5 +1,5 @@
 import { CognitoJwtVerifier } from 'aws-jwt-verify'
-import { findApiKeyByHash, getEntitlements, getUser, hashApiKey } from '@makerbay/core'
+import { findApiKeyByHash, getEntitlements, getTenant, getUser, hashApiKey } from '@makerbay/core'
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.USER_POOL_ID!,
@@ -26,6 +26,7 @@ export const handler = async (event: {
     if (token.startsWith('mb_sk_') || token.startsWith('mb_pk_')) {
       const key = await findApiKeyByHash(hashApiKey(token))
       if (!key) return { isAuthorized: false }
+      if (await suspended(key.tenantId)) return { isAuthorized: false }
       const entitlements = await getEntitlements(key.tenantId)
       return {
         isAuthorized: true,
@@ -41,6 +42,7 @@ export const handler = async (event: {
     const payload = await verifier.verify(token)
     const user = await getUser(payload.sub)
     const tenantId = user?.tenantId ?? ''
+    if (tenantId && (await suspended(tenantId))) return { isAuthorized: false }
     const entitlements = tenantId ? await getEntitlements(tenantId) : { modules: {} }
     return {
       isAuthorized: true,
@@ -55,4 +57,12 @@ export const handler = async (event: {
   } catch {
     return { isAuthorized: false }
   }
+}
+
+// The kill switch's second half: getTenantBySlug hides public pages, and this
+// denial covers everything authenticated. Authorizer results are cached per
+// header, so a suspension can take up to the cache TTL to bite - the runbook
+// says so.
+async function suspended(tenantId: string): Promise<boolean> {
+  return (await getTenant(tenantId))?.status === 'suspended'
 }

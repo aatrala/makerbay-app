@@ -1,12 +1,29 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Empty, Notice, Skeleton, when } from '@makerbay/web-kit'
 import { adminApi, explainAdmin, type TenantSummary } from '../api'
 
 export default function Tenants() {
   const [tenants, setTenants] = useState<TenantSummary[] | null>(null)
   const [q, setQ] = useState('')
+  const [email, setEmail] = useState('')
+  const [lookupBusy, setLookupBusy] = useState(false)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
+
+  // Every ticket arrives as an email address; this is the triage front door.
+  const lookup = (e: FormEvent) => {
+    e.preventDefault()
+    if (!email.includes('@') || lookupBusy) return
+    setLookupBusy(true); setError('')
+    void adminApi('GET', `/admin/v1/lookup?email=${encodeURIComponent(email.trim())}`)
+      .then((r) => {
+        if (r.tenant?.tenantId) navigate(`/tenants/${r.tenant.tenantId}`)
+        else setError('That user exists but has no workspace.')
+      })
+      .catch((e) => setError(explainAdmin(e)))
+      .finally(() => setLookupBusy(false))
+  }
 
   useEffect(() => {
     void adminApi('GET', '/admin/v1/tenants')
@@ -29,6 +46,20 @@ export default function Tenants() {
       <p>Every customer workspace. Open one to see its entitlements and grant access.</p>
 
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      <div className="card">
+        <h2>Find by email</h2>
+        <form onSubmit={lookup}>
+          <div className="row">
+            <input className="grow" type="email" placeholder="customer@example.com" value={email}
+              onChange={(e) => setEmail(e.target.value)} aria-label="Customer email" />
+            <button disabled={lookupBusy || !email.includes('@')}>
+              {lookupBusy ? 'Looking…' : 'Open workspace'}
+            </button>
+          </div>
+        </form>
+        <p className="meta">Jumps straight to the workspace that email belongs to.</p>
+      </div>
 
       <div className="card">
         <div className="row">

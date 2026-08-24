@@ -678,10 +678,19 @@ export class MakerbayStack extends cdk.Stack {
       ...adminEnv,
       EMAIL_FROM: `hello@${DOMAIN}`,
       EMAIL_CONFIG_SET: emailConfigSet.configurationSetName,
+      CUSTOMER_POOL_ID: userPool.userPoolId,
     })
     // Staff can send a test email so SES setup is verifiable rather than
     // merely declared. The first real sender will be the Requests module.
     adminApiFn.addToRolePolicy(sesSendPolicy)
+    // Password resets send Cognito's own code to the user's mailbox; staff
+    // never see or choose a password.
+    adminApiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cognito-idp:AdminResetUserPassword'],
+        resources: [userPool.userPoolArn],
+      }),
+    )
 
     const usageAggregatorFn = fn('UsageAggregatorFn', 'packages/core-api/src/usage-aggregator.ts', {
       TABLE_USAGE: usage.tableName,
@@ -731,7 +740,8 @@ export class MakerbayStack extends cdk.Stack {
     audit.grantReadData(coreFn)
 
     // ── Grants ───────────────────────────────────────────────────────────
-    for (const t of [users, apiKeys, entitlements, grants]) t.grantReadData(authorizerFn)
+    // tenants: the authorizer refuses suspended workspaces (the kill switch).
+    for (const t of [tenants, users, apiKeys, entitlements, grants]) t.grantReadData(authorizerFn)
     for (const t of [tenants, users, apiKeys, entitlements, grants, usage]) t.grantReadWriteData(coreFn)
     bus.grantPutEventsTo(coreFn)
 
@@ -907,10 +917,12 @@ export class MakerbayStack extends cdk.Stack {
       }),
     )
 
-    for (const t of [tenants, users, apiKeys, entitlements, grants, usage, sources, conversations]) {
+    for (const t of [tenants, users, apiKeys, entitlements, grants, usage, sources, conversations, presenceConfig]) {
       t.grantReadData(adminApiFn)
     }
     grants.grantReadWriteData(adminApiFn)
+    // Suspend/unsuspend writes the tenant status field - nothing else.
+    tenants.grantWriteData(adminApiFn)
     staffDirectory.grantReadData(adminAuthorizerFn)
     // PutItem only: this Lambda cannot rewrite or delete its own audit trail.
     adminAudit.grant(adminApiFn, 'dynamodb:PutItem')

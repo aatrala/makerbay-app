@@ -1,16 +1,23 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
-import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb'
+import {
+  AdminResetUserPasswordCommand,
+  CognitoIdentityProviderClient,
+} from '@aws-sdk/client-cognito-identity-provider'
+import { GetCommand, PutCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb'
 import {
   ddb,
+  findUserByEmail,
   getEffectiveEntitlement,
   getMonthUsage,
   getTenant,
   grantManual,
   listGrants,
+  listTenantUsers,
   MODULES,
   PLATFORM_VERSION,
   revokeGrant,
+  setTenantStatus,
   ulid,
   type Grant,
 } from '@makerbay/core'
@@ -43,6 +50,7 @@ const PLANS: Record<string, Record<string, number>> = {
 }
 
 const ses = new SESv2Client({})
+const cognito = new CognitoIdentityProviderClient({})
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const staff = event.requestContext.authorizer.lambda
@@ -65,6 +73,14 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && revokePath) return await revoke(staff, revokePath[1], event)
 
     if (method === 'POST' && path === '/admin/v1/email/test') return await sendTestEmail(staff, event)
+
+    if (method === 'GET' && path === '/admin/v1/lookup') return await lookupByEmail(staff, event)
+
+    const reset = path.match(/^\/admin\/v1\/users\/([A-Za-z0-9-]+)\/reset-password$/)
+    if (method === 'POST' && reset) return await resetPassword(staff, reset[1], event)
+
+    const susp = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/(suspend|unsuspend)$/)
+    if (method === 'POST' && susp) return await setSuspension(staff, susp[1], susp[2] === 'suspend', event)
 
     return json(404, { error: 'not_found' })
   } catch (err) {
@@ -183,9 +199,18 @@ async function tenantDetail(tenantId: string): Promise<APIGatewayProxyResultV2> 
   const tenant = await getTenant(tenantId)
   if (!tenant) return json(404, { error: 'tenant_not_found' })
 
-  const [grants, usage] = await Promise.all([
+  const [grants, usage, users, presence, sourceCount] = await Promise.all([
     listGrants(tenantId),
     getMonthUsage(tenantId, new Date().toISOString().slice(0, 7)),
+    listTenantUsers(tenantId),
+    ddb.send(new GetCommand({ TableName: process.env.TABLE_PRESENCECONFIG!, Key: { tenantId } }))
+      .then((r) => r.Item).catch(() => undefined),
+    ddb.send(new QueryCommand({
+      TableName: process.env.TABLE_SOURCES!,
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+      Select: 'COUNT',
+    })).then((r) => r.Count ?? 0).catch(() => null),
   ])
   const entitlements: Record<string, unknown> = {}
   for (const m of MODULES) entitlements[m.id] = await getEffectiveEntitlement(tenantId, m.id)
@@ -203,6 +228,31 @@ async function tenantDetail(tenantId: string): Promise<APIGatewayProxyResultV2> 
       stripeCustomerId: tenant.stripeCustomerId ?? null,
       createdAt: tenant.createdAt,
     },
+    // The rest of the 360: is Stripe reaching us, can they take money, who
+    // can log in, what is public - the first look for most support tickets.
+    webhook: {
+      lastAt: tenant.lastWebhookAt ?? null,
+      lastType: tenant.lastWebhookType ?? null,
+      lastLive: tenant.lastWebhookLive ?? null,
+    },
+    connect: {
+      stripeAccountId: tenant.stripeAccountId ?? null,
+      payoutsEnabled: tenant.payoutsEnabled ?? false,
+      onboardedAt: tenant.connectOnboardedAt ?? null,
+    },
+    users: users.map((u) => ({
+      userId: u.userId, email: u.email ?? null, role: u.role, createdAt: u.createdAt,
+    })),
+    moduleState: {
+      presence: presence
+        ? {
+            published: Boolean(presence.published),
+            customDomain: presence.customDomain ?? null,
+            domainStatus: presence.domainStatus ?? null,
+          }
+        : null,
+      assistant: { sourceCount },
+    },
     entitlements,
     grants: grants.map((g: Grant) => ({
       sk: g.sk, source: g.source, moduleId: g.moduleId, planTier: g.planTier,
@@ -210,6 +260,86 @@ async function tenantDetail(tenantId: string): Promise<APIGatewayProxyResultV2> 
       grantedBy: g.grantedBy, createdAt: g.createdAt,
     })),
     usage,
+  })
+}
+
+/** G3: every support ticket arrives as an email address. */
+async function lookupByEmail(staff: StaffContext, event: Event): Promise<APIGatewayProxyResultV2> {
+  const email = String(event.queryStringParameters?.email ?? '').trim().toLowerCase()
+  if (!email.includes('@')) return json(400, { error: 'email_required' })
+
+  const user = await findUserByEmail(email)
+  if (!user) return json(404, { error: 'no_user', message: 'No user with that email address.' })
+  const tenant = await getTenant(user.tenantId)
+  await audit(staff, 'user.lookup', user.tenantId, { email })
+  return json(200, {
+    user: { userId: user.userId, email: user.email, role: user.role, createdAt: user.createdAt },
+    tenant: tenant
+      ? {
+          tenantId: tenant.tenantId, name: tenant.name, slug: tenant.slug,
+          plan: tenant.plan, status: tenant.status,
+          subscriptionStatus: tenant.subscriptionStatus ?? 'none',
+        }
+      : null,
+  })
+}
+
+/**
+ * Sends Cognito's own reset code to the user's verified email. Staff never
+ * see or set a password - the user proves the mailbox, same as self-service.
+ */
+async function resetPassword(staff: StaffContext, userId: string, event: Event): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const reason = String(body.reason ?? '').trim()
+  if (reason.length < 10) {
+    return json(400, { error: 'reason_required', message: 'Give a reason of at least 10 characters - it is recorded in the audit log.' })
+  }
+  try {
+    await cognito.send(new AdminResetUserPasswordCommand({
+      UserPoolId: process.env.CUSTOMER_POOL_ID!,
+      Username: userId,
+    }))
+  } catch (err) {
+    const name = (err as { name?: string }).name ?? 'unknown'
+    await audit(staff, 'user.reset_password', '-', { userId, error: name }, 'error')
+    return json(502, {
+      error: 'reset_failed',
+      message: name === 'InvalidParameterException'
+        ? 'Cognito refused - the user may have no verified email to send the code to.'
+        : `Cognito refused the request (${name}).`,
+    })
+  }
+  await audit(staff, 'user.reset_password', '-', { userId, reason })
+  return json(200, { reset: userId, note: 'Cognito emailed the user a reset code.' })
+}
+
+/**
+ * G4: the abuse kill switch. Suspension hides every public page (slug
+ * resolution refuses) and denies every authenticated call (authorizer
+ * check). The authorizer caches per header, so allow a few minutes.
+ */
+async function setSuspension(
+  staff: StaffContext,
+  tenantId: string,
+  suspend: boolean,
+  event: Event,
+): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const reason = String(body.reason ?? '').trim()
+  if (reason.length < 10) {
+    return json(400, { error: 'reason_required', message: 'Give a reason of at least 10 characters - it is recorded in the audit log.' })
+  }
+  const tenant = await getTenant(tenantId)
+  if (!tenant) return json(404, { error: 'tenant_not_found' })
+
+  await setTenantStatus(tenantId, suspend ? 'suspended' : 'active')
+  await audit(staff, suspend ? 'tenant.suspend' : 'tenant.unsuspend', tenantId, { reason })
+  return json(200, {
+    tenantId,
+    status: suspend ? 'suspended' : 'active',
+    note: suspend
+      ? 'Public pages are hidden now; dashboard and API access dies as authorizer caches expire (a few minutes).'
+      : 'Reinstated. Public pages return immediately; sign-ins as caches expire.',
   })
 }
 

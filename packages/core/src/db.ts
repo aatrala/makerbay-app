@@ -47,7 +47,52 @@ export async function getTenantBySlug(slug: string): Promise<TenantRow | undefin
       Limit: 1,
     }),
   )
-  return r.Items?.[0] as TenantRow | undefined
+  const tenant = r.Items?.[0] as TenantRow | undefined
+  // Every public surface (chat, booking, quote links, help centre) resolves
+  // its tenant here, so a suspension takes them all down in one place. The
+  // dashboard is denied separately, in the authorizer.
+  if (tenant?.status === 'suspended') return undefined
+  return tenant
+}
+
+/** The abuse kill switch. Staff-console only; every call is audited there. */
+export async function setTenantStatus(
+  tenantId: string,
+  status: TenantRow['status'],
+): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.tenants(),
+      Key: { tenantId },
+      UpdateExpression: 'SET #s = :s',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: { ':s': status },
+      ConditionExpression: 'attribute_exists(tenantId)',
+    }),
+  )
+}
+
+/** Every ticket arrives as an email address; this turns one into a user. */
+export async function findUserByEmail(email: string): Promise<UserRow | undefined> {
+  const r = await ddb.send(
+    new ScanCommand({
+      TableName: Tables.users(),
+      FilterExpression: 'email = :e',
+      ExpressionAttributeValues: { ':e': email.trim().toLowerCase() },
+    }),
+  )
+  return (r.Items ?? [])[0] as UserRow | undefined
+}
+
+export async function listTenantUsers(tenantId: string): Promise<UserRow[]> {
+  const r = await ddb.send(
+    new ScanCommand({
+      TableName: Tables.users(),
+      FilterExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+    }),
+  )
+  return (r.Items ?? []) as UserRow[]
 }
 
 /**

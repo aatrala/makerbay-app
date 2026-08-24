@@ -1,85 +1,77 @@
 # MakerBay — Status Board
 
-Updated 2026-08-24. One line per item; details live in the specs and CHANGELOG.
-Issue numbers refer to the running issue stream in our working sessions.
+Updated 2026-08-24 (evening). One line per item; details live in the specs
+and CHANGELOG. Issue numbers refer to the running issue stream.
 
 ## Shipped and verified
 
 | # | Item | Status |
 |---|------|--------|
-| — | Contacts, Requests, Bookings, Quotes+Invoices, Reviews, Presence, Assistant (RAG chat + embed), Payments (Stripe Connect), Voice (pending AWS enablement), Usage metering, Audit trail + Activity page | Live |
-| 26 | Assistant widget: business identity header + quick chips (services / hours / contact / about) | Live |
-| 27 | Sidebar redesign Variant A (grouped Work/Grow nav, icons, account popover, module tabs) | Live |
-| 28 | App version in app footer/popover + marketing site, linking to changelog | Live |
+| — | Contacts, Requests, Bookings, Quotes+Invoices, Reviews, Presence, Assistant (RAG chat + embed), Payments (Stripe Connect), Voice rescue (pending AWS enablement), Usage metering, Audit trail + Activity page | Live |
+| 26 | Assistant widget: business identity header + quick chips | Live |
+| 27 | Sidebar redesign Variant A + **phase 2 mobile bottom nav** (Requests badge / Diary / Quotes / More) | Live |
+| 28 | App version in app + marketing site, linking to changelog | Live |
 | 29 | Edit page URL slug inline on Your page | Live |
-| 30 | Help centre redesign: auto-generated titles/descriptions/categories from knowledge base, search, grouped index | Live |
+| 30 | Help centre redesign + **owner article curation** (edit title/description/category per article, Rewrite with AI) | Live |
 | 31 | Marketing screenshots consistent theming | Live |
-| 32 | Booking form layout broken inside chat widget (CSS leak) | Fixed |
-| 33 | Share page (WhatsApp/LinkedIn/Telegram/FB/GBP steps) + QR codes on Your page | Live |
-| 34 | Connect-domain flow (URL normalization, alias release on remove, honest alias_busy, re-add cycle proven on demo.makerbay.app) | Fixed |
-| 35 | Test-mode billing badge instead of live Stripe text | Live |
-| 36 | Genie v1 (read-only briefings over activity/bookings/requests/money/reviews/business) + /me grant merge | Live |
-| — | Pricing Variant A (Free / Trade $29 / Genie $99, annual $290) on site + billing | Live |
-| — | Roadmap + changelog Variant B on marketing site | Live |
+| 32 | Booking form layout in chat widget (CSS leak) | Fixed |
+| 33 | Share page + QR codes | Live |
+| 34 | Connect-domain flow fixes, proven on demo.makerbay.app | Fixed |
+| 35 | Test-mode billing badge | Live |
+| 36 | Genie v1 read-only + /me grant merge | Live |
+| 37 | Documents start at 001 + configurable prefix (SP-Q-001). Verified live: existing numbers untouched, new quote = SP-Q-005, public pages serve labels | Live |
+| — | **Busy blocks**: block out owner time from the diary; slots refuse it, cap ignores it. Verified live (13:00-15:00 block removed exactly those slots) | Live |
+| — | **Genie phase 2 writes**: send quote/invoice, cancel/complete booking, block time — server-held confirmation cards, executed via module APIs with the owner's own token, receipts + audit trail. Verified e2e (propose → confirm → diary; replay refused) | Live |
+| — | **Genie plan commercialized**: $99/mo Stripe product (Trade bundle + 2500 Genie msgs), taster allowances 25 free / 250 Trade applied at runtime, Billing upgrade card | Live |
+| — | **Admin console P0**: find-by-email, Tenant 360 (webhook health, Connect state, users, page/domain, source count), audited password resets, suspend/unsuspend enforced in slug resolution + authorizer, docs/runbook-support.md | Deployed 2026-08-24 |
+| — | Pricing Variant A + roadmap/changelog Variant B on site | Live |
+| — | Old demo CloudFront distribution E1NIGMQRWW00GS | Deleted 2026-08-24 |
 
-## In flight (this session)
+## Next up (approved, on me)
 
-| # | Item | Status |
-|---|------|--------|
-| 37 | Documents start at 001 + configurable prefix (SP-Q-001, SP-INV-001). Counters seed zero, central label helpers, prefix threaded through quotes/invoices/payments/Genie/web/public pages, settings input with live preview | Code done, deploying now |
-
-## Approved queue (in order)
-
-1. **Manual busy blocks for diary** (~1 day) — owner can block out times so slots
-   don't offer; approved 2026-08-24, starting after issue 37 ships.
-2. **Genie phase 2 — writes** — tool registry in core, PendingAction
-   confirmation cards, top-5 write actions, receipts, taint escalation.
-3. **Sidebar phase 2** — mobile bottom nav (Requests / Diary / Quotes / More)
-   with open-requests count badge.
-4. **Genie commercialization** — $99 Stripe product, bundle grants via webhook,
-   taster allowances (25/250/2500 msgs).
-5. **Admin console P0** (~3 days, spec-admin-support.md) — staff console at
-   admin.makerbay.app: tenant lookup, entitlement/grant management, usage view.
-6. **Voice latency probe** (~1 week, <$100, spec-voice-live-agent.md) — founder
-   steps in on AWS support blockers.
-7. **Help centre remaining item** — owner-facing help settings (title,
-   visibility, per-article curation) approved 2026-08-24.
+1. **Voice latency probe** (Stage 1, ~1 week, <$100 — spec-voice-live-agent.md):
+   one Connect instance + DID + Nova 2 Sonic handler, dual-channel recorded
+   PSTN calls. Gate: median <1,200ms AND p95 turn <900ms. Next dedicated
+   session; founder steps in on AWS support blockers.
 
 ## Needs founder input
 
-- **WhatsApp surface for Genie** — founder asked what it's for. Short version:
-  instead of opening the dashboard, the owner texts their Genie on WhatsApp
-  ("what's tomorrow look like?", "chase INV-003") and gets the same briefings/
-  actions in the channel they already live in. Costs: WhatsApp Business API
-  number + Meta approval + per-conversation fees. Parked until wanted.
-- **Admin P1 scope** — founder asked for clarity. P1 = impersonation ("view as
-  tenant"), refunds/credits issuing, feature-flag toggles per tenant, audit
-  search across tenants. P0 covers lookup + grants + usage; P1 is the
-  operate-at-scale layer. Parked until P0 lands and needs emerge.
-
-## On hold (deliberate)
-
-- **Marketplace** — revisit at ~1000 customers.
-- **Booking deposits** — revisit after payments volume.
-- **Ops hygiene** (root → IAM Identity Center, CloudWatch alarms, CI pipeline,
-  Cost Explorer review) — founder will revisit.
-- **Admin P1** — see above.
-- **WhatsApp Genie** — see above.
+- **WhatsApp surface for Genie** — what it is: the owner texts their Genie on
+  WhatsApp ("what's tomorrow?", "chase INV-003") instead of opening the app;
+  same briefings and confirmation cards, in the channel tradies already live
+  in. Costs: WhatsApp Business API number, Meta business verification, and
+  per-conversation fees (~USD 0.5-8c each). Say go and it queues behind the
+  voice probe; otherwise stays parked.
+- **Admin P1 scope** — spec G5-G8 (~4-5 days): SES suppression list view +
+  removal, read-only conversation viewer for wrong-AI-answer tickets,
+  scripted audited privacy export/delete, audit log reader page. Recommended
+  before the first 100 customers; pick any subset.
 
 ## Blocked on founder (quick)
 
-- **Stripe restricted key scopes** — add write scopes (Accounts, Account Links,
-  Checkout Sessions, Payment Intents, Refunds) to the rk_live key, and add
-  `checkout.session.completed` + `account.updated` events to the existing
-  webhook endpoint. Then I verify Connect onboarding + a live payment e2e.
+- **Stripe restricted key scopes** — add write scopes (Accounts, Account
+  Links, Checkout Sessions, Payment Intents, Refunds, and now Products +
+  Prices + Subscriptions for the Genie plan product) to the rk_live key; add
+  `checkout.session.completed` + `account.updated` to the webhook endpoint.
+  Then I verify Connect onboarding + a live payment + Genie checkout e2e.
 
 ## External waits
 
-- Chime SDK Voice enablement (AWS support case).
+- Chime SDK Voice enablement (AWS support case) — gates voice rescue go-live.
 - SES production access.
 - SMS origination identity registration.
 
-## Housekeeping
+## On hold (deliberate)
 
-- Old demo CloudFront distribution E1NIGMQRWW00GS — approved for deletion
-  2026-08-24, being removed now.
+- Marketplace (revisit ~1000 customers). Booking deposits. WhatsApp Genie
+  (pending founder read on the note above). Admin P1 (pending scope pick).
+- Ops hygiene (root → IAM Identity Center, alarms, CI, Cost Explorer) —
+  founder will revisit; worth a look after this week's five deploys.
+
+## Notes
+
+- Suspension enforcement caveat: authorizer results are cached per header, so
+  a suspension bites on public pages immediately but on the dashboard within
+  a few minutes. Documented in runbook-support.md.
+- First staff account needs the CLI bootstrap in runbook-support.md (the
+  console has no self-serve staff signup, by design).

@@ -13,8 +13,18 @@ interface Source {
   fetchedAt?: string
   warning?: string
   published?: boolean
+  helpMeta?: { title: string; description: string; category: string }
   createdAt: string
 }
+
+const HELP_CATEGORIES = [
+  'Getting started',
+  'Services & pricing',
+  'Bookings & appointments',
+  'Policies & guarantees',
+  'Troubleshooting',
+  'General',
+]
 
 interface Preview {
   name: string
@@ -46,6 +56,9 @@ export default function Knowledge() {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [metaEdit, setMetaEdit] = useState<{
+    sourceId: string; name: string; title: string; description: string; category: string
+  } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -179,6 +192,26 @@ export default function Knowledge() {
     })
   }
 
+  const saveMeta = () => {
+    if (!metaEdit) return
+    void run(async () => {
+      await api('POST', `/v1/assistant/sources/${metaEdit.sourceId}/publish`, {
+        helpMeta: { title: metaEdit.title, description: metaEdit.description, category: metaEdit.category },
+      })
+      setMetaEdit(null)
+      setNote('Article updated. The help centre picks it up within a few minutes.')
+    })
+  }
+
+  const regenMeta = (id: string) =>
+    void run(async () => {
+      const r = await api('POST', `/v1/assistant/sources/${id}/publish`, { published: true, regenerate: true })
+      setMetaEdit(null)
+      setNote(r.source?.helpMeta
+        ? `Rewritten as "${r.source.helpMeta.title}" under ${r.source.helpMeta.category}.`
+        : 'Regenerated.')
+    })
+
   const ready = sources.filter((s) => s.status === 'ready').length
   const working = sources.filter((s) => s.status === 'processing' || s.status === 'awaiting_upload').length
 
@@ -299,6 +332,9 @@ export default function Knowledge() {
                   <tr key={s.sourceId}>
                     <td>
                       {s.name}
+                      {s.published && s.helpMeta && (
+                        <div className="meta trunc">article: “{s.helpMeta.title}” · {s.helpMeta.category}</div>
+                      )}
                       {s.sourceUrl && <div className="meta trunc">{s.sourceUrl}</div>}
                       {s.warning && <div className="meta warn-text">{s.warning}</div>}
                     </td>
@@ -315,6 +351,15 @@ export default function Knowledge() {
                     <td className="nowrap">{when(s.createdAt)}</td>
                     <td className="nowrap">
                       <button className="ghost" onClick={() => openPreview(s.sourceId)}>Preview</button>{' '}
+                      {s.published && (
+                        <><button className="ghost" onClick={() => setMetaEdit({
+                          sourceId: s.sourceId,
+                          name: s.name,
+                          title: s.helpMeta?.title ?? s.name,
+                          description: s.helpMeta?.description ?? '',
+                          category: s.helpMeta?.category ?? 'General',
+                        })}>Article</button>{' '}</>
+                      )}
                       {s.type === 'url' && <><button className="ghost" onClick={() => refresh(s.sourceId)}>Refresh</button>{' '}</>}
                       <button className="danger" onClick={() => remove(s.sourceId, s.name)}>Remove</button>
                     </td>
@@ -332,6 +377,36 @@ export default function Knowledge() {
           </p>
         )}
       </div>
+
+      {metaEdit && (
+        <div className="card">
+          <div className="row">
+            <h2 className="grow">Help article: {metaEdit.name}</h2>
+            <button className="ghost" onClick={() => setMetaEdit(null)}>Close</button>
+          </div>
+          <p className="meta">
+            How this source appears in your help centre. The wording was written for you at publish
+            time — change anything, or have it rewritten from the content.
+          </p>
+          <label htmlFor="am-title">Title</label>
+          <input id="am-title" maxLength={80} value={metaEdit.title}
+            onChange={(e) => setMetaEdit({ ...metaEdit, title: e.target.value })} />
+          <label htmlFor="am-desc">One-line description</label>
+          <input id="am-desc" maxLength={160} value={metaEdit.description}
+            onChange={(e) => setMetaEdit({ ...metaEdit, description: e.target.value })} />
+          <label htmlFor="am-cat">Category</label>
+          <select id="am-cat" value={metaEdit.category}
+            onChange={(e) => setMetaEdit({ ...metaEdit, category: e.target.value })}>
+            {HELP_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <div className="row mt">
+            <button disabled={busy} onClick={saveMeta}>Save article</button>
+            <button className="ghost" disabled={busy} onClick={() => regenMeta(metaEdit.sourceId)}>
+              Rewrite with AI
+            </button>
+          </div>
+        </div>
+      )}
 
       {preview && (
         <div className="card">

@@ -60,7 +60,7 @@ export interface ModuleManifest {
 }
 
 /** Platform version: the core (tenancy, auth, entitlements, billing) itself. */
-export const PLATFORM_VERSION = '1.20.0'
+export const PLATFORM_VERSION = '1.22.0'
 
 export const MODULES: ModuleManifest[] = [
   contactsManifest,

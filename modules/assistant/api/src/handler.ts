@@ -34,6 +34,7 @@ import {
   businessProfile,
 } from './db'
 import {
+  HELP_CATEGORIES,
   buildCitations,
   generateAnswer,
   generateHelpMeta,
@@ -571,12 +572,30 @@ async function setPublished(
   if (source.status !== 'ready' && body.published === true) {
     return json(409, { error: 'not_ready', message: 'Wait until this source has finished processing.' })
   }
-  const updated: SourceRow = { ...source, published: body.published === true, updatedAt: new Date().toISOString() }
+  const updated: SourceRow = {
+    ...source,
+    // Omitting `published` edits the article without touching visibility.
+    published: body.published === undefined ? (source.published ?? false) : body.published === true,
+    updatedAt: new Date().toISOString(),
+  }
+
+  // Owner curation beats generation: a hand-written title, description or
+  // category sticks until the owner regenerates or rewrites it.
+  if (body.helpMeta && typeof body.helpMeta === 'object') {
+    const m = body.helpMeta as Record<string, unknown>
+    updated.helpMeta = {
+      title: String(m.title ?? '').trim().slice(0, 80) || source.name,
+      description: String(m.description ?? '').trim().slice(0, 160),
+      category: (HELP_CATEGORIES as readonly string[]).includes(String(m.category))
+        ? String(m.category)
+        : (updated.helpMeta?.category ?? 'General'),
+    }
+  }
 
   // First publish (or explicit regenerate): one model call turns a filename
   // into a customer-facing title, a one-line description and a category the
   // help centre groups by. Best-effort - publishing never fails on it.
-  if (body.published === true && (!updated.helpMeta || body.regenerate === true)) {
+  if (updated.published && (!updated.helpMeta || body.regenerate === true)) {
     const text = await sourceText(source)
     if (text) {
       const tenant = await getTenant(tenantId)

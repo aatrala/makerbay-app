@@ -11,6 +11,26 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.12.0 - 2026-08-24
+
+> **Support that answers on the first look** — staff can now find any account by email, see its whole state on one screen, send password resets, and pull the kill switch on abuse.
+
+- Added `platform` Staff console: find a workspace by the customer's email
+  address, a full account view (webhook health, payment onboarding, public
+  page and domain state, who can log in), audited password resets that send
+  Cognito's own code, and suspend/reinstate with enforcement everywhere -
+  public pages and API access included. Every staff action is on the
+  append-only audit log, reasons required.
+
+## 2.11.0 - 2026-08-24
+
+> **Your help centre, your words** — edit any article's title, description and category by hand, or have it rewritten from the content in one click.
+
+- Added `assistant` An Article editor on every published knowledge source:
+  change the title, one-line description and category your help centre
+  shows, or tap "Rewrite with AI" to regenerate them from the content.
+  Hand-written wording sticks until you say otherwise.
+
 ## 2.10.0 - 2026-08-24
 
 > **A thumb nav for the ute, and a Genie taster for everyone** — Requests, Diary and Quotes one tap away on your phone, and every plan now includes enough Genie to feel what it is.
