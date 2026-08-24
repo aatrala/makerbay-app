@@ -48,7 +48,7 @@ these work.
 | **a** | **Assistant** | Answers customers from the business's own documents, on the web page, the widget, or by link. |
 | **b** | **Bookings** | Turns "are you free Thursday" into a confirmed appointment without a phone call. |
 | **c** | **Presence** — a page per business | The thing customers actually land on: who you are, what you do, when you are free, book now, ask anything. Auto-created, editable, at a slug. |
-| **d** | **Visibility** | Being findable for "[service] near [suburb]" — a directory across every business on the platform, plus each one's own page. |
+| **d** | **Visibility** | Getting the business's own Google profile right, and collecting reviews at the moment a customer is most likely to leave one. Not a directory - see below. |
 | **e** | **Voice** | Answers the phone when the shop is shut or the person is up a ladder. Takes the booking or the callback. |
 
 ### Why these five and not others
@@ -58,11 +58,17 @@ want an assistant, a booking engine and a voice bot. They want a page that gets
 them work. The other three are what makes that page do something when a
 customer arrives on it — at 9am from Google, at 11pm from a phone call.
 
-**(d) is the acquisition engine and the moat.** One page ranks for nothing. Two
-hundred pages, all fast, all structured, all genuinely about a real business in
-a real suburb, is an asset that compounds and that a competitor cannot copy by
-writing code. It is also the hardest and slowest of the five, and the one most
-likely to be oversold. See §6.
+**(d) was reframed by the research and is no longer a directory.** Live SERP
+data showed that a per-business page is the wrong page type for
+"[service] [suburb]" queries - a page-type problem no amount of markup fixes -
+and that a suburb directory cannot rank without supply density we will not have
+for years. Worse, generating those pages is the exact shape Google penalises.
+
+What survives is real and smaller: Google Business Profile is the channel that
+matters, it is verified against the business rather than the platform, and
+helping a trade get it right plus collecting real reviews is genuinely valuable.
+(d) becomes features inside Presence, not a product. See
+`docs/analysis-search-visibility.md`.
 
 **(e) is the highest willingness to pay in the whole portfolio** and the highest
 risk. A missed call is real money; a voice agent that mishandles a customer is
@@ -129,13 +135,17 @@ one more feature.
 Written down here so it cannot be quietly forgotten when the marketing copy is
 being drafted.
 
-**Visibility cannot be promised.** We do not control Google. Auto-generating
-city × service pages is a pattern search engines actively penalise when the
-pages are thin. What we can honestly offer is: a fast, well-structured,
-genuinely-about-this-business page with correct local markup, and a directory
-that is useful to a human. What we must never say is "we will get you to page
-one". *An independent analysis of this is commissioned; §7 sequencing depends
-on what it concludes.*
+**Visibility cannot be promised, and the analysis was harsher than expected.**
+We do not control Google, and the research found that a directory is not merely
+hard but the wrong *kind* of business for us: if a suburb page ranked, the trade
+does not get a lead, we get a visitor we must route - which is a marketplace
+competing with hipages and JustDial, not SaaS. A solo pre-revenue founder should
+not pick the marketplace.
+
+The risk also lands closer to home than expected: auto-generating per-tenant
+page copy is the most likely route to being classified as scaled content abuse,
+and that would take every tenant's page down together. Presence carries hard
+indexing rules because of it.
 
 **Voice is the one that can damage a customer.** A bad answer in chat is
 ignored; a bad answer on the phone loses the job and embarrasses the tradie.
@@ -162,8 +172,8 @@ Ordered by dependency and by what is already built, not by excitement.
 |---|---|---|
 | **1** | **(c) Presence** | Mostly assembly: Assistant, Bookings, Quotes and Contacts already exist. It turns five modules into one product with an obvious pitch. Nothing else should come first. |
 | **2** | **Stripe Connect** | Blocks the payments half of (c), and deposits in Bookings and Quotes. Long lead time because of verification. |
-| **3** | **(d) Visibility** | Needs (c) to exist — there is no directory without listings. Slow-burn; start early because it compounds, but never sell it as a guarantee. |
-| **4** | **(e) Voice** | Separate technical project with real per-minute cost. Worth doing when there is revenue to justify it and a customer base to pilot with. |
+| **3** | **(d) as GBP assist + reviews** | No longer a directory. Google Business Profile setup, detail consistency, and asking for reviews after a finished job. Builds on Presence; the directory is deferred behind a hard density rule of 8+ real providers per suburb. |
+| **4** | **(e) Voice** | Real per-minute cost, and the price is $29/month rather than $149 because Jobber and ServiceM8 already bundle one. A reason to stay, not a reason to pay. India may be the better first market. |
 | **5** | **Reviews** | Needs completed jobs to trigger from, so it stays last. |
 
 ## 8. How to judge a new idea

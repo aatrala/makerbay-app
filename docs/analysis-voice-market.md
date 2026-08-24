@@ -1,8 +1,8 @@
 # Voice agents — competitive and pricing analysis
 
 **Version:** 1.0 · **Researched:** 2026-08-24 · **Scope:** phone answering for SMBs
-**Feeds:** `docs/vision.md` item (e) · **Status:** commercial half complete;
-technical feasibility (latency, per-minute cost, AWS architecture) still running.
+**Feeds:** `docs/vision.md` item (e)
+**Status:** Parts 1–2 superseded in places by Part 3. Read Part 3 first.
 
 Prices were read off vendor properties on 2026-08-24 unless marked otherwise.
 Anything not verifiable on a vendor's own site is marked as such and should not
@@ -24,28 +24,22 @@ document is detail hanging off it.
 It also sets our ceiling. Rosie is $49/month for 250 minutes and $149 for 1,000.
 Any price we pick lives in that neighbourhood, not Ruby's.
 
-## 2. The finding that changes our position
+## 2. ~~The finding that changes our position~~ — WITHDRAWN, see Part 3
 
-> Across eight vendors, **not one publicly claims integration with
-> ServiceTitan, Housecall Pro or Jobber** — the systems tradies actually run
-> their jobs in.
+> **This section was wrong and is kept only so the correction is legible.**
 
-Every one of these products is a phone answering service *bolted onto a calendar
-it does not own*. Slang integrates with OpenTable because restaurants live in
-OpenTable. Numa integrates with dealer DMS because dealerships live there. For
-home services, nobody has done the equivalent.
+It originally claimed that no vendor integrates with ServiceTitan, Housecall Pro
+or Jobber, and concluded that owning the diary was an advantage nobody else had.
 
-**We do not need to solve that problem, because we do not have it.** MakerBay
-already owns the diary, the customer record and the knowledge base. A voice
-agent here is a *surface on a system we control*, not an integration against
-someone else's.
+That was true of the *horizontal* vendors surveyed in Part 1 — Ruby, Rosie,
+Goodcall, Smith.ai — and **false of the home-services-native ones**, which the
+first sweep did not cover. Avoca is a ServiceTitan certified app with $125M
+raised at a $1B valuation. Sameday is certified too. The gap I thought I had
+found does not exist.
 
-That is the difference between "an AI answers your phone and emails you a
-message" and "an AI answers your phone and the job is in your diary before you
-put the drill down". The second one is only buildable by whoever owns the diary.
-
-This is the strongest strategic argument for (e) so far, and it did not come
-from reasoning about our product — it came from finding the hole in theirs.
+Worse, the follow-up research found the field-service platforms have shipped
+their *own* voice agents and priced them at $29–32/month or free. **Part 3
+replaces this section entirely.** Read that instead.
 
 ## 3. Who is actually in this market
 

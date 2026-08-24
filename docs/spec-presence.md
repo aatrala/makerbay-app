@@ -104,9 +104,31 @@ Bookings and the page changes.
   surfaces — never a second naming scheme.
 - **Unpublished means 404**, not a placeholder. A half-finished page indexed by
   Google is a liability the owner cannot easily undo.
-- **No invented content.** If the owner has not written an intro, we show their
-  services and nothing else. We do not generate a paragraph about how great
-  they are; a customer can tell, and so can a search engine.
+- **No invented content, and this is now a hard rule rather than taste.**
+  Generating "Joe's Electrical provides reliable emergency electrical services
+  in Newtown..." for every tenant from one prompt produces a near-duplicate
+  corpus at scale, which is the single most likely way this domain gets
+  classified as scaled content abuse - taking every other tenant's page down
+  with it. Template the *structure*; fill it with data the owner entered.
+  See `docs/analysis-search-visibility.md` section 3.
+
+- **A page is `noindex` until it is genuinely complete.** Real photo, at least
+  one priced service, a real intro. This keeps our index at roughly one page
+  per real business rather than one per signup, which is the difference between
+  a corpus Google trusts and one it discounts wholesale.
+
+- **If the tradie already has a website, our page is `noindex, follow`** and
+  links to theirs. We do not cross-domain canonical, and we do not compete with
+  our own customer for their own brand name.
+
+- **Churn is handled from day one.** Deleted tenant returns `410 Gone`. Lapsed
+  but intact returns `noindex, follow` and stays live so it is reversible.
+  Never `robots.txt`-block a page we want deindexed - Google cannot recrawl to
+  see the `noindex`. Never bulk-redirect dead tenants to a category page; that
+  is a soft-404 doorway pattern.
+
+- **Sitemaps segmented by page type**, so Search Console tells us which class of
+  page is being rejected instead of leaving us blind.
 - **Photo is optional and one.** Not a gallery. A gallery is a project and an
   empty gallery looks abandoned.
 
@@ -136,7 +158,11 @@ Bookings and the page changes.
 
 ## 10. Then what
 
-Presence makes (d) Visibility possible, because a directory needs listings.
+Presence is now also where the search *value* lives, not just the search risk.
+The visibility research concluded that a directory cannot rank without supply we
+will not have for years, and that what actually works is being the best page a
+tradie can point their Google Business Profile at. So the next features here are
+GBP assist and review generation - not a directory.
 It makes (e) Voice worth more, because the voice agent has somewhere to send
 people. And it makes Stripe Connect urgent rather than theoretical.
 

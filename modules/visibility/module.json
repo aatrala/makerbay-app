@@ -1,7 +1,7 @@
 {
   "id": "visibility",
   "name": "Get found",
-  "tagline": "Be findable for what you do, where you do it",
+  "tagline": "Set up properly on Google, and asked for reviews at the right moment",
   "status": "planned",
   "version": {
     "api": "0.0.0",
@@ -20,29 +20,33 @@
   ],
   "roadmap": {
     "order": 7,
-    "note": "Needs pages to exist before there is a directory. Under independent analysis - we will not sell rankings we cannot control."
+    "note": "Reframed after research: a new directory cannot rank against IndiaMART, JustDial and hipages without supply we will not have for years, and auto-generated suburb pages are the shape Google penalises. What works is helping a business get its own Google profile right and collect real reviews."
   },
   "marketing": {
-    "summary": "A directory of the businesses on MakerBay, searchable by what you need and where you are, with every listing backed by a real page that answers questions and takes bookings.",
+    "summary": "Google Business Profile is how customers actually find a local trade, and it is verified against your business, not ours - so we cannot rank on your behalf and will not pretend to. What we can do is get your profile set up properly, keep your details consistent, and ask every finished customer for a review at the moment they are most likely to leave one.",
     "audience": "Service businesses whose customers search before they call.",
     "features": [
       {
-        "title": "One listing, kept current",
-        "body": "Your directory entry is your page. Change your hours once and both are right."
+        "title": "Your Google profile, set up properly",
+        "body": "Guided setup: the right categories, real hours, your service list, photo prompts, and details that match your page exactly. Most trades get this wrong and never find out."
       },
       {
-        "title": "Findable by service and area",
-        "body": "Customers browse by what they need and the suburb they are in, and land somewhere that can book them in."
+        "title": "Reviews asked for automatically",
+        "body": "After a finished job, the customer gets a message with a direct link to leave a Google review. Asking at the right moment is most of the battle."
       },
       {
-        "title": "Honest about what we control",
-        "body": "We build fast, correctly marked-up pages and a directory worth using. We do not sell search rankings, because nobody can."
+        "title": "The best answer when someone searches your name",
+        "body": "Word of mouth is how most trade work arrives. When someone Googles your business after seeing your van, your page loads fast and books them in."
       }
     ],
     "faq": [
       {
         "q": "Will this get me to the top of Google?",
-        "a": "We will not promise that, and you should not believe anyone who does. What we control is a fast page, correct local markup and a directory that is genuinely useful. What Google does with that is Google's."
+        "a": "No, and anyone promising that is selling you something. Rankings for searches like 'electrician near me' are decided by Google Maps and your Google profile, which is verified against your business rather than ours. We help you get that profile right and collect real reviews, which is what actually moves it."
+      },
+      {
+        "q": "Do you list me in a directory?",
+        "a": "Not yet, and not until there are enough trades in your area for the page to be genuinely useful. A directory page listing one electrician helps nobody and search engines rightly penalise it."
       }
     ]
   }
