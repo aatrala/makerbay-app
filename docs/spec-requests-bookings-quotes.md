@@ -301,3 +301,39 @@ The pure logic in these modules — slot computation, money arithmetic, token
 generation, status transitions — is exactly the kind that should be unit
 tested, and it can be tested without AWS. This is the natural point to
 introduce Vitest.
+
+---
+
+## Addendum 2026-08-24: reminders, revisions, invoices (shipped)
+
+### Booking reminders
+- One-off EventBridge Scheduler schedule per booking, name `rem-{bookingId}`,
+  created at booking time (`ActionAfterCompletion: DELETE` so fired schedules
+  clean themselves up), deleted best-effort on cancel from either side.
+- Timing is pure and tested (`reminder-time.ts`): more than 26h out → 24h
+  before; more than 3h out → 2h before; else no reminder.
+- The reminder Lambda re-reads the booking and sends only if it is still
+  `confirmed`, has an email, and is still in the future. The schedule is a
+  wake-up call, not the source of truth. Metric: `reminder.sent`.
+- On completion the booking Lambda emits `booking.completed` on the bus; the
+  reviews Lambda owns what happens next (see SPEC.md §5).
+
+### Quote revisions
+- `POST /v1/quotes/{id}/revise` on any non-draft quote: a fresh draft with a
+  new number and token, `revisionOf` back-reference. A `sent` original flips
+  to `superseded` and its public page points forward to the new quote; a
+  settled original (accepted/declined/expired) keeps its status - history
+  never changes.
+
+### Simple invoices (in the Quotes module)
+- Born from an accepted quote only (`POST /v1/quotes/{id}/invoice`); lines
+  and totals are copied, never recomputed - the customer already agreed.
+- Own atomic number series (`INV-0001`); table `makerbay-invoices`.
+- Statuses `draft → sent → paid | void`. Paid is immutable except void.
+- Public themed page at `chat.makerbay.app/invoice?slug=&token=`, printable
+  (three themes: classic, compact, bold; picked in Quotes settings alongside
+  `paymentInstructions` and `dueDays`).
+- Deliberately not bookkeeping: no ledgers, no reconciliation, no tax
+  accounting. The public roadmap wording changed from "no invoicing" to
+  "no bookkeeping/tax accounting" the same day this shipped.
+- Metrics: `invoice.sent`, `invoice.paid`.

@@ -8,6 +8,7 @@ const Tables = {
   bookingServices: () => process.env.TABLE_BOOKINGSERVICES!,
   bookingConfig: () => process.env.TABLE_BOOKINGCONFIG!,
   assistantConfig: () => process.env.TABLE_ASSISTANT_CONFIG!,
+  reviews: () => process.env.TABLE_REVIEWS!,
 }
 
 export interface PresenceConfigRow {
@@ -28,6 +29,13 @@ export interface PresenceConfigRow {
    * brand, and we never cross-domain canonical.
    */
   websiteUrl?: string
+  /** Presence Pro: the page on the tenant's own domain. See domain.ts. */
+  customDomain?: string
+  domainCertArn?: string
+  domainStatus?: 'pending_validation' | 'pending_dns' | 'active'
+  domainValidation?: { name: string; value: string }
+  distributionId?: string
+  distributionDomain?: string
   updatedAt?: string
 }
 
@@ -104,4 +112,52 @@ export async function assistantView(tenantId: string): Promise<AssistantView> {
     greeting: String(r.Item?.greeting ?? ''),
     brandColor: /^#[0-9a-fA-F]{6}$/.test(String(r.Item?.brandColor)) ? String(r.Item!.brandColor) : '#c2410c',
   }
+}
+
+export interface ReviewsView {
+  average: number
+  count: number
+  items: Array<{ rating: number; text?: string; name?: string }>
+}
+
+/** Published first-party reviews, newest first. Read-only, like everything above. */
+export async function publishedReviews(tenantId: string): Promise<ReviewsView | undefined> {
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: Tables.reviews(),
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+      ScanIndexForward: false,
+      Limit: 200,
+    }),
+  )
+  const rows = (r.Items ?? []).filter((x) => x.status === 'published' && x.rating)
+  if (!rows.length) return undefined
+  const average = rows.reduce((s, x) => s + Number(x.rating), 0) / rows.length
+  return {
+    average: Math.round(average * 10) / 10,
+    count: rows.length,
+    items: rows.slice(0, 5).map((x) => ({
+      rating: Number(x.rating),
+      text: x.text ? String(x.text) : undefined,
+      name: x.name ? String(x.name) : undefined,
+    })),
+  }
+}
+
+/**
+ * The tenant whose active custom domain matches the request host. Backed by
+ * the byDomain GSI, so an unknown host costs one cheap query.
+ */
+export async function findByCustomDomain(domain: string): Promise<PresenceConfigRow | undefined> {
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: Tables.config(),
+      IndexName: 'byDomain',
+      KeyConditionExpression: 'customDomain = :d',
+      ExpressionAttributeValues: { ':d': domain },
+      Limit: 1,
+    }),
+  )
+  return (r.Items ?? [])[0] as PresenceConfigRow | undefined
 }

@@ -2,10 +2,10 @@
   "id": "reviews",
   "name": "Reviews",
   "tagline": "Ask happy customers for a review at the right moment",
-  "status": "planned",
+  "status": "live",
   "version": {
-    "api": "0.0.0",
-    "web": "0.0.0"
+    "api": "1.0.0",
+    "web": "1.0.0"
   },
   "routes": [
     "/v1/reviews/*",
@@ -21,7 +21,7 @@
   ],
   "roadmap": {
     "order": 9,
-    "note": "Needs a completed job or appointment to trigger from, so it follows Bookings and Quotes."
+    "note": "Shipped. Asks after a completed booking, collects the words on a page in your name, shows them on your MakerBay page. No gating, ever."
   },
   "marketing": {
     "summary": "The best time to ask for a review is just after the work is done and the customer is pleased. Reviews watches for that moment - a completed booking, an accepted quote - and asks, then shows the results on your site.",
@@ -36,8 +36,8 @@
         "body": "One reminder, then it stops. Nagging costs you the review and the customer."
       },
       {
-        "title": "Show them on your site",
-        "body": "An embeddable wall of reviews using the same one-line snippet as the assistant."
+        "title": "Shown where you are found",
+        "body": "Published reviews appear on your MakerBay page, and every respondent is offered your Google review link too - whatever they scored."
       }
     ],
     "faq": [

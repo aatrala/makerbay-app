@@ -37,7 +37,7 @@ interface Quote {
   taxCents: number
   totalCents: number
   currency: string
-  status: 'draft' | 'sent' | 'accepted' | 'declined' | 'expired'
+  status: 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'superseded'
   validUntil: string
   notes?: string
   terms?: string
@@ -45,12 +45,36 @@ interface Quote {
   createdAt: string
 }
 
+interface Invoice {
+  invoiceId: string
+  number: number
+  quoteId?: string
+  contactId?: string
+  customerName?: string
+  customerEmail?: string
+  lines: Line[]
+  subtotalCents: number
+  taxCents: number
+  totalCents: number
+  currency: string
+  notes?: string
+  paymentInstructions?: string
+  status: 'draft' | 'sent' | 'paid' | 'void'
+  dueAt: string
+  createdAt: string
+  sentAt?: string
+  paidAt?: string
+}
+
+const invoiceLabel = (i: Pick<Invoice, 'number'>) => `INV-${String(i.number).padStart(4, '0')}`
+
 const cash = (cents: number, currency = 'AUD') =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(cents / 100)
 
 const STATUS_CHIP: Record<string, string> = {
   draft: 'awaiting_upload', sent: 'processing', accepted: 'ready',
-  declined: 'failed', expired: 'failed',
+  declined: 'failed', expired: 'failed', superseded: 'failed',
+  paid: 'ready', void: 'failed',
 }
 
 function QuotesList() {
@@ -241,6 +265,7 @@ function NewQuote() {
 
 function QuoteDetail() {
   const { quoteId = '' } = useParams()
+  const navigate = useNavigate()
   const [quote, setQuote] = useState<Quote | null>(null)
   const [publicUrl, setPublicUrl] = useState('')
   const [taxLabel, setTaxLabel] = useState('Tax')
@@ -299,6 +324,9 @@ function QuoteDetail() {
       {quote.status === 'expired' && (
         <Notice tone="warn">This quote passed its date and can no longer be accepted.</Notice>
       )}
+      {quote.status === 'superseded' && (
+        <Notice tone="warn">This quote was replaced by a newer revision.</Notice>
+      )}
 
       <div className="card">
         <div className="scroll-x">
@@ -348,6 +376,198 @@ function QuoteDetail() {
               <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener">Preview</a>
             </div>
             <p className="meta">Anyone with this link can view and accept. Share it only with your customer.</p>
+          </>
+        )}
+      </div>
+
+      {quote.status !== 'draft' && (
+        <div className="card">
+          <h2>Next steps</h2>
+          <div className="row">
+            {quote.status === 'accepted' && (
+              <button disabled={busy} onClick={() => void (async () => {
+                setBusy(true); setError('')
+                try {
+                  const r = await api('POST', `/v1/quotes/${quoteId}/invoice`, {})
+                  navigate(`/quotes/invoices/${r.invoice.invoiceId}`)
+                } catch (e) { setError(explain(e)); setBusy(false) }
+              })()}>
+                Create invoice
+              </button>
+            )}
+            <button className="ghost" disabled={busy} onClick={() => void (async () => {
+              setBusy(true); setError('')
+              try {
+                const r = await api('POST', `/v1/quotes/${quoteId}/revise`, {})
+                navigate(`/quotes/${r.quote.quoteId}`)
+              } catch (e) { setError(explain(e)); setBusy(false) }
+            })()}>
+              Revise quote
+            </button>
+          </div>
+          <p className="meta">
+            {quote.status === 'accepted'
+              ? 'An invoice copies the agreed lines exactly. A revision starts a fresh draft with a new number.'
+              : 'A revision starts a fresh draft with a new number; this quote stays as it is.'}
+          </p>
+        </div>
+      )}
+    </>
+  )
+}
+
+function InvoicesList() {
+  const [invoices, setInvoices] = useState<Invoice[] | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    void api('GET', '/v1/quotes/invoices')
+      .then((r) => setInvoices(r.invoices ?? []))
+      .catch((e) => { setError(explain(e)); setInvoices([]) })
+  }, [])
+
+  return (
+    <>
+      <h1>Invoices</h1>
+      <p>Simple invoices from accepted quotes. Bookkeeping and tax stay in your accounting software.</p>
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      <div className="card">
+        {!invoices ? <Skeleton rows={4} /> : invoices.length === 0 ? (
+          <Empty title="No invoices yet">
+            Open an accepted quote and press Create invoice — the agreed price carries over exactly.
+          </Empty>
+        ) : (
+          <div className="scroll-x">
+            <table>
+              <thead><tr><th>#</th><th>Customer</th><th className="num">Total</th><th>Status</th><th>Due</th></tr></thead>
+              <tbody>
+                {invoices.map((i) => (
+                  <tr key={i.invoiceId}>
+                    <td><Link to={`/quotes/invoices/${i.invoiceId}`}>{invoiceLabel(i)}</Link></td>
+                    <td>{i.customerName || i.customerEmail || <span className="meta">no name</span>}</td>
+                    <td className="num">{cash(i.totalCents, i.currency)}</td>
+                    <td><span className={`chip ${STATUS_CHIP[i.status]}`}>{i.status}</span></td>
+                    <td className="nowrap">{when(i.dueAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+function InvoiceDetail() {
+  const { invoiceId = '' } = useParams()
+  const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const [label, setLabel] = useState('')
+  const [publicUrl, setPublicUrl] = useState('')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api('GET', `/v1/quotes/invoices/${invoiceId}`)
+      setInvoice(r.invoice); setLabel(r.label); setPublicUrl(r.publicUrl)
+    } catch (e) { setError(explain(e)) }
+  }, [invoiceId])
+  useEffect(() => { void load() }, [load])
+
+  const run = (fn: () => Promise<void>) =>
+    void (async () => {
+      setBusy(true); setError(''); setNote('')
+      try { await fn(); await load() } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  if (error && !invoice) return (
+    <><p className="meta"><Link to="/quotes/invoices">← All invoices</Link></p><h1>Invoice</h1>
+      <Notice tone="err">{error}</Notice></>
+  )
+  if (!invoice) return (
+    <><p className="meta"><Link to="/quotes/invoices">← All invoices</Link></p><h1>Invoice</h1>
+      <div className="card"><Skeleton rows={5} /></div></>
+  )
+
+  return (
+    <>
+      <p className="meta"><Link to="/quotes/invoices">← All invoices</Link></p>
+      <h1>{label}</h1>
+      <p>
+        {invoice.customerName || invoice.customerEmail}
+        {invoice.contactId && <> · <Link to={`/contacts/${invoice.contactId}`}>see their history</Link></>}
+        {' '}· <span className={`chip ${STATUS_CHIP[invoice.status]}`}>{invoice.status}</span>
+        {invoice.quoteId && <> · <Link to={`/quotes/${invoice.quoteId}`}>from quote</Link></>}
+      </p>
+
+      {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {invoice.status === 'paid' && (
+        <Notice tone="ok">Paid{invoice.paidAt ? ` on ${when(invoice.paidAt)}` : ''}. A paid invoice never changes.</Notice>
+      )}
+
+      <div className="card">
+        <div className="scroll-x">
+          <table>
+            <thead><tr><th>Description</th><th className="num">Qty</th><th className="num">Unit</th><th className="num">Total</th></tr></thead>
+            <tbody>
+              {invoice.lines.map((l, i) => (
+                <tr key={i}>
+                  <td>{l.description}</td>
+                  <td className="num">{l.quantity} {l.unit}</td>
+                  <td className="num">{cash(l.unitCents, invoice.currency)}</td>
+                  <td className="num">{cash(l.totalCents, invoice.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <dl className="facts mt">
+          <dt>Subtotal</dt><dd>{cash(invoice.subtotalCents, invoice.currency)}</dd>
+          {invoice.taxCents > 0 && <><dt>Tax</dt><dd>{cash(invoice.taxCents, invoice.currency)}</dd></>}
+          <dt>Total</dt><dd><strong>{cash(invoice.totalCents, invoice.currency)}</strong></dd>
+          <dt>Due</dt><dd>{new Date(invoice.dueAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
+        </dl>
+        {invoice.paymentInstructions && <><label>How to pay</label><p className="meta">{invoice.paymentInstructions}</p></>}
+      </div>
+
+      <div className="card">
+        <h2>Send and settle</h2>
+        {invoice.status !== 'void' && invoice.status !== 'paid' && (
+          <div className="row">
+            <button disabled={busy || !invoice.customerEmail}
+              onClick={() => run(async () => {
+                const r = await api('POST', `/v1/quotes/invoices/${invoiceId}/send`, {})
+                setNote(r.emailed
+                  ? `Sent to ${invoice.customerEmail}.`
+                  : 'Email is not switched on yet, so nothing was sent. Copy the link below instead.')
+              })}>
+              {busy ? 'Working…' : invoice.status === 'draft' ? 'Send invoice' : 'Send again'}
+            </button>
+            <button className="ghost" disabled={busy}
+              onClick={() => run(async () => { await api('PATCH', `/v1/quotes/invoices/${invoiceId}`, { status: 'paid' }) })}>
+              Mark paid
+            </button>
+            <button className="danger" disabled={busy}
+              onClick={() => { if (window.confirm('Void this invoice?')) run(async () => { await api('PATCH', `/v1/quotes/invoices/${invoiceId}`, { status: 'void' }) }) }}>
+              Void
+            </button>
+          </div>
+        )}
+        {!invoice.customerEmail && invoice.status === 'draft' && (
+          <p className="meta">This customer has no email — share the link below instead.</p>
+        )}
+        {publicUrl && (
+          <>
+            <label className="mt">Customer link</label>
+            <div className="row">
+              <input className="grow" readOnly value={publicUrl} onFocus={(e) => e.target.select()} aria-label="Customer link" />
+              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener">Preview</a>
+            </div>
+            <p className="meta">The page is printable — the customer can save it as a PDF. The look comes from your invoice theme under Price list.</p>
           </>
         )}
       </div>
@@ -468,6 +688,30 @@ function PriceList() {
             <label htmlFor="terms">Terms shown on every quote</label>
             <textarea id="terms" rows={2} value={config.terms}
               onChange={(e) => setConfig({ ...config, terms: e.target.value })} />
+
+            <h2 className="mt">Invoices</h2>
+            <div className="row">
+              <div className="grow">
+                <label htmlFor="inv-theme">Theme</label>
+                <select id="inv-theme" value={config.invoiceTheme ?? 'classic'}
+                  onChange={(e) => setConfig({ ...config, invoiceTheme: e.target.value })}>
+                  <option value="classic">Classic — serif, quiet, traditional</option>
+                  <option value="compact">Compact — small and dense</option>
+                  <option value="bold">Bold — heavy header, big total</option>
+                </select>
+              </div>
+              <div className="grow">
+                <label htmlFor="inv-due">Due after (days)</label>
+                <input id="inv-due" type="number" min={1} max={90} value={config.dueDays ?? 14}
+                  onChange={(e) => setConfig({ ...config, dueDays: Number(e.target.value) })} />
+              </div>
+            </div>
+            <label htmlFor="inv-pay">How customers pay you</label>
+            <textarea id="inv-pay" rows={2} value={config.paymentInstructions ?? ''}
+              placeholder={'Bank transfer to BSB 000-000, account 12345678.\nOr PayID: 0400 000 000.'}
+              onChange={(e) => setConfig({ ...config, paymentInstructions: e.target.value })} />
+            <p className="meta">Shown on every invoice that is not yet paid.</p>
+
             <div className="mt"><button disabled={busy}>Save settings</button></div>
           </form>
         </div>
@@ -481,6 +725,7 @@ export const quotesDashboard: DashboardModule = {
   label: 'Quotes',
   nav: [
     { to: '/quotes', label: 'All quotes' },
+    { to: '/quotes/invoices', label: 'Invoices' },
     { to: '/quotes/prices', label: 'Price list' },
   ],
   routes: () => (
@@ -488,6 +733,8 @@ export const quotesDashboard: DashboardModule = {
       <Route path="/quotes" element={<QuotesList />} />
       <Route path="/quotes/new" element={<NewQuote />} />
       <Route path="/quotes/prices" element={<PriceList />} />
+      <Route path="/quotes/invoices" element={<InvoicesList />} />
+      <Route path="/quotes/invoices/:invoiceId" element={<InvoiceDetail />} />
       <Route path="/quotes/:quoteId" element={<QuoteDetail />} />
     </>
   ),

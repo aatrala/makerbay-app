@@ -4,8 +4,8 @@
   "tagline": "Turn a job enquiry into a priced quote the same day",
   "status": "live",
   "version": {
-    "api": "1.0.0",
-    "web": "1.0.0"
+    "api": "1.1.0",
+    "web": "1.1.0"
   },
   "routes": [
     "/v1/quotes/*",
@@ -13,7 +13,9 @@
   ],
   "meteredMetrics": [
     "quote.sent",
-    "quote.accepted"
+    "quote.accepted",
+    "invoice.sent",
+    "invoice.paid"
   ],
   "entitlementKey": "quotes",
   "dependsOn": [
@@ -21,7 +23,7 @@
   ],
   "roadmap": {
     "order": 5,
-    "note": "Shipped. Quoting only - invoicing, tax handling and bookkeeping stay out of scope."
+    "note": "Shipped. Quotes, revisions and simple invoices - bookkeeping, tax accounting and reconciliation stay in your accounting software."
   },
   "marketing": {
     "summary": "A job enquiry comes in through the assistant. You open it, pick line items from your price list, and send a quote the customer can open on their phone and accept. No accounting software, no PDF wrangling.",
@@ -38,20 +40,28 @@
       {
         "title": "Accepted with one tap",
         "body": "The customer opens a link, sees the quote, and accepts. You get told immediately and the quote is locked."
+      },
+      {
+        "title": "Revise without rewriting history",
+        "body": "A revision is a fresh quote with a new number. What the customer already accepted, declined or let lapse stays exactly as it was."
+      },
+      {
+        "title": "Invoice the moment they accept",
+        "body": "One click turns an accepted quote into a numbered invoice with the same agreed lines, a due date, your payment details and a printable page in your choice of theme."
       }
     ],
     "faq": [
       {
         "q": "Does this replace my accounting software?",
-        "a": "No. This is quoting, not bookkeeping. Tax handling, invoice numbering and reconciliation belong in Xero, MYOB or QuickBooks, and we would rather export to them than compete with them badly."
+        "a": "No. Quotes and simple invoices live here; bookkeeping, tax accounting and reconciliation belong in Xero, MYOB or QuickBooks. An invoice here is a document your customer can read, print and pay against - not a ledger entry."
       },
       {
         "q": "Can I send an invoice from it?",
-        "a": "No. An accepted quote is a record that the customer agreed to a price; a compliant invoice with tax handling and numbering belongs in Xero, MYOB or QuickBooks. We would rather export to them later than do it badly now."
+        "a": "Yes - from an accepted quote. The lines and totals are copied exactly as agreed, the invoice gets its own INV number, and the customer gets a printable page. Mark it paid when the money lands; a paid invoice never changes."
       },
       {
         "q": "Can the customer pay a deposit when they accept?",
-        "a": "Not yet, for the same reason: paying money into your account needs a payment setup we have not built. The quote records the acceptance; you invoice and collect however you do today."
+        "a": "Not yet, for the same reason: paying money into your account needs a payment setup we have not built. The quote records the acceptance; you invoice from it and collect however you do today."
       }
     ]
   },

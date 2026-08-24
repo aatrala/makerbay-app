@@ -4,7 +4,7 @@
   "tagline": "Appointments customers can make without calling you",
   "status": "live",
   "version": {
-    "api": "1.1.0",
+    "api": "1.2.0",
     "web": "1.0.0"
   },
   "routes": [
@@ -43,7 +43,7 @@
     "faq": [
       {
         "q": "Does it send reminders before the appointment?",
-        "a": "Not yet. Reminders need scheduled sending, which arrives with the next release. Bookings today confirms by email at the time of booking."
+        "a": "Yes. A reminder email goes out the day before (or two hours before, for same-day bookings), with the same cancel link - so a customer who cannot make it frees the slot instead of no-showing. If the booking is cancelled first, no reminder is sent."
       },
       {
         "q": "Will it sync with my calendar?",

@@ -3,6 +3,8 @@
  *   /booking?slug=...             pick a service, a day and a real free slot
  *   /booking/cancel?slug=&token=  view or cancel a booking, no account needed
  *   /quote?slug=&token=           view a quote and accept or decline it
+ *   /review?slug=&token=          leave a review after a finished job
+ *   /invoice?slug=&token=         view a themed, printable invoice
  *
  * Same rules as chat.js: vanilla JS, text via textContent unless the markup
  * is entirely ours, and every failure ends in a message a person can act on.
@@ -58,6 +60,8 @@
   if (path === '/booking') return bookingPage()
   if (path === '/booking/cancel') return cancelPage()
   if (path === '/quote') return quotePage()
+  if (path === '/review') return reviewPage()
+  if (path === '/invoice') return invoicePage()
   return fail('This link is not valid.')
 
   // ── Booking ────────────────────────────────────────────────────────────
@@ -279,6 +283,12 @@
         stateBlock = '<p class="q-state">This quote was declined.</p>'
       } else if (q.status === 'expired') {
         stateBlock = '<p class="q-state">This quote expired on ' + esc(validUntil) + '. Ask ' + esc(business) + ' for an updated one.</p>'
+      } else if (q.status === 'superseded') {
+        stateBlock = '<p class="q-state">This quote has been replaced with an updated one.' +
+          (q.supersededBy
+            ? ' <a href="/quote?slug=' + encodeURIComponent(slug) + '&token=' + encodeURIComponent(q.supersededBy) + '">View the current quote</a>.'
+            : '') +
+          '</p>'
       } else {
         stateBlock =
           '<div class="q-actions">' +
@@ -321,5 +331,181 @@
         if (window.confirm('Decline this quote?')) respond('decline')
       })
     }).catch(function () { fail('This quote could not be loaded right now.') })
+  }
+
+  // ── Review ─────────────────────────────────────────────────────────────
+
+  function reviewPage() {
+    if (!token) return fail('This link is not valid.')
+    var qs = '?slug=' + encodeURIComponent(slug) + '&token=' + encodeURIComponent(token)
+    get(API + '/v1/public/reviews/invite' + qs).then(function (res) {
+      if (res.status !== 200) return fail('This review link could not be found. It may have expired.')
+      var info = res.data
+      document.title = 'How did we do? — ' + (info.business || '')
+      app.className = ''
+      var foot = '</div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
+
+      if (info.responded) {
+        app.innerHTML =
+          '<header><div class="name">' + esc(info.business || '') + '</div></header>' +
+          '<div class="page-body"><div class="done">' +
+          '<div class="tick">&#10003;</div><h2>Thank you</h2>' +
+          '<p class="hint">This review has already been received.</p>' +
+          '</div>' + foot
+        return
+      }
+
+      var rating = 0
+      app.innerHTML =
+        '<header><div class="name">' + esc(info.business || '') + '</div></header>' +
+        '<div class="page-body">' +
+        '<h2 class="q-title">How did we do' + (info.name ? ', ' + esc(info.name) : '') + '?</h2>' +
+        (info.serviceName ? '<p class="lead">Your ' + esc(info.serviceName) + ' with ' + esc(info.business || 'us') + '.</p>' : '') +
+        '<div class="stars" id="stars">' +
+        [1, 2, 3, 4, 5].map(function (n) {
+          return '<button class="star" data-n="' + n + '" aria-label="' + n + ' star' + (n > 1 ? 's' : '') + '">&#9734;</button>'
+        }).join('') +
+        '</div>' +
+        '<form id="rform" class="pform">' +
+        '<label>A few words, if you have a minute (optional)</label>' +
+        '<textarea id="f-text" rows="4" maxlength="1500"></textarea>' +
+        '<button class="primary" type="submit" id="submit" disabled>Send review</button>' +
+        '<p class="form-err" id="f-err"></p>' +
+        '</form>' + foot
+
+      function paint() {
+        app.querySelectorAll('.star').forEach(function (b) {
+          var n = Number(b.getAttribute('data-n'))
+          b.innerHTML = n <= rating ? '&#9733;' : '&#9734;'
+          b.className = 'star' + (n <= rating ? ' on' : '')
+        })
+        document.getElementById('submit').disabled = rating === 0
+      }
+      app.querySelectorAll('.star').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.preventDefault()
+          rating = Number(b.getAttribute('data-n'))
+          paint()
+        })
+      })
+
+      app.querySelector('#rform').addEventListener('submit', function (e) {
+        e.preventDefault()
+        if (!rating) return
+        var err = document.getElementById('f-err')
+        err.textContent = ''
+        var btn = document.getElementById('submit')
+        btn.disabled = true
+        btn.textContent = 'Sending…'
+        post(API + '/v1/public/reviews/respond' + qs, {
+          slug: slug, token: token, rating: rating,
+          text: document.getElementById('f-text').value.trim(),
+        }).then(function (r) {
+          if (r.status !== 200) {
+            btn.disabled = false
+            btn.textContent = 'Send review'
+            err.textContent = (r.data && r.data.message) || 'That did not work. Try again.'
+            return
+          }
+          app.querySelector('.page-body').innerHTML =
+            '<div class="done">' +
+            '<div class="tick">&#10003;</div><h2>Thank you</h2>' +
+            '<p class="hint">Your review means a lot to a small business.</p>' +
+            (r.data.googleLink
+              ? '<p>Happy to say it publicly? <a class="primary-link" href="' + esc(r.data.googleLink) + '" target="_blank" rel="noopener">Leave a Google review too</a></p>'
+              : '') +
+            '</div>'
+        })
+      })
+    }).catch(function () { fail('This review link could not be loaded right now.') })
+  }
+
+  // ── Invoice ────────────────────────────────────────────────────────────
+
+  function invoicePage() {
+    if (!token) return fail('This link is not valid.')
+    get(API + '/v1/public/quotes/invoice?slug=' + encodeURIComponent(slug) + '&token=' + encodeURIComponent(token))
+      .then(function (res) {
+        if (res.status !== 200) return fail('This invoice could not be found.')
+        var inv = res.data.invoice
+        var business = res.data.business || ''
+        var theme = res.data.theme || 'classic'
+        document.title = inv.label + ' — ' + business
+        app.className = ''
+        document.body.classList.add('invoice-' + theme)
+
+        var style = document.createElement('style')
+        style.textContent =
+          '.inv{max-width:640px;margin:0 auto}' +
+          '.inv table{width:100%;border-collapse:collapse;margin:1rem 0}' +
+          '.inv td,.inv th{padding:.5rem .25rem;text-align:left;vertical-align:top}' +
+          '.inv .num{text-align:right;white-space:nowrap}' +
+          '.inv .i-unit{display:block;font-size:.85em;opacity:.65}' +
+          '.inv .i-total td{font-weight:700;border-top:2px solid currentColor}' +
+          '.inv .i-meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin:.75rem 0}' +
+          '.inv .i-paid{display:inline-block;padding:.2rem .6rem;border-radius:4px;font-weight:700}' +
+          '.inv .i-pay{white-space:pre-wrap;padding:.75rem;border-radius:6px;margin-top:1rem}' +
+          '.inv .i-print{margin-top:1.25rem}' +
+          '@media print{header,footer,.i-print{display:none!important}body{background:#fff}}' +
+          // classic: serif headings, ruled lines, quiet.
+          (theme === 'classic'
+            ? '.inv h2{font-family:Georgia,serif;font-weight:400;letter-spacing:.02em}' +
+              '.inv tbody tr{border-bottom:1px solid rgba(128,128,128,.25)}' +
+              '.inv .i-paid{background:#e8f5e9;color:#1b5e20}.inv .i-pay{background:rgba(128,128,128,.08)}'
+            : '') +
+          // compact: small, dense, tabular - for the inbox skim-reader.
+          (theme === 'compact'
+            ? '.inv{font-size:.92em}.inv h2{font-size:1.15em;text-transform:uppercase;letter-spacing:.08em}' +
+              '.inv td,.inv th{padding:.3rem .25rem}.inv thead th{border-bottom:1px solid currentColor;font-size:.8em;text-transform:uppercase}' +
+              '.inv .i-paid{background:#e8f5e9;color:#1b5e20}.inv .i-pay{border:1px solid rgba(128,128,128,.3)}'
+            : '') +
+          // bold: heavy header band, big total - reads at arm's length.
+          (theme === 'bold'
+            ? '.inv h2{font-size:1.6em;font-weight:800}' +
+              '.inv .i-band{background:#111;color:#fff;padding:1rem;border-radius:8px;margin-bottom:1rem}' +
+              '.inv .i-band h2{margin:0}.inv .i-band p{margin:.25rem 0 0;opacity:.8}' +
+              '.inv .i-total td{font-size:1.25em}' +
+              '.inv .i-paid{background:#1b5e20;color:#fff}.inv .i-pay{background:rgba(128,128,128,.12)}'
+            : '')
+        document.head.appendChild(style)
+
+        var dateOf = function (iso) {
+          return iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
+        }
+        var lines = inv.lines.map(function (l) {
+          return '<tr><td>' + esc(l.description) +
+            '<span class="i-unit">' + l.quantity + ' ' + esc(l.unit) + ' × ' + money(l.unitCents, inv.currency) + '</span></td>' +
+            '<td class="num">' + money(l.totalCents, inv.currency) + '</td></tr>'
+        }).join('')
+
+        var heading = theme === 'bold'
+          ? '<div class="i-band"><h2>' + esc(inv.label) + '</h2><p>' + esc(business) + '</p></div>'
+          : '<h2>' + esc(inv.label) + '</h2>'
+
+        app.innerHTML =
+          '<header><div class="name">' + esc(business) + '</div></header>' +
+          '<div class="page-body"><div class="inv">' +
+          heading +
+          '<div class="i-meta">' +
+          '<span>' + (inv.customerName ? 'Billed to ' + esc(inv.customerName) : '') + '</span>' +
+          (inv.paidAt
+            ? '<span class="i-paid">Paid ' + esc(dateOf(inv.paidAt)) + '</span>'
+            : '<span>Issued ' + esc(dateOf(inv.issuedAt)) + ' · Due ' + esc(dateOf(inv.dueAt)) + '</span>') +
+          '</div>' +
+          '<table>' + (theme === 'compact' ? '<thead><tr><th>Item</th><th class="num">Amount</th></tr></thead>' : '') +
+          '<tbody>' + lines + '</tbody>' +
+          '<tfoot>' +
+          '<tr><td>Subtotal</td><td class="num">' + money(inv.subtotalCents, inv.currency) + '</td></tr>' +
+          (inv.taxCents > 0 ? '<tr><td>' + esc(inv.taxLabel || 'Tax') + '</td><td class="num">' + money(inv.taxCents, inv.currency) + '</td></tr>' : '') +
+          '<tr class="i-total"><td>Total' + (inv.paidAt ? ' (paid)' : ' due') + '</td><td class="num">' + money(inv.totalCents, inv.currency) + '</td></tr>' +
+          '</tfoot></table>' +
+          (inv.notes ? '<p class="q-notes">' + esc(inv.notes) + '</p>' : '') +
+          (inv.paymentInstructions && !inv.paidAt ? '<div class="i-pay">' + esc(inv.paymentInstructions) + '</div>' : '') +
+          '<p class="i-print"><button class="ghost" id="print">Print or save as PDF</button></p>' +
+          '</div></div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
+
+        document.getElementById('print').addEventListener('click', function () { window.print() })
+      })
+      .catch(function () { fail('This invoice could not be loaded right now.') })
   }
 })()

@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import {
   appendContactEvent,
+  emitEvent,
   emitUsage,
   findApiKeyByHash,
   getEffectiveEntitlement,
@@ -14,8 +15,14 @@ import {
   upsertContact,
   type CallerContext,
 } from '@makerbay/core'
-import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { ddb as ddbRaw } from '@makerbay/core'
+import {
+  CreateScheduleCommand,
+  DeleteScheduleCommand,
+  SchedulerClient,
+} from '@aws-sdk/client-scheduler'
+import { remindAt } from './reminder-time'
 import {
   DEFAULT_BOOKING_CONFIG,
   blocking,
@@ -328,6 +335,7 @@ async function createBooking(
 
   await emitUsage({ tenantId, moduleId: 'booking', metric: 'booking.created', quantity: 1 })
   await attributeRescue(tenantId, contact.contactId)
+  await scheduleReminder(tenantId, bookingId, row.startsAt)
   return json(201, { bookingId, booking: view, emailed: customerMail.sent })
 }
 
@@ -335,33 +343,47 @@ async function slugOf(tenantId: string): Promise<string> {
   return (await getTenant(tenantId))?.slug ?? ''
 }
 
-async function autoAskReview(tenantId: string, contactId: string, email: string): Promise<void> {
+const scheduler = new SchedulerClient({})
+
+/**
+ * A one-off EventBridge schedule per booking, named after it, that invokes the
+ * reminder Lambda shortly before the appointment. ActionAfterCompletion DELETE
+ * means fired schedules clean themselves up; cancelling a booking deletes the
+ * schedule best-effort, and the reminder Lambda re-checks the row's status
+ * anyway - the schedule is a wake-up call, not the source of truth.
+ */
+async function scheduleReminder(tenantId: string, bookingId: string, startsAt: string): Promise<void> {
   try {
-    const cfg = await ddbRaw.send(
-      new GetCommand({ TableName: process.env.TABLE_VISIBILITYCONFIG!, Key: { tenantId } }),
+    const at = remindAt(startsAt, new Date())
+    if (!at || !process.env.REMINDER_FN_ARN || !process.env.SCHEDULER_ROLE_ARN) return
+    await scheduler.send(
+      new CreateScheduleCommand({
+        Name: `rem-${bookingId}`,
+        GroupName: 'default',
+        // Scheduler wants seconds-precision without a zone suffix.
+        ScheduleExpression: `at(${at.toISOString().slice(0, 19)})`,
+        ScheduleExpressionTimezone: 'UTC',
+        FlexibleTimeWindow: { Mode: 'OFF' },
+        ActionAfterCompletion: 'DELETE',
+        Target: {
+          Arn: process.env.REMINDER_FN_ARN,
+          RoleArn: process.env.SCHEDULER_ROLE_ARN,
+          Input: JSON.stringify({ tenantId, bookingId }),
+          RetryPolicy: { MaximumRetryAttempts: 2 },
+        },
+      }),
     )
-    const reviewLink = String(cfg.Item?.reviewLink ?? '')
-    if (cfg.Item?.autoAsk !== true || !reviewLink) return
-    const tenant = await getTenant(tenantId)
-    const notice = await sendEmail({
-      to: email,
-      subject: `How did we do? - ${tenant?.name ?? ''}`,
-      text: [
-        String(cfg.Item?.askMessage ?? 'Thanks for choosing us! A Google review takes a minute and makes a real difference.'),
-        '',
-        `Leave a review: ${reviewLink}`,
-        '',
-        tenant?.name ?? '',
-      ].join('\n'),
-    })
-    await appendContactEvent(tenantId, contactId, {
-      moduleId: 'visibility',
-      title: notice.sent ? 'Asked for a Google review after a completed job' : 'Review ask written (email not sent)',
-    })
-    await emitUsage({ tenantId, moduleId: 'visibility', metric: 'review.requested', quantity: 1 })
   } catch (err) {
-    // Asking is telemetry-grade; it must never fail the completion itself.
-    console.warn('auto review ask failed', err)
+    // A missing reminder must never fail the booking itself.
+    console.warn('reminder schedule failed', { bookingId, err })
+  }
+}
+
+async function cancelReminder(bookingId: string): Promise<void> {
+  try {
+    await scheduler.send(new DeleteScheduleCommand({ Name: `rem-${bookingId}`, GroupName: 'default' }))
+  } catch {
+    // Already fired and self-deleted, or never created - both fine.
   }
 }
 
@@ -415,6 +437,7 @@ async function cancelByToken(
   const now = new Date().toISOString()
   const config = await getBookingConfig(tenantId)
   await putBooking({ ...booking, status: 'cancelled', cancelledAt: now, updatedAt: now })
+  await cancelReminder(booking.bookingId)
   await appendContactEvent(tenantId, booking.contactId, {
     moduleId: 'booking',
     title: `Cancelled their ${booking.serviceName} booking`,
@@ -505,12 +528,25 @@ async function patchBooking(tenantId: string, bookingId: string, event: Event): 
   await putBooking(row)
 
   // The moment a customer is most likely to leave a review is right after the
-  // job is done. One ask, once - configured under Get found.
-  if (status === 'completed' && existing.status !== 'completed' && existing.email) {
-    await autoAskReview(tenantId, existing.contactId, existing.email)
+  // job is done. The event fans out to whichever review surface the tenant
+  // runs - the Reviews module, or the Get found Google-link ask.
+  if (status === 'completed' && existing.status !== 'completed') {
+    try {
+      await emitEvent('booking', 'booking.completed', {
+        tenantId,
+        bookingId,
+        contactId: existing.contactId,
+        email: existing.email,
+        name: existing.name,
+        serviceName: existing.serviceName,
+      })
+    } catch (err) {
+      console.warn('booking.completed emit failed', err)
+    }
   }
 
   if (status === 'cancelled' && existing.status !== 'cancelled') {
+    await cancelReminder(bookingId)
     const config = await getBookingConfig(tenantId)
     const tenant = await getTenant(tenantId)
     await sendEmail({

@@ -9,6 +9,36 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.2.0 - 2026-08-24
+
+- Added `reviews` Reviews is live: after a completed booking the customer gets
+  one polite ask, leaves stars and words on a page in your name, and the
+  published reviews appear on your MakerBay page. You can hide a review or
+  bring it back - never edit it. Every respondent is offered your Google
+  review link, whatever they scored: gating reviews breaks Google's rules and
+  we will not build it.
+- Added `booking` Reminders that stop no-shows: a reminder email the day
+  before (or two hours before, for same-day bookings) with the same cancel
+  link. Cancelled bookings never get one - the reminder re-checks the diary
+  before it sends.
+- Added `quotes` Quote revisions: a revision is a fresh quote with a new
+  number, and what the customer already accepted, declined or let lapse stays
+  exactly as it was. A replaced quote's page points forward to the current one.
+- Added `quotes` Simple invoices: one click turns an accepted quote into a
+  numbered invoice - same agreed lines, a due date, your payment details and a
+  printable page in a choice of three themes. Mark it paid when the money
+  lands; a paid invoice never changes. Bookkeeping and tax accounting stay in
+  your accounting software, as promised.
+- Added `presence` Presence Pro custom domains: connect a domain you own, add
+  two DNS records, and your page serves at yourbusiness.com.au with its own
+  certificate. The free makerbay.app page stays either way.
+- Added `presence` Published reviews now appear on your page - the words your
+  customers actually wrote.
+- Changed `platform` Modules now talk to each other through events: a
+  completed booking raises one event, and whichever review surface you run -
+  Reviews, or the Get found Google-link ask - answers it. One ask per
+  completion, never both.
+
 ## 2.1.0 - 2026-08-24
 
 - Added `visibility` Get found is live and free: a guided checklist that gets

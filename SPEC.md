@@ -24,10 +24,10 @@ makerbay.app/roadmap. The order is a dependency chain, not a preference:
 |---|---|---|
 | 1 | **Contacts** (core, never entitlement-gated) | shipped |
 | 1 | **Assistant** | shipped |
-| 2 | **Requests** — handoff, lead capture, feedback | next |
-| 3 | **Bookings** | planned |
-| 4 | **Quotes** | planned |
-| 5 | **Reviews** | planned |
+| 2 | **Requests** — handoff, lead capture, feedback | shipped |
+| 3 | **Bookings** (now with reminders) | shipped |
+| 4 | **Quotes** (now with revisions and simple invoices) | shipped |
+| 5 | **Reviews** | shipped |
 
 **This spec covers:**
 
@@ -239,7 +239,32 @@ docs/market-research.md, 2026-08).
 
 ---
 
-## 5. Reviews module (planned)
+## 5. Reviews module (SHIPPED - as-built notes)
+
+Shipped 2026-08-24. The sections below were the planning scope; where the
+built module differs, the build is deliberate and listed here:
+
+- **Ask page** lives at `chat.makerbay.app/review?slug=&token=`, on the
+  existing pages surface, not a new `reviews.makerbay.app` subdomain.
+- **Statuses** are `invited → published` (auto-publish on respond) with an
+  owner `hidden` toggle - moderation is hide/show, never edit. The planned
+  queued/reminded pipeline collapsed to a single ask with **no reminder in
+  v1**; the manifest's "one reminder, then stop" remains the ceiling when a
+  reminder is added.
+- **Trigger** is the `booking.completed` EventBridge event (source
+  `makerbay.booking`). If Reviews is enabled with autoAsk, a first-party
+  invite goes out; otherwise the Get found Google-link ask runs. One ask per
+  completion, never both. Accepted-quote triggering is future work.
+- **Wall**: published reviews render on the tenant's Presence page (visible
+  words only - no self-serving review structured data) and via
+  `GET /v1/public/reviews`. The embeddable one-line snippet wall is future.
+- **No gating** is enforced in code: every respondent gets the Google link
+  after submitting, whatever the rating.
+- Tables: `makerbay-reviews` (tenantId, reviewId), `makerbay-reviewsconfig`.
+  Free-tier-style limit inside the paid module: 20 invites/month via
+  MODULE_CATALOG limits.
+
+## 5-planned. Original planning scope (historical)
 
 Roadmap order 5, after Bookings and Quotes, because it needs a completed job
 or appointment to trigger from (`modules/reviews/module.json`, which is the

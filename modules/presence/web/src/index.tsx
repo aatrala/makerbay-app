@@ -214,8 +214,118 @@ function PagePage() {
         </>
       )}
 
+      {config && <DomainCard />}
+
       {!config && !error && <div className="card"><Skeleton rows={6} /></div>}
     </>
+  )
+}
+
+interface DomainState {
+  domain: string | null
+  status?: 'pending_validation' | 'pending_dns' | 'active'
+  validation?: { name: string; value: string }
+  target?: string
+  message?: string
+}
+
+function DomainCard() {
+  const [state, setState] = useState<DomainState | null>(null)
+  const [input, setInput] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [proBlocked, setProBlocked] = useState(false)
+
+  const load = useCallback(async () => {
+    try { setState(await api('GET', '/v1/presence/domain')) }
+    catch (e) { setError(explain(e)) }
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const run = (fn: () => Promise<void>) =>
+    void (async () => {
+      setBusy(true); setError(''); setNote('')
+      try { await fn() } catch (e) {
+        const msg = explain(e)
+        if (msg.includes('Presence Pro')) setProBlocked(true)
+        setError(msg)
+      } finally { setBusy(false) }
+    })()
+
+  const add = (e: FormEvent) => {
+    e.preventDefault()
+    run(async () => {
+      const r = await api('PUT', '/v1/presence/domain', { domain: input.trim() })
+      setState(r); setNote(r.message ?? '')
+    })
+  }
+
+  const STATUS_TEXT: Record<string, string> = {
+    pending_validation: 'Waiting for DNS validation',
+    pending_dns: 'Certificate issued — point your domain',
+    active: 'Live',
+  }
+
+  return (
+    <div className="card">
+      <h2>Your own domain</h2>
+      <p className="meta">
+        Serve this page on a domain you own — yourbusiness.com.au instead of
+        makerbay.app. Part of Presence Pro. The free makerbay.app page stays either way.
+      </p>
+      {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {error && <Notice tone={proBlocked ? 'warn' : 'err'} onClose={() => setError('')}>{error}</Notice>}
+
+      {!state ? <Skeleton rows={2} /> : !state.domain ? (
+        <form onSubmit={add}>
+          <div className="row">
+            <input className="grow" value={input} placeholder="yourbusiness.com.au"
+              onChange={(e) => setInput(e.target.value)} aria-label="Your domain" />
+            <button disabled={busy || !input.trim()}>{busy ? 'Working…' : 'Connect domain'}</button>
+          </div>
+          <p className="meta">You will add two DNS records at your domain provider: one to prove you own it, one to point it here.</p>
+        </form>
+      ) : (
+        <>
+          <p>
+            <strong>{state.domain}</strong>{' '}
+            <span className={`chip ${state.status === 'active' ? 'ready' : 'processing'}`}>
+              {STATUS_TEXT[state.status ?? ''] ?? state.status}
+            </span>
+          </p>
+          {state.message && <p className="meta">{state.message}</p>}
+          {state.status === 'pending_validation' && state.validation && (
+            <>
+              <label className="mt">Add this CNAME record at your DNS provider</label>
+              <div className="row">
+                <input className="grow" readOnly value={state.validation.name} onFocus={(e) => e.target.select()} aria-label="Record name" />
+              </div>
+              <div className="row">
+                <input className="grow" readOnly value={state.validation.value} onFocus={(e) => e.target.select()} aria-label="Record value" />
+              </div>
+            </>
+          )}
+          {state.status !== 'pending_validation' && state.target && (
+            <>
+              <label className="mt">Point your domain here (CNAME)</label>
+              <div className="row">
+                <input className="grow" readOnly value={state.target} onFocus={(e) => e.target.select()} aria-label="CNAME target" />
+              </div>
+            </>
+          )}
+          <div className="row mt">
+            <button className="ghost" disabled={busy} onClick={() => run(async () => { setState(await api('GET', '/v1/presence/domain')) })}>
+              Check status
+            </button>
+            <button className="danger" disabled={busy}
+              onClick={() => { if (window.confirm('Remove this domain? The page stays on makerbay.app.')) run(async () => { setState(await api('DELETE', '/v1/presence/domain')) }) }}>
+              Remove domain
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 

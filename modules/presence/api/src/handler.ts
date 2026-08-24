@@ -13,10 +13,13 @@ import {
   activeServices,
   assistantView,
   bookingHours,
+  findByCustomDomain,
   getPresenceConfig,
+  publishedReviews,
   putPresenceConfig,
   type PresenceConfigRow,
 } from './db'
+import { deleteDomain, getDomain, putDomain } from './domain'
 import { indexDirective, isComplete, renderNotFound, renderPage } from './render'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
@@ -58,6 +61,11 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && path === '/v1/presence/photo') return await photoUpload(tenantId, event)
     if (method === 'POST' && path === '/v1/presence/photo/confirm') return await photoConfirm(tenantId, event)
 
+    // Presence Pro: the page on the tenant's own domain.
+    if (method === 'GET' && path === '/v1/presence/domain') return await getDomain(tenantId)
+    if (method === 'PUT' && path === '/v1/presence/domain') return await putDomain(tenantId, body(event))
+    if (method === 'DELETE' && path === '/v1/presence/domain') return await deleteDomain(tenantId)
+
     return json(404, { error: 'not_found' })
   } catch (err) {
     console.error('presence error', { path, method, err })
@@ -75,6 +83,19 @@ async function resolveTenantId(ctx: CallerContext): Promise<string> {
 
 async function publicRoute(method: string, event: Event): Promise<APIGatewayProxyResultV2> {
   if (method !== 'GET') return json(404, { error: 'not_found' })
+
+  // A custom-domain distribution identifies the tenant by host, not slug.
+  const domain = String(event.queryStringParameters?.domain ?? '').trim().toLowerCase()
+  if (domain) {
+    const config = await findByCustomDomain(domain)
+    if (!config || !config.published || config.domainStatus === 'pending_validation') {
+      return html(404, renderNotFound())
+    }
+    const tenant = await getTenant(config.tenantId)
+    if (!tenant) return html(404, renderNotFound())
+    return await renderFor(tenant, config, `https://${domain}/`)
+  }
+
   const slug = String(event.queryStringParameters?.slug ?? '').trim()
   if (!slug) return html(404, renderNotFound())
 
@@ -86,13 +107,27 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
   // Google is a liability the owner cannot easily undo (spec §7).
   if (!config.published) return html(404, renderNotFound())
 
-  const [services, hours, assistant, assistantEnt, bookingEnt] = await Promise.all([
+  // An active custom domain is the canonical home; the free page points at it.
+  const canonical = config.domainStatus === 'active' && config.customDomain
+    ? `https://${config.customDomain}/`
+    : undefined
+  return await renderFor(tenant, config, canonical)
+}
+
+async function renderFor(
+  tenant: { tenantId: string; name: string; slug: string },
+  config: PresenceConfigRow,
+  canonicalUrl?: string,
+): Promise<APIGatewayProxyResultV2> {
+  const [services, hours, assistant, assistantEnt, bookingEnt, reviewsEnt] = await Promise.all([
     activeServices(tenant.tenantId),
     bookingHours(tenant.tenantId),
     assistantView(tenant.tenantId),
     getEffectiveEntitlement(tenant.tenantId, 'assistant'),
     getEffectiveEntitlement(tenant.tenantId, 'booking'),
+    getEffectiveEntitlement(tenant.tenantId, 'reviews'),
   ])
+  const reviews = reviewsEnt.enabled ? await publishedReviews(tenant.tenantId) : undefined
 
   const page = renderPage({
     config,
@@ -106,6 +141,8 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
     // the hosted chat, which itself degrades gracefully when knowledge is thin.
     hasKnowledge: assistantEnt.enabled,
     bookingEnabled: bookingEnt.enabled,
+    reviews,
+    canonicalUrl,
     now: new Date(),
   })
   return html(200, page)

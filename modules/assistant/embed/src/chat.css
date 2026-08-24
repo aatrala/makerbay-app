@@ -118,3 +118,13 @@ button:disabled { opacity: 0.5; cursor: default; }
 .q-actions { display: flex; gap: 10px; }
 .q-state { margin-top: 16px; font-weight: 600; }
 .q-state.ok { color: #15803d; }
+.stars { display: flex; gap: 6px; margin: 6px 0 4px; }
+.star {
+  background: none; border: none; font-size: 34px; line-height: 1; padding: 4px;
+  cursor: pointer; color: #d6d3d1;
+}
+.star.on { color: #f59e0b; }
+.primary-link {
+  display: inline-block; margin-top: 6px; background: var(--brand); color: #fff;
+  border-radius: 9px; padding: 12px 20px; font-weight: 650; text-decoration: none;
+}

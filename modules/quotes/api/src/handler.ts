@@ -17,6 +17,16 @@ import {
   type CallerContext,
 } from '@makerbay/core'
 import {
+  INVOICE_THEMES,
+  getInvoice,
+  invoiceFromQuote,
+  invoiceLabel,
+  listInvoices,
+  patchInvoice,
+  publicInvoiceView,
+  sendInvoice,
+} from './invoices'
+import {
   DEFAULT_QUOTES_CONFIG,
   computeTotals,
   deletePriceItem,
@@ -46,7 +56,7 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
 
 const CHAT = 'https://chat.makerbay.app'
 const APP = 'https://app.makerbay.app'
-const STATUSES: QuoteStatus[] = ['draft', 'sent', 'accepted', 'declined', 'expired']
+const STATUSES: QuoteStatus[] = ['draft', 'sent', 'accepted', 'declined', 'expired', 'superseded']
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const method = event.requestContext.http.method
@@ -87,6 +97,21 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
 
     const send = path.match(/^\/v1\/quotes\/([0-9A-Z]{26})\/send$/)
     if (method === 'POST' && send) return await sendQuote(tenantId, send[1])
+
+    const revise = path.match(/^\/v1\/quotes\/([0-9A-Z]{26})\/revise$/)
+    if (method === 'POST' && revise) return await reviseQuote(tenantId, revise[1])
+
+    const toInvoice = path.match(/^\/v1\/quotes\/([0-9A-Z]{26})\/invoice$/)
+    if (method === 'POST' && toInvoice) return await createInvoice(tenantId, toInvoice[1])
+
+    if (method === 'GET' && path === '/v1/quotes/invoices') {
+      return json(200, { invoices: await listInvoices(tenantId) })
+    }
+    const inv = path.match(/^\/v1\/quotes\/invoices\/([0-9A-Z]{26})$/)
+    if (method === 'GET' && inv) return await invoiceDetail(tenantId, inv[1])
+    if (method === 'PATCH' && inv) return await patchInvoice(tenantId, inv[1], body(event))
+    const invSend = path.match(/^\/v1\/quotes\/invoices\/([0-9A-Z]{26})\/send$/)
+    if (method === 'POST' && invSend) return await sendInvoice(tenantId, invSend[1])
 
     return json(404, { error: 'not_found' })
   } catch (err) {
@@ -144,6 +169,10 @@ async function publicRoute(
   )
   if (!resolved) return json(404, { error: 'not_found' })
 
+  if (method === 'GET' && path === '/v1/public/quotes/invoice') {
+    return publicInvoiceView(resolved.tenantId, resolved.name, String(q.token ?? ''))
+  }
+
   const match = path.match(/^\/v1\/public\/quotes\/([A-Za-z0-9_-]{20,})(\/respond)?$/)
   if (!match) return json(404, { error: 'not_found' })
 
@@ -169,6 +198,7 @@ async function publicRoute(
 }
 
 const publicView = (q: QuoteRow, status: QuoteStatus, taxLabel: string) => ({
+  supersededBy: (q as { supersededByToken?: string }).supersededByToken ?? null,
   number: q.number,
   status,
   lines: q.lines,
@@ -450,6 +480,81 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
   return json(200, { quote: updated, publicUrl: url, emailed: notice.sent, emailError: notice.error })
 }
 
+/**
+ * A new version of a settled or sent quote. The old quote never changes -
+ * what somebody agreed to (or declined, or let lapse) stays exactly as it
+ * was. The new draft copies the lines and the customer, gets its own number,
+ * and the old public page points forward to it once this one is sent.
+ */
+async function reviseQuote(tenantId: string, quoteId: string): Promise<APIGatewayProxyResultV2> {
+  const old = await getQuote(tenantId, quoteId)
+  if (!old) return json(404, { error: 'not_found' })
+  if (old.status === 'draft') {
+    return json(409, { error: 'still_draft', message: 'This quote is still a draft - just edit it.' })
+  }
+
+  const now = new Date().toISOString()
+  const config = await getQuotesConfig(tenantId)
+  const fresh: QuoteRow = {
+    ...old,
+    quoteId: ulid(),
+    number: await nextQuoteNumber(tenantId),
+    status: 'draft',
+    publicToken: linkToken(),
+    validUntil: new Date(Date.now() + config.validDays * 86_400_000).toISOString(),
+    createdAt: now,
+    updatedAt: now,
+    sentAt: undefined,
+    acceptedAt: undefined,
+    declinedAt: undefined,
+    notifyError: undefined,
+  }
+  ;(fresh as { revisionOf?: string }).revisionOf = old.quoteId
+  await putQuote(fresh)
+
+  // A sent-but-unanswered quote is replaced; its page will say so. Settled
+  // quotes (accepted/declined/expired) keep their status - they are history.
+  if (old.status === 'sent') {
+    await putQuote({
+      ...old,
+      status: 'superseded' as QuoteStatus,
+      updatedAt: now,
+      ...( { supersededByToken: fresh.publicToken } as Partial<QuoteRow>),
+    })
+  } else {
+    await putQuote({ ...old, updatedAt: now, ...({ supersededByToken: fresh.publicToken } as Partial<QuoteRow>) })
+  }
+  return json(201, { quote: fresh })
+}
+
+async function createInvoice(tenantId: string, quoteId: string): Promise<APIGatewayProxyResultV2> {
+  const quote = await getQuote(tenantId, quoteId)
+  if (!quote) return json(404, { error: 'not_found' })
+  try {
+    const invoice = await invoiceFromQuote(tenantId, quote)
+    return json(201, { invoice })
+  } catch (err) {
+    if ((err as { code?: string }).code === 'quote_not_accepted') {
+      return json(409, {
+        error: 'quote_not_accepted',
+        message: 'An invoice comes from an accepted quote - the customer has to agree to the price first.',
+      })
+    }
+    throw err
+  }
+}
+
+async function invoiceDetail(tenantId: string, invoiceId: string): Promise<APIGatewayProxyResultV2> {
+  const invoice = await getInvoice(tenantId, invoiceId)
+  if (!invoice) return json(404, { error: 'not_found' })
+  const tenant = await getTenant(tenantId)
+  return json(200, {
+    invoice,
+    label: invoiceLabel(invoice),
+    publicUrl: `${CHAT}/invoice?slug=${tenant?.slug ?? ''}&token=${invoice.publicToken}`,
+  })
+}
+
 async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const b = body(event)
   const existing = await getQuotesConfig(tenantId)
@@ -463,7 +568,14 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
     terms: String(b.terms ?? DEFAULT_QUOTES_CONFIG.terms).slice(0, 2000),
     validDays: Math.min(Math.max(Number(b.validDays ?? existing.validDays) || 30, 1), 365),
     notifyEmail: String(b.notifyEmail ?? existing.notifyEmail).slice(0, 200),
-  }
+    invoiceTheme: INVOICE_THEMES.includes(b.invoiceTheme as never)
+      ? (b.invoiceTheme as string)
+      : ((existing as { invoiceTheme?: string }).invoiceTheme ?? 'classic'),
+    paymentInstructions: String(
+      b.paymentInstructions ?? (existing as { paymentInstructions?: string }).paymentInstructions ?? '',
+    ).slice(0, 1000),
+    dueDays: Math.min(Math.max(Number(b.dueDays ?? (existing as { dueDays?: number }).dueDays ?? 14) || 14, 1), 90),
+  } as typeof existing
   await putQuotesConfig(config)
   return json(200, { config })
 }

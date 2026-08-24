@@ -4,8 +4,8 @@
   "tagline": "A page that gets you found, answers questions and takes bookings",
   "status": "live",
   "version": {
-    "api": "1.0.0",
-    "web": "1.0.0"
+    "api": "1.1.0",
+    "web": "1.1.0"
   },
   "routes": [
     "/v1/presence/*",
@@ -42,6 +42,10 @@
       {
         "title": "Built to be found",
         "body": "Server-rendered, fast, and marked up so search engines understand what you do and where you do it."
+      },
+      {
+        "title": "Your reviews, on the page",
+        "body": "Reviews collected after finished jobs appear on your page - the words your customers actually wrote, never edited."
       }
     ],
     "faq": [
@@ -55,7 +59,7 @@
       },
       {
         "q": "Can I use my own domain?",
-        "a": "Not in the first version. Your page lives at makerbay.app/p/your-business until then."
+        "a": "Yes, with Presence Pro: connect a domain you own, add two DNS records, and the same page serves at yourbusiness.com.au with its own certificate. The free makerbay.app page stays either way."
       }
     ]
   }

@@ -26,7 +26,7 @@ export interface QuoteLine {
   totalCents: number
 }
 
-export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired'
+export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'superseded'
 
 export interface QuoteRow {
   tenantId: string

@@ -42,6 +42,11 @@ const MODULE_CATALOG: Record<string, ModuleEntitlement> = {
     plan: 'free',
     limits: { bookingsPerMonth: 20 },
   },
+  reviews: {
+    enabled: true,
+    plan: 'free',
+    limits: { reviewsPerMonth: 20 },
+  },
 }
 
 const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({

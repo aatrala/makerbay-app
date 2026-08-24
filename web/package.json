@@ -15,6 +15,7 @@
     "@makerbay/presence-web": "*",
     "@makerbay/quotes-web": "*",
     "@makerbay/requests-web": "*",
+    "@makerbay/reviews-web": "*",
     "@makerbay/visibility-web": "*",
     "@makerbay/voice-web": "*",
     "@makerbay/web-kit": "*",

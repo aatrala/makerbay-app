@@ -7,7 +7,8 @@
   // Booking, cancellation and quote pages share this surface but not this
   // file. Dispatch before anything chat-shaped happens.
   var pagePath = location.pathname.replace(/\/+$/, '')
-  if (pagePath === '/booking' || pagePath === '/booking/cancel' || pagePath === '/quote') {
+  if (pagePath === '/booking' || pagePath === '/booking/cancel' || pagePath === '/quote' ||
+      pagePath === '/review' || pagePath === '/invoice') {
     var s = document.createElement('script')
     s.src = '/pages.js'
     document.body.appendChild(s)

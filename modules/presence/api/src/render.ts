@@ -12,6 +12,12 @@
 
 import type { AssistantView, HoursView, PresenceConfigRow, ServiceView } from './db'
 
+export interface ReviewView {
+  rating: number
+  text?: string
+  name?: string
+}
+
 export interface PageInput {
   config: PresenceConfigRow
   businessName: string
@@ -21,6 +27,14 @@ export interface PageInput {
   assistant: AssistantView
   hasKnowledge: boolean
   bookingEnabled: boolean
+  /** Published first-party reviews, when the Reviews module is on. */
+  reviews?: { average: number; count: number; items: ReviewView[] }
+  /**
+   * Where this page canonically lives. Defaults to makerbay.app/p/{slug};
+   * an active custom domain takes over as the canonical home, and the free
+   * page points at it - same content, one address in the index.
+   */
+  canonicalUrl?: string
   /** The instant of rendering, passed in so open/closed is testable. */
   now: Date
 }
@@ -117,7 +131,7 @@ export function localBusinessJsonLd(input: PageInput): string {
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',
     name: businessName,
-    url: `${PAGE_ORIGIN}/p/${slug}`,
+    url: input.canonicalUrl ?? `${PAGE_ORIGIN}/p/${slug}`,
   }
   if (config.phone) data.telephone = config.phone
   if (config.email) data.email = config.email
@@ -187,6 +201,12 @@ const styles = (brand: string) => `
   table.hours td { padding: 4px 18px 4px 0; color: var(--body); font-size: 15.5px; }
   table.hours td:first-child { color: var(--ink); font-weight: 600; min-width: 110px; }
   .contact a { color: var(--brand); text-decoration: none; font-weight: 600; }
+  .rev-sum { color: var(--body); margin-bottom: 14px; }
+  .rev-stars { color: #f59e0b; letter-spacing: 1px; }
+  blockquote.rev { margin: 0 0 16px; padding: 0 0 16px; border-bottom: 1px solid var(--line); }
+  blockquote.rev:last-of-type { border-bottom: none; padding-bottom: 0; }
+  blockquote.rev p { color: var(--body); }
+  blockquote.rev cite { color: var(--muted); font-style: normal; font-size: 14.5px; }
   footer { border-top: 1px solid var(--line); margin-top: 18px; padding: 26px 0 44px; }
   footer p { color: var(--muted); font-size: 13.5px; }
   footer a { color: var(--muted); }
@@ -250,6 +270,26 @@ ${(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const)
   </section>`
     : ''
 
+  // Visible words only, no review structured data: Google treats review
+  // markup about your own business on your own page as self-serving and
+  // ignores it at best. The words still persuade the humans who land here.
+  const reviewsBlock = input.reviews && input.reviews.count > 0
+    ? `<section>
+    <h2>What customers say</h2>
+    <p class="rev-sum"><span class="rev-stars">${'★'.repeat(Math.round(input.reviews.average))}</span> ${input.reviews.average.toFixed(1)} from ${input.reviews.count} review${input.reviews.count === 1 ? '' : 's'}</p>
+${input.reviews.items
+  .slice(0, 5)
+  .map(
+    (r) => `    <blockquote class="rev">
+      <span class="rev-stars">${'★'.repeat(r.rating)}</span>
+      ${r.text ? `<p>${esc(r.text)}</p>` : ''}
+      ${r.name ? `<cite>${esc(r.name)}</cite>` : ''}
+    </blockquote>`,
+  )
+  .join('\n')}
+  </section>`
+    : ''
+
   const contactBits = [
     config.phone ? `<a href="tel:${esc(config.phone)}">${esc(config.phone)}</a>` : '',
     config.email ? `<a href="mailto:${esc(config.email)}">${esc(config.email)}</a>` : '',
@@ -264,10 +304,10 @@ ${(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const)
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}" />
 ${directive === 'noindex' ? '<meta name="robots" content="noindex, follow" />' : ''}
-<link rel="canonical" href="${PAGE_ORIGIN}/p/${esc(slug)}" />
+<link rel="canonical" href="${esc(input.canonicalUrl ?? `${PAGE_ORIGIN}/p/${slug}`)}" />
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(description)}" />
-<meta property="og:url" content="${PAGE_ORIGIN}/p/${esc(slug)}" />
+<meta property="og:url" content="${esc(input.canonicalUrl ?? `${PAGE_ORIGIN}/p/${slug}`)}" />
 <meta property="og:type" content="website" />
 ${config.photoKey ? `<meta property="og:image" content="${PHOTO_ORIGIN}/${esc(config.photoKey)}" />` : ''}
 <script type="application/ld+json">${localBusinessJsonLd(input)}</script>
@@ -288,6 +328,7 @@ ${config.photoKey ? `<meta property="og:image" content="${PHOTO_ORIGIN}/${esc(co
 
   ${config.intro.trim() ? `<section><h2>About</h2><p class="intro">${esc(config.intro.trim())}</p></section>` : ''}
   ${servicesBlock}
+  ${reviewsBlock}
   ${hoursBlock}
   ${contactBits.length ? `<section class="contact"><h2>Contact</h2><p>${contactBits.join(' · ')}</p></section>` : ''}
 </div>

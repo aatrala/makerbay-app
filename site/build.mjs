@@ -216,7 +216,7 @@ const roadmapPage = () =>
       wish list: each module is placed where it is because of what it needs
       underneath it.
     </p>
-    <small>Last updated 23 August 2026</small>
+    <small>Last updated 24 August 2026</small>
   </div>
 </div>
 
@@ -245,10 +245,11 @@ ${modules
       <p>Saying this out loud is more useful than a longer roadmap.</p>
     </div>
     <div class="faq">
-      <h3>Invoicing, tax and bookkeeping</h3>
-      <p>Quotes stop at an accepted quote and a deposit. Compliant invoicing, tax
-      handling and reconciliation belong in Xero, MYOB or QuickBooks. We would
-      rather export to them than compete with them badly.</p>
+      <h3>Bookkeeping and tax accounting</h3>
+      <p>Quotes can turn an accepted quote into a simple, numbered invoice the
+      customer can read and pay against - and that is where it stops. Ledgers,
+      reconciliation and tax accounting belong in Xero, MYOB or QuickBooks. We
+      would rather export to them than compete with them badly.</p>
       <h3>A full CRM</h3>
       <p>Contacts exists so the other modules have somewhere sensible to put a
       customer. If you need pipelines, forecasting and email sequences, use a
@@ -281,7 +282,7 @@ const pricingPage = () => {
 
   return page({
     title: 'Pricing - MakerBay',
-    description: 'Contacts, Requests and Quotes are free forever. You pay for the AI assistant and Bookings, and only for what you switch on.',
+    description: 'Your page, Contacts, Requests, Quotes with invoices and Get found are free forever. You pay for the AI assistant, Bookings and Reviews, and only for what you switch on.',
     path: '/pricing',
     body: `<div class="hero">
   <div class="wrap">
@@ -325,8 +326,8 @@ ${free
       <h2>What you pay for</h2>
       <p>
         The assistant costs us money every time it answers a question, and
-        Bookings is worth real money to a business whose day is a calendar.
-        Those two carry the price.
+        Bookings and Reviews are worth real money to a business whose day is a
+        calendar and whose customers read star ratings. Those carry the price.
       </p>
     </div>
     <div class="prices">

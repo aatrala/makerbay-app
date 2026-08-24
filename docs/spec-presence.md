@@ -168,3 +168,31 @@ people. And it makes Stripe Connect urgent rather than theoretical.
 
 The sequencing in `docs/vision.md` §7 holds: build this, then Connect, then
 decide about Visibility with the analysis in hand.
+
+---
+
+## Addendum 2026-08-24: reviews on the page, custom domains (shipped)
+
+### §10 Reviews section
+Published first-party reviews (Reviews module enabled + published rows)
+render in a "What customers say" section: average, count, latest five.
+Visible words only - deliberately no review structured data, because review
+markup about your own business on your own page is self-serving under
+Google's guidelines and ignored at best.
+
+### §11 Custom domains (Presence Pro)
+- Gate: `getEffectiveEntitlement(tenantId, 'presence').planTier === 'pro'`,
+  else 402. The free makerbay.app page is never affected.
+- `PUT /v1/presence/domain {domain}` → ACM certificate (DNS validation) →
+  owner adds the validation CNAME. `GET` polls: once ISSUED, the Lambda
+  creates a per-tenant CloudFront distribution (origin api.makerbay.app,
+  shared viewer-request function rewrites every path to
+  `/v1/public/presence?domain={host}`, shared presence cache policy, the
+  tenant's certificate). Owner then points their domain (CNAME) at the
+  distribution. States: pending_validation → pending_dns → active.
+- Host lookup: `byDomain` GSI on PresenceConfig.
+- Canonicals: with an active custom domain, the custom domain is the
+  canonical home and the free page points at it (same content, one address
+  in the index). Without one, unchanged.
+- `DELETE` disables the distribution best-effort and clears the config;
+  a never-used certificate is deleted immediately.

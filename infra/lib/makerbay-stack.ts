@@ -104,9 +104,20 @@ export class MakerbayStack extends cdk.Stack {
     const priceItems = table('PriceItems', 'tenantId', 'itemId')
     const quotes = table('Quotes', 'tenantId', 'quoteId')
     const quotesConfig = table('QuotesConfig', 'tenantId')
+    // Invoices are their own table with their own number series - INV-7 must
+    // never repeat, and an invoice outlives the quote it came from.
+    const invoices = table('Invoices', 'tenantId', 'invoiceId')
+    const reviews = table('Reviews', 'tenantId', 'reviewId')
+    const reviewsConfig = table('ReviewsConfig', 'tenantId')
     // Presence stores only the editable words; services, hours and prices are
     // read live from the modules that own them, so nothing is stored twice.
     const presenceConfig = table('PresenceConfig', 'tenantId')
+    // Presence Pro custom domains: the per-tenant distribution identifies the
+    // tenant by request host, so the config must be findable by domain.
+    presenceConfig.addGlobalSecondaryIndex({
+      indexName: 'byDomain',
+      partitionKey: { name: 'customDomain', type: dynamodb.AttributeType.STRING },
+    })
     const visibilityConfig = table('VisibilityConfig', 'tenantId')
     // Missed-call rescue: the events table streams so the text goes out the
     // moment a call is answered, without slowing the call itself down.
@@ -408,13 +419,35 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_PRICEITEMS: priceItems.tableName,
       TABLE_QUOTES: quotes.tableName,
       TABLE_QUOTESCONFIG: quotesConfig.tableName,
+      TABLE_INVOICES: invoices.tableName,
     })
+    const reviewsFn = fn('ReviewsApiFn', 'modules/reviews/api/src/handler.ts', {
+      ...moduleEnv,
+      TABLE_REVIEWS: reviews.tableName,
+      TABLE_REVIEWSCONFIG: reviewsConfig.tableName,
+      // The public respond page offers the Google link configured under
+      // Get found, and the no-Reviews fallback ask reads the same config.
+      TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
+    })
+    // Fired by a one-off EventBridge schedule made when the booking is created.
+    const reminderFn = fn('BookingReminderFn', 'modules/booking/api/src/reminder.ts', {
+      ...moduleEnv,
+      TABLE_BOOKINGS: bookings.tableName,
+      TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+    })
+    const reminderSchedulerRole = new iam.Role(this, 'ReminderSchedulerRole', {
+      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com', {
+        conditions: { StringEquals: { 'aws:SourceAccount': this.account } },
+      }),
+    })
+    reminderFn.grantInvoke(reminderSchedulerRole)
     const presenceFn = fn('PresenceApiFn', 'modules/presence/api/src/handler.ts', {
       ...tableEnv,
       TABLE_PRESENCECONFIG: presenceConfig.tableName,
       TABLE_BOOKINGSERVICES: bookingServices.tableName,
       TABLE_BOOKINGCONFIG: bookingConfig.tableName,
       TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+      TABLE_REVIEWS: reviews.tableName,
     })
     const visibilityFn = fn('VisibilityApiFn', 'modules/visibility/api/src/handler.ts', {
       ...moduleEnv,
@@ -626,7 +659,40 @@ export class MakerbayStack extends cdk.Stack {
     }
     for (const t of [requests, requestsConfig]) t.grantReadWriteData(requestsFn)
     for (const t of [bookingServices, bookings, bookingConfig]) t.grantReadWriteData(bookingFn)
-    for (const t of [priceItems, quotes, quotesConfig]) t.grantReadWriteData(quotesFn)
+    for (const t of [priceItems, quotes, quotesConfig, invoices]) t.grantReadWriteData(quotesFn)
+
+    // Reviews: its own tables, Contacts, and the Get found config (read) for
+    // the Google link and the fallback ask.
+    for (const t of [reviews, reviewsConfig, contacts, contactEvents]) t.grantReadWriteData(reviewsFn)
+    for (const t of [tenants, users, apiKeys, entitlements, grants]) t.grantReadData(reviewsFn)
+    visibilityConfig.grantReadData(reviewsFn)
+    bus.grantPutEventsTo(reviewsFn)
+    reviewsFn.addToRolePolicy(sesSendPolicy)
+
+    // The reminder Lambda reads the diary and emails the customer.
+    for (const t of [bookings, bookingConfig, tenants, users]) t.grantReadData(reminderFn)
+    bus.grantPutEventsTo(reminderFn)
+    reminderFn.addToRolePolicy(sesSendPolicy)
+    // Booking creates and deletes its own one-off reminder schedules. The
+    // name prefix bounds it: this function manages rem-* and nothing else.
+    bookingFn.addEnvironment('REMINDER_FN_ARN', reminderFn.functionArn)
+    bookingFn.addEnvironment('SCHEDULER_ROLE_ARN', reminderSchedulerRole.roleArn)
+    bookingFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['scheduler:CreateSchedule', 'scheduler:DeleteSchedule'],
+      resources: [`arn:aws:scheduler:${this.region}:${this.account}:schedule/default/rem-*`],
+    }))
+    bookingFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['iam:PassRole'],
+      resources: [reminderSchedulerRole.roleArn],
+      conditions: { StringEquals: { 'iam:PassedToService': 'scheduler.amazonaws.com' } },
+    }))
+
+    // A completed job is the moment to ask for a review.
+    new events.Rule(this, 'BookingCompletedRule', {
+      eventBus: bus,
+      eventPattern: { source: ['makerbay.booking'], detailType: ['booking.completed'] },
+      targets: [new eventsTargets.LambdaFunction(reviewsFn)],
+    })
     presenceConfig.grantReadWriteData(presenceFn)
     visibilityConfig.grantReadWriteData(visibilityFn)
     for (const t of [tenants, users, entitlements, grants]) t.grantReadData(visibilityFn)
@@ -648,7 +714,7 @@ export class MakerbayStack extends cdk.Stack {
     bus.grantPutEventsTo(rescueProcessorFn)
     rescueProcessorFn.addToRolePolicy(sesSendPolicy)
     // Read-only views: presence renders what other modules own, never writes it.
-    for (const t of [bookingServices, bookingConfig, assistantConfig, tenants, users, entitlements, grants]) {
+    for (const t of [bookingServices, bookingConfig, assistantConfig, reviews, tenants, users, entitlements, grants]) {
       t.grantReadData(presenceFn)
     }
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
@@ -774,6 +840,7 @@ export class MakerbayStack extends cdk.Stack {
       ['Requests', 'requests', requestsFn],
       ['Booking', 'booking', bookingFn],
       ['Quotes', 'quotes', quotesFn],
+      ['Reviews', 'reviews', reviewsFn],
     ] as const) {
       httpApi.addRoutes({
         path: `/v1/${prefix}`,
@@ -1023,6 +1090,23 @@ function handler(event) {
 }
 `),
     })
+    // On a Presence Pro custom domain every path is the page; the function
+    // maps whatever was requested onto the API, carrying the host so the
+    // Lambda knows which tenant owns the domain. Shared by every per-tenant
+    // distribution the presence Lambda creates.
+    const domainRewrite = new cloudfront.Function(this, 'PresenceDomainRewrite', {
+      functionName: `makerbay-presence-domain-rewrite-${this.account}`,
+      comment: 'Maps a custom presence domain onto the public presence API',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request
+  request.uri = '/v1/public/presence'
+  request.querystring = { domain: { value: event.request.headers.host.value } }
+  return request
+}
+`),
+    })
     const presenceCachePolicy = new cloudfront.CachePolicy(this, 'PresenceCachePolicy', {
       cachePolicyName: `makerbay-presence-${this.account}`,
       defaultTtl: cdk.Duration.minutes(5),
@@ -1061,6 +1145,34 @@ function handler(event) {
       ],
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
     })
+    // Presence Pro custom domains: the Lambda builds per-tenant distributions
+    // from these two shared pieces. Certificates are per-domain and DNS-owned
+    // by the tenant, so nothing here is per-tenant.
+    presenceFn.addEnvironment('DOMAIN_REWRITE_FN_ARN', domainRewrite.functionArn)
+    presenceFn.addEnvironment('PRESENCE_CACHE_POLICY_ID', presenceCachePolicy.cachePolicyId)
+    // Operator-only escape hatch: lets us run the custom-domain flow against
+    // a subdomain in our own zone. Tenants can never claim makerbay.app names.
+    presenceFn.addEnvironment('DOMAIN_TEST_ALLOW', 'demo.makerbay.app')
+    presenceFn.addToRolePolicy(new iam.PolicyStatement({
+      // ACM certificate lifecycle for tenant domains. Request has no resource
+      // to scope to; Describe/Delete act on certs this account created.
+      actions: ['acm:RequestCertificate', 'acm:DescribeCertificate', 'acm:DeleteCertificate', 'acm:AddTagsToCertificate'],
+      resources: ['*'],
+    }))
+    presenceFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'cloudfront:CreateDistribution', 'cloudfront:GetDistribution',
+        'cloudfront:GetDistributionConfig', 'cloudfront:UpdateDistribution',
+        'cloudfront:TagResource',
+      ],
+      resources: [`arn:aws:cloudfront::${this.account}:distribution/*`],
+    }))
+    presenceFn.addToRolePolicy(new iam.PolicyStatement({
+      // Attaching the shared viewer-request function to a new distribution.
+      actions: ['cloudfront:GetFunction', 'cloudfront:DescribeFunction'],
+      resources: [domainRewrite.functionArn],
+    }))
+
     // Apex plus www both point at the marketing distribution.
     new route53.ARecord(this, 'ApexAlias', {
       zone,
