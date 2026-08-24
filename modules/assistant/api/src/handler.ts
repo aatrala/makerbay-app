@@ -181,6 +181,13 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
 
   const config = { ...DEFAULT_CONFIG, ...(await getConfig(tenant.tenantId)) }
   if (!config.helpEnabled) return renderNotFound()
+  // Same rule as the chat surface: the page's accent colour wins, so the
+  // help centre, the page and the chat read as one business.
+  const presence = await ddbRaw.send(
+    new GetCommand({ TableName: process.env.TABLE_PRESENCECONFIG!, Key: { tenantId: tenant.tenantId } }),
+  ).catch(() => undefined)
+  const accent = String(presence?.Item?.accentColor ?? '')
+  if (/^#[0-9a-fA-F]{6}$/.test(accent)) config.brandColor = accent
 
   const published = (await listSources(tenant.tenantId))
     .filter((s) => s.published && s.status === 'ready')
