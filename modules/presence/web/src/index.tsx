@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Route } from 'react-router-dom'
+import SharePage from './SharePage'
 import {
   Notice,
   Skeleton,
@@ -126,19 +127,7 @@ function PagePage() {
       {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
-      <div className="card">
-        <h2>Your address</h2>
-        <div className="row">
-          <input className="grow" readOnly value={pageUrl} onFocus={(e) => e.target.select()}
-            aria-label="Your page address" />
-          <a className="btn" href={pageUrl} target="_blank" rel="noopener">Open</a>
-        </div>
-        <p className="meta mt">
-          Put this on your van, your invoices and your Google Business Profile. It is free and it
-          stays free. Want a different address? <Link to="/workspace">Edit it under Workspace → Settings</Link>
-          {' '}— or connect your own domain below.
-        </p>
-      </div>
+      <AddressCard pageUrl={pageUrl} onChanged={load} />
 
       {indexing && !indexing.ownSite && (
         indexing.complete ? (
@@ -317,6 +306,98 @@ function PagePage() {
   )
 }
 
+/**
+ * The page address, editable in place. The slug is workspace-wide (chat and
+ * help centre share it), so this calls the workspace endpoint - but the
+ * owner should not have to know that to change their address.
+ */
+function AddressCard({ pageUrl, onChanged }: { pageUrl: string; onChanged: () => Promise<void> }) {
+  const currentSlug = pageUrl.split('/p/')[1] ?? ''
+  const [editing, setEditing] = useState(false)
+  const [slug, setSlug] = useState(currentSlug)
+  const [check, setCheck] = useState<{ available: boolean; message?: string } | null>(null)
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { setSlug(currentSlug) }, [currentSlug])
+
+  useEffect(() => {
+    const wanted = slug.trim().toLowerCase()
+    if (!editing || !wanted || wanted === currentSlug) { setCheck(null); return }
+    const t = setTimeout(() => {
+      void api('GET', `/v1/core/workspace/slug?check=${encodeURIComponent(wanted)}`)
+        .then(setCheck)
+        .catch(() => setCheck(null))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [editing, slug, currentSlug])
+
+  const save = (e: FormEvent) => {
+    e.preventDefault()
+    const wanted = slug.trim().toLowerCase()
+    if (wanted === currentSlug) { setEditing(false); return }
+    if (!window.confirm('Change your address? Every link you have already shared stops working immediately.')) return
+    setBusy(true); setError(''); setNote('')
+    void api('PATCH', '/v1/core/workspace', { slug: wanted })
+      .then(async () => {
+        setNote('Address changed. Update your Google profile and anything printed.')
+        setEditing(false)
+        await onChanged()
+      })
+      .catch((err) => setError(explain(err)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="card">
+      <h2>Your address</h2>
+      {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {!editing ? (
+        <>
+          <div className="row">
+            <input className="grow" readOnly value={pageUrl} onFocus={(e) => e.target.select()}
+              aria-label="Your page address" />
+            <a className="btn" href={pageUrl} target="_blank" rel="noopener">Open</a>
+            <button className="ghost" onClick={() => setEditing(true)}>Edit</button>
+          </div>
+          <p className="meta mt">
+            Put this on your van, your invoices and your Google Business Profile. It is free and it
+            stays free. The same address serves your chat and help centre — or connect your own
+            domain below.
+          </p>
+        </>
+      ) : (
+        <form onSubmit={save}>
+          <div className="row">
+            <span className="meta nowrap">makerbay.app/p/</span>
+            <input className="grow" autoFocus value={slug} aria-label="New address"
+              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+              maxLength={40} />
+            <button disabled={busy || (check != null && !check.available)}>
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" className="ghost" disabled={busy}
+              onClick={() => { setEditing(false); setSlug(currentSlug); setError('') }}>
+              Cancel
+            </button>
+          </div>
+          <p className="meta" aria-live="polite">
+            {slug.trim().toLowerCase() === currentSlug
+              ? 'Lowercase letters, numbers and hyphens.'
+              : check == null
+                ? 'Checking availability…'
+                : check.available
+                  ? '✓ Available. Saving breaks every link you have already shared - the old address is released immediately.'
+                  : check.message ?? 'That address is already in use.'}
+          </p>
+        </form>
+      )}
+    </div>
+  )
+}
+
 interface DomainState {
   domain: string | null
   status?: 'pending_validation' | 'pending_dns' | 'active'
@@ -428,10 +509,14 @@ function DomainCard() {
 export const presenceDashboard: DashboardModule = {
   id: 'presence',
   label: 'Your page',
-  nav: [{ to: '/page', label: 'Edit page' }],
-  routes: () => (
+  nav: [
+    { to: '/page', label: 'Edit page' },
+    { to: '/page/share', label: 'Share' },
+  ],
+  routes: ({ me }) => (
     <>
       <Route path="/page" element={<PagePage />} />
+      <Route path="/page/share" element={<SharePage me={me} />} />
     </>
   ),
 }

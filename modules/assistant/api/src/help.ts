@@ -54,6 +54,8 @@ export const sourceIdFromSlug = (slug: string): string => {
  * into spaces, and capitalise - a public page should not read as "faq-v2.pdf".
  */
 const titleOf = (source: SourceRow): string => {
+  // A generated title (made at publish time) beats any filename cleanup.
+  if (source.helpMeta?.title) return source.helpMeta.title
   const raw = source.name.replace(/\.[a-z0-9]{1,5}$/i, '').replace(/^Q&A:\s*/, '').trim()
   if (!raw) return 'Untitled'
   // Names with spaces were written by a person; leave those alone.
@@ -65,38 +67,56 @@ const titleOf = (source: SourceRow): string => {
 // ── Shared chrome ────────────────────────────────────────────────────────
 
 const styles = (brand: string) => `
-  :root { --brand: ${esc(brand)}; --ink: #1c1917; --body: #57534e; --muted: #a8a29e; --line: #e7e5e4; }
+  :root { --brand: ${esc(brand)}; --ink: #1c1917; --body: #57534e; --muted: #a8a29e;
+    --line: #e7e5e4; --soft: #faf9f7; --card: #ffffff; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
-    color: var(--ink); background: #fff; line-height: 1.65; font-size: 17px; -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
-  header { border-bottom: 1px solid var(--line); padding: 22px 0; margin-bottom: 40px; }
-  header .wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header a.home { font-weight: 700; font-size: 18px; color: var(--ink); text-decoration: none; letter-spacing: -0.02em; }
+    color: var(--ink); background: var(--soft); line-height: 1.65; font-size: 17px; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 16px 0; }
+  header .wrap { display: flex; align-items: center; gap: 16px; }
+  header a.home { font-weight: 700; font-size: 17px; color: var(--ink); text-decoration: none;
+    letter-spacing: -0.02em; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header .btn { padding: 8px 16px; font-size: 14px; }
   a { color: var(--brand); }
-  h1 { font-size: clamp(28px, 4vw, 38px); line-height: 1.2; letter-spacing: -0.02em; margin-bottom: 12px; }
-  h2 { font-size: 20px; margin: 32px 0 8px; letter-spacing: -0.01em; }
+  .hero { padding: 44px 0 34px; }
+  h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 10px; }
   p { color: var(--body); margin-bottom: 14px; }
-  .lead { font-size: 19px; margin-bottom: 32px; }
-  ul.articles { list-style: none; margin: 24px 0; }
-  ul.articles li { border-bottom: 1px solid var(--line); }
-  ul.articles li:last-child { border-bottom: none; }
-  ul.articles a { display: block; padding: 18px 0; text-decoration: none; color: inherit; }
-  ul.articles a:hover h2 { color: var(--brand); }
-  ul.articles h2 { margin: 0 0 4px; font-size: 18px; }
-  ul.articles p { margin: 0; font-size: 15.5px; color: var(--muted); }
+  .lead { font-size: 18.5px; margin-bottom: 0; max-width: 56ch; }
+  .search { margin: 22px 0 0; position: relative; max-width: 480px; }
+  .search input { width: 100%; padding: 13px 18px; border: 1px solid var(--line); border-radius: 12px;
+    font: inherit; font-size: 16px; background: var(--card); outline: none; }
+  .search input:focus { border-color: var(--brand); }
+  .cat { margin: 30px 0 0; }
+  .cat > h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    margin: 0 0 10px 2px; }
+  ul.articles { list-style: none; display: grid; gap: 10px; }
+  ul.articles a { display: block; padding: 16px 20px; text-decoration: none; color: inherit;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  ul.articles a:hover { border-color: var(--brand); }
+  ul.articles a:hover h3 { color: var(--brand); }
+  ul.articles h3 { margin: 0 0 3px; font-size: 17px; letter-spacing: -0.01em; }
+  ul.articles p { margin: 0; font-size: 14.5px; color: var(--muted); }
+  .none { display: none; }
+  .no-results { color: var(--muted); padding: 20px 2px; }
+  .article-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 34px 34px 28px; margin-top: 28px; }
   article { white-space: pre-wrap; font-size: 16.5px; color: var(--body); }
-  .meta { color: var(--muted); font-size: 14.5px; }
-  .back { display: inline-block; margin-bottom: 24px; font-size: 15px; text-decoration: none; }
-  .ask { border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin: 44px 0; }
-  .ask h2 { margin-top: 0; }
+  .meta { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  .crumb { display: inline-block; margin: 26px 0 0; font-size: 14.5px; text-decoration: none; font-weight: 600; }
+  .ask { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px 24px; margin: 36px 0; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .ask div { flex: 1; min-width: 200px; }
+  .ask h2 { margin: 0 0 4px; font-size: 17px; }
+  .ask p { margin: 0; font-size: 14.5px; }
   .btn { display: inline-block; background: var(--brand); color: #fff; text-decoration: none;
-    padding: 11px 20px; border-radius: 8px; font-weight: 650; font-size: 15px; }
-  footer { border-top: 1px solid var(--line); margin-top: 56px; padding: 28px 0 44px; }
+    padding: 11px 20px; border-radius: 9px; font-weight: 650; font-size: 15px; white-space: nowrap; }
+  footer { border-top: 1px solid var(--line); margin-top: 40px; padding: 26px 0 44px; }
   footer p { font-size: 14px; color: var(--muted); margin: 0; }
+  @media (max-width: 560px) { .article-wrap { padding: 22px 18px; } }
   @media (prefers-color-scheme: dark) {
-    :root { --ink: #f5f5f4; --body: #d6d3d1; --muted: #a8a29e; --line: #292524; }
-    body { background: #1c1917; }
+    :root { --ink: #f5f5f4; --body: #d6d3d1; --muted: #a8a29e; --line: #33302c;
+      --soft: #1c1917; --card: #262220; }
     header a.home { color: var(--ink); }
   }
 `
@@ -129,6 +149,7 @@ ${opts.noindex ? '<meta name="robots" content="noindex" />' : ''}
 <header>
   <div class="wrap">
     <a class="home" href="/${esc(opts.slug)}">${esc(opts.siteName)}</a>
+    <a class="btn" href="https://chat.makerbay.app/${esc(opts.slug)}">Ask a question</a>
   </div>
 </header>
 <main class="wrap">
@@ -143,8 +164,10 @@ ${opts.body}
 
 const askBlock = (slug: string, assistantName: string) => `
 <div class="ask">
-  <h2>Cannot find what you need?</h2>
-  <p>Ask ${esc(assistantName)} directly. It answers from these same documents.</p>
+  <div>
+    <h2>Cannot find what you need?</h2>
+    <p>Ask ${esc(assistantName)} directly - it answers from these same documents, instantly.</p>
+  </div>
   <a class="btn" href="https://chat.makerbay.app/${esc(slug)}">Ask a question</a>
 </div>`
 
@@ -167,6 +190,16 @@ export function renderNotFound(): APIGatewayProxyResultV2 {
   )
 }
 
+/** Category display order; anything unrecognised lands in General. */
+const CATEGORY_ORDER = [
+  'Getting started',
+  'Services & pricing',
+  'Bookings & appointments',
+  'Policies & guarantees',
+  'Troubleshooting',
+  'General',
+]
+
 export function renderIndex(
   config: AssistantConfigRow & { helpTitle?: string; helpIntro?: string },
   slug: string,
@@ -174,20 +207,69 @@ export function renderIndex(
   excerpts: Record<string, string>,
 ): APIGatewayProxyResultV2 {
   const siteName = config.helpTitle?.trim() || `${config.name} help centre`
-  const intro = config.helpIntro?.trim() || 'Answers to the questions we are asked most often.'
+  const intro = config.helpIntro?.trim() || 'Straight answers about our services, prices and how we work.'
+
+  const describe = (s: SourceRow): string =>
+    s.helpMeta?.description ??
+    `${(excerpts[s.sourceId] ?? '').slice(0, 150)}${(excerpts[s.sourceId] ?? '').length > 150 ? '…' : ''}`
+
+  // Group by generated category. A single-category centre skips the group
+  // headings - structure should only appear once it structures something.
+  const groups = new Map<string, SourceRow[]>()
+  for (const s of sources) {
+    const cat = s.helpMeta?.category && CATEGORY_ORDER.includes(s.helpMeta.category)
+      ? s.helpMeta.category
+      : 'General'
+    if (!groups.has(cat)) groups.set(cat, [])
+    groups.get(cat)!.push(s)
+  }
+  const orderedCats = CATEGORY_ORDER.filter((c) => groups.has(c))
+  const showHeadings = orderedCats.length > 1
+
+  const item = (s: SourceRow) => `    <li data-t="${esc((titleOf(s) + ' ' + describe(s)).toLowerCase())}"><a href="/${esc(slug)}/${esc(articleSlug(s))}">
+      <h3>${esc(titleOf(s))}</h3>
+      <p>${esc(describe(s))}</p>
+    </a></li>`
 
   const list = sources.length
-    ? `<ul class="articles">
-${sources
-  .map(
-    (s) => `  <li><a href="/${esc(slug)}/${esc(articleSlug(s))}">
-    <h2>${esc(titleOf(s))}</h2>
-    <p>${esc((excerpts[s.sourceId] ?? '').slice(0, 150))}${(excerpts[s.sourceId] ?? '').length > 150 ? '…' : ''}</p>
-  </a></li>`,
-  )
-  .join('\n')}
-</ul>`
+    ? orderedCats
+        .map(
+          (cat) => `<section class="cat" data-cat>
+  ${showHeadings ? `<h2>${esc(cat)}</h2>` : ''}
+  <ul class="articles">
+${groups.get(cat)!.map(item).join('\n')}
+  </ul>
+</section>`,
+        )
+        .join('\n')
     : '<p>No articles have been published yet.</p>'
+
+  // Search filters what is already on the page - honest, instant, and the
+  // full list stays served for the no-JavaScript reader and the crawler.
+  const search = sources.length > 3
+    ? `<div class="search"><input id="q" type="search" placeholder="Search ${sources.length} articles…" aria-label="Search articles" /></div>
+<p class="no-results none" id="noq">Nothing matches that. Try the Ask a question button instead.</p>
+<script>
+(function () {
+  var q = document.getElementById('q')
+  if (!q) return
+  q.addEventListener('input', function () {
+    var t = q.value.trim().toLowerCase()
+    var any = false
+    document.querySelectorAll('ul.articles li').forEach(function (li) {
+      var hit = !t || (li.getAttribute('data-t') || '').indexOf(t) !== -1
+      li.classList.toggle('none', !hit)
+      if (hit) any = true
+    })
+    document.querySelectorAll('[data-cat]').forEach(function (sec) {
+      var visible = sec.querySelectorAll('li:not(.none)').length > 0
+      sec.classList.toggle('none', !visible)
+    })
+    document.getElementById('noq').classList.toggle('none', any)
+  })
+})()
+</script>`
+    : ''
 
   return html(
     200,
@@ -200,8 +282,11 @@ ${sources
       slug,
       // An empty help centre should not be indexed as a thin page.
       noindex: sources.length === 0,
-      body: `<h1>${esc(siteName)}</h1>
+      body: `<div class="hero">
+<h1>${esc(siteName)}</h1>
 <p class="lead">${esc(intro)}</p>
+${search}
+</div>
 ${list}
 ${askBlock(slug, config.name)}`,
     }),
@@ -228,10 +313,12 @@ export function renderArticle(
       brand: config.brandColor,
       siteName,
       slug,
-      body: `<a class="back" href="/${esc(slug)}">&larr; All articles</a>
+      body: `<a class="crumb" href="/${esc(slug)}">&larr; All articles</a>
+<div class="article-wrap">
 <h1>${esc(title)}</h1>
-<p class="meta">Updated <time datetime="${esc(updated)}">${esc(new Date(updated).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}</time></p>
+<p class="meta">${source.helpMeta?.category ? `${esc(source.helpMeta.category)} · ` : ''}Updated <time datetime="${esc(updated)}">${esc(new Date(updated).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}</time></p>
 <article>${esc(text)}</article>
+</div>
 ${askBlock(slug, config.name)}`,
     }),
   )

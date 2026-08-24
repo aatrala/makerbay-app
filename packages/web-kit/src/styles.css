@@ -334,3 +334,13 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
 .checklist li.done { color: var(--muted); }
 .checklist li.done > span:first-child { color: var(--ok); }
 .checklist li.soon > span:first-child { color: var(--muted); }
+.side .whoami .version { color: var(--muted); font-size: 12px; text-decoration: none; }
+.side .whoami .version:hover { color: #e7e5e4; }
+
+/* Sidebar scroll structure: brand pinned top, account pinned bottom, the
+   module list scrolls independently between them. */
+.side { display: flex; flex-direction: column; max-height: 100vh; position: sticky; top: 0; }
+.side-body nav { flex: 1 1 auto; overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+.side-body { min-height: 0; }
+.share-steps { margin: 0 0 0 20px; }
+.share-steps li { padding: 4px 0; color: var(--body); font-size: 15px; }

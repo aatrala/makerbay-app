@@ -135,6 +135,11 @@ function HelpCentre({ config, me, set, toggle, save, busy }: {
               placeholder="Answers to the questions we are asked most often." />
 
             <p className="meta">
+              When you publish an article, a customer-facing title, description and category are
+              written for it automatically — a filename is not a headline. The centre groups by
+              category and gains search at four articles.
+            </p>
+            <p className="meta">
               Submit <code>{url}/sitemap.xml</code> to Google Search Console so your articles are
               found. Each page links back to your assistant for anything it does not cover.
             </p>

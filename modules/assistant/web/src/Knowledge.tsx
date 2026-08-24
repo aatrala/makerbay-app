@@ -163,9 +163,11 @@ export default function Knowledge() {
 
   const publish = (id: string, next: boolean) =>
     void run(async () => {
-      await api('POST', `/v1/assistant/sources/${id}/publish`, { published: next })
+      const r = await api('POST', `/v1/assistant/sources/${id}/publish`, { published: next })
       setNote(next
-        ? 'Published. It will appear in your help centre within a few minutes.'
+        ? r.source?.helpMeta
+          ? `Published as "${r.source.helpMeta.title}" under ${r.source.helpMeta.category}. Live in your help centre within a few minutes.`
+          : 'Published. It will appear in your help centre within a few minutes.'
         : 'Unpublished. It is no longer public.')
     })
 

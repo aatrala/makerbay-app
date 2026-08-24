@@ -239,3 +239,69 @@ export async function getIngestionStatus(jobId: string): Promise<string> {
   )
   return r.ingestionJob?.status ?? 'UNKNOWN'
 }
+
+export interface HelpMeta {
+  title: string
+  description: string
+  category: string
+}
+
+export const HELP_CATEGORIES = [
+  'Getting started',
+  'Services & pricing',
+  'Bookings & appointments',
+  'Policies & guarantees',
+  'Troubleshooting',
+  'General',
+] as const
+
+/**
+ * A customer-facing title, one-line description and category for a published
+ * help article, generated once at publish time. A filename is not a headline
+ * and a raw excerpt is not a description; one cheap model call fixes both
+ * and gives the index real structure to group by.
+ */
+export async function generateHelpMeta(
+  businessName: string,
+  sourceName: string,
+  text: string,
+): Promise<HelpMeta | undefined> {
+  try {
+    const r = await runtimeClient.send(
+      new ConverseCommand({
+        modelId: MODEL_ID(),
+        system: [{
+          text: [
+            `You title help-centre articles for ${businessName}, a local service business.`,
+            'Reply with ONLY a JSON object: {"title": string, "description": string, "category": string}.',
+            'title: at most 60 characters, written for the business\'s customers, no filename artifacts.',
+            'description: one plain sentence, at most 140 characters, saying what a reader will learn.',
+            `category: exactly one of ${JSON.stringify(HELP_CATEGORIES)}.`,
+            'Never invent facts not present in the document.',
+          ].join('\n'),
+        }],
+        messages: [{
+          role: 'user',
+          content: [{ text: `Document name: ${sourceName}\n\nDocument content:\n${text.slice(0, 6000)}` }],
+        }],
+        inferenceConfig: { maxTokens: 300, temperature: 0.2 },
+      }),
+    )
+    const raw = r.output?.message?.content?.map((c) => c.text ?? '').join('') ?? ''
+    const match = raw.match(/\{[\s\S]*\}/)
+    if (!match) return undefined
+    const parsed = JSON.parse(match[0]) as Partial<HelpMeta>
+    if (!parsed.title || !parsed.description) return undefined
+    return {
+      title: String(parsed.title).slice(0, 80),
+      description: String(parsed.description).slice(0, 180),
+      category: (HELP_CATEGORIES as readonly string[]).includes(String(parsed.category))
+        ? String(parsed.category)
+        : 'General',
+    }
+  } catch (err) {
+    // Metadata is an enhancement - publishing must not fail on it.
+    console.warn('help meta generation failed', { sourceName, err: String(err) })
+    return undefined
+  }
+}

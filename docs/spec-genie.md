@@ -72,6 +72,26 @@ my site" is always answerable - by the dashboard and by Genie itself.
    with a generous `genieTokensPerMonth` in the grant. Zero new entitlement
    mechanics; gate on the entitlement, never a plan name.
 
+## Quick actions (decided 2026-08-24, design review)
+
+A Genie chip is a pre-baked READ tool call executed directly and rendered as
+a card - skipping the Converse loop entirely: zero prompt ambiguity, zero
+tokens against the allowance, same registry tools so coverage stays honest.
+
+V1 five: **What happened today** (query_activity briefing) · **Today's
+bookings** · **Waiting on you** (open requests + unanswered reviews) ·
+**Unpaid invoices** · **Send a quote** (the one write-starter; it enters the
+normal PendingAction confirmation flow, never a shortcut). Context-aware in
+ONE slot only: the first chip is "Morning briefing" before noon and
+"Tomorrow's bookings" after 5pm; the rest stay static - rotating chips
+destroy muscle memory on a surface opened ten times a day.
+
+The same pattern shipped on the CUSTOMER chat surface (2026-08-24): identity
+lockup (business name + "AI assistant · open state" always on screen),
+persistent chip row (Book a time · Services & prices · Hours · Contact ·
+About), every chip a local card from structured config data - instant, free,
+no typing theater, hidden when the data is empty.
+
 ## V1 scope
 
 Ship: morning briefing; read tools across all live modules; write tools for

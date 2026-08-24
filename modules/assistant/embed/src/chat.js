@@ -52,25 +52,34 @@
     return payload
   }
 
+  var business = null
+
   fetch(API + '/v1/public/assistant/config?' + query)
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status) })
-    .then(function (data) { config = data.assistant; render() })
+    .then(function (data) { config = data.assistant; business = data.business || null; render() })
     .catch(function () { fail('This assistant is unavailable right now.') })
 
   function render() {
     document.documentElement.style.setProperty('--brand', config.brandColor || '#0f6bff')
-    document.title = config.name || 'Chat'
+    var bizName = (business && business.name) || config.name || 'Chat'
+    document.title = bizName
     app.className = ''
+    // Identity leads with the BUSINESS - that is who the customer thinks
+    // they are talking to - and the AI disclosure lives in the header so it
+    // is on screen at the moment of every message, not scrolled away.
+    var sub = 'AI assistant' + (business && business.openLabel ? ' · ' + esc(business.openLabel) : '')
+    var avatar = business && business.photoUrl
+      ? '<img class="avatar photo" src="' + esc(business.photoUrl) + '" alt="" />'
+      : '<div class="avatar">' + esc(bizName.trim().charAt(0).toUpperCase()) + '</div>'
     app.innerHTML =
       '<header>' +
-      '<div class="avatar">' + esc((config.name || 'A').trim().charAt(0).toUpperCase()) + '</div>' +
-      '<div class="name">' + esc(config.name || 'Assistant') + '</div>' +
-      (config.bookingEnabled && config.slug
-        ? '<a class="book-cta" href="/booking?slug=' + encodeURIComponent(config.slug) + '">Book a time</a>'
-        : '') +
+      avatar +
+      '<div class="who"><div class="name">' + esc(bizName) + '</div>' +
+      '<div class="sub">' + sub + '</div></div>' +
       '<button class="close" aria-label="Close chat">&#10005;</button>' +
       '</header>' +
       '<div class="log" id="log"></div>' +
+      '<div class="chips" id="chips"></div>' +
       '<form id="form">' +
       '<input id="input" placeholder="Type your question…" autocomplete="off" />' +
       '<button class="send" id="send" type="submit">Send</button>' +
@@ -81,8 +90,176 @@
       parent.postMessage('makerbay:close', '*')
     })
     app.querySelector('#form').addEventListener('submit', send)
+    renderChips()
     if (config.greeting) add('bot', config.greeting)
     if (!embedded) app.querySelector('#input').focus()
+  }
+
+  /**
+   * Quick actions: every chip renders a local card from data already in the
+   * config payload - instant, free, and never a Bedrock call. A chip with no
+   * data behind it is not shown. Book a time is first: it is the conversion.
+   */
+  function renderChips() {
+    var row = document.getElementById('chips')
+    if (!row || !business) return
+    var slugQ = encodeURIComponent(config.slug || slug || '')
+    var defs = [
+      {
+        label: 'Book a time',
+        show: config.bookingEnabled && business.services.length > 0 && slugQ,
+        act: function () { location.href = '/booking?slug=' + slugQ },
+      },
+      { label: 'Services & prices', show: business.services.length > 0, act: function () { addCard(servicesCard()) } },
+      { label: 'Hours', show: hasHours(), act: function () { addCard(hoursCard()) } },
+      { label: 'Contact', show: Boolean(business.phone || business.email), act: function () { addCard(contactCard()) } },
+      { label: 'About', show: Boolean(business.intro || business.headline), act: function () { addCard(aboutCard()) } },
+    ]
+    defs.forEach(function (d) {
+      if (!d.show) return
+      var b = document.createElement('button')
+      b.type = 'button'
+      b.className = 'chip'
+      b.textContent = d.label
+      b.addEventListener('click', d.act)
+      row.appendChild(b)
+    })
+    if (!row.children.length) row.remove()
+  }
+
+  function hasHours() {
+    if (!business || !business.hours) return false
+    for (var d in business.hours) {
+      if (business.hours[d] && business.hours[d].length) return true
+    }
+    return false
+  }
+
+  function cash(cents) {
+    try {
+      return new Intl.NumberFormat('en', { style: 'currency', currency: (business && business.currency) || 'AUD' })
+        .format(cents / 100)
+    } catch (e) { return '$' + (cents / 100).toFixed(2) }
+  }
+
+  /** Cards are information from the business, not AI speech - no typing
+   *  indicator, no delay, styled as a card rather than a bubble. */
+  function addCard(node) {
+    var log = document.getElementById('log')
+    var el = document.createElement('div')
+    el.className = 'msg bot card'
+    el.appendChild(node)
+    log.appendChild(el)
+    log.scrollTop = log.scrollHeight
+  }
+
+  function cardShell(title) {
+    var wrap = document.createElement('div')
+    var h = document.createElement('div')
+    h.className = 'card-title'
+    h.textContent = title
+    wrap.appendChild(h)
+    return wrap
+  }
+
+  function servicesCard() {
+    var wrap = cardShell('Services & prices')
+    business.services.forEach(function (s) {
+      var row = document.createElement('div')
+      row.className = 'svc-row'
+      var left = document.createElement('div')
+      var nm = document.createElement('div')
+      nm.className = 'svc-nm'
+      nm.textContent = s.name
+      left.appendChild(nm)
+      if (s.description) {
+        var ds = document.createElement('div')
+        ds.className = 'svc-ds'
+        ds.textContent = s.description
+        left.appendChild(ds)
+      }
+      var right = document.createElement('div')
+      right.className = 'svc-pr'
+      right.textContent = (s.priceCents != null ? cash(s.priceCents) + ' · ' : '') + s.durationMinutes + ' min'
+      row.appendChild(left)
+      row.appendChild(right)
+      wrap.appendChild(row)
+    })
+    if (config.bookingEnabled) {
+      var a = document.createElement('a')
+      a.className = 'card-act'
+      a.href = '/booking?slug=' + encodeURIComponent(config.slug || slug || '')
+      a.textContent = 'Book a time'
+      wrap.appendChild(a)
+    }
+    return wrap
+  }
+
+  function hoursCard() {
+    var wrap = cardShell('Opening hours')
+    if (business.openLabel) {
+      var st = document.createElement('div')
+      st.className = 'open-label'
+      st.textContent = business.openLabel
+      wrap.appendChild(st)
+    }
+    var days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+    var names = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' }
+    days.forEach(function (d) {
+      var w = business.hours[d]
+      var row = document.createElement('div')
+      row.className = 'hrs-row'
+      var n = document.createElement('span')
+      n.textContent = names[d]
+      var v = document.createElement('span')
+      v.textContent = w && w.length ? w.map(function (x) { return x.from + '–' + x.to }).join(', ') : 'Closed'
+      row.appendChild(n)
+      row.appendChild(v)
+      wrap.appendChild(row)
+    })
+    return wrap
+  }
+
+  function contactCard() {
+    var wrap = cardShell('Contact')
+    if (business.phone) {
+      var p = document.createElement('a')
+      p.className = 'card-act'
+      p.href = 'tel:' + business.phone
+      p.textContent = 'Call ' + business.phone
+      wrap.appendChild(p)
+    }
+    if (business.email) {
+      var m = document.createElement('a')
+      m.className = 'card-act ghosted'
+      m.href = 'mailto:' + business.email
+      m.textContent = business.email
+      wrap.appendChild(m)
+    }
+    return wrap
+  }
+
+  function aboutCard() {
+    var wrap = cardShell('About ' + business.name)
+    if (business.headline) {
+      var h = document.createElement('div')
+      h.className = 'svc-nm'
+      h.textContent = business.headline
+      wrap.appendChild(h)
+    }
+    if (business.intro) {
+      var p = document.createElement('p')
+      p.className = 'about-p'
+      p.textContent = business.intro
+      wrap.appendChild(p)
+    }
+    if (business.areas && business.areas.length) {
+      var a = document.createElement('div')
+      a.className = 'svc-ds'
+      a.textContent = 'Serving ' + business.areas.join(', ')
+      wrap.appendChild(a)
+    }
+    return wrap
   }
 
   /**

@@ -52,6 +52,9 @@ export default function Shell({ me, modules, stripeMode }: {
             <strong>{me.tenant?.name}</strong>
             <span>{me.user.email}</span>
             <button className="linkish" onClick={logout}>Sign out</button>
+            <a className="version" href="https://makerbay.app/changelog" target="_blank" rel="noopener">
+              v{__MB_RELEASE__} — what's new
+            </a>
           </div>
         </div>
       </aside>

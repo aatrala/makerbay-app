@@ -94,6 +94,8 @@ const header = () => `<header>
   </div>
 </header>`
 
+let LATEST = ''
+
 const footer = () => `<footer>
   <div class="wrap foot-grid">
     <div class="foot-col foot-brand">
@@ -118,7 +120,7 @@ const footer = () => `<footer>
     </div>
   </div>
   <div class="wrap foot-legal">
-    <p>&copy; 2026 Appa Technologies Pty Ltd</p>
+    <p>&copy; 2026 Appa Technologies Pty Ltd${LATEST ? ` &middot; <a href="/changelog">v${LATEST}</a>` : ''}</p>
   </div>
 </footer>`
 
@@ -643,6 +645,9 @@ const write = async (path, html) => {
   await writeFile(join(dir, 'index.html'), html, 'utf8')
 }
 
+const releases = parseChangelog(await readFile(join(repo, 'CHANGELOG.md'), 'utf8'))
+LATEST = releases[0].version
+
 let generated = 0
 for (const m of modules) {
   // A hand-written page wins: some modules deserve more than the manifest says.
@@ -654,7 +659,6 @@ for (const m of modules) {
 await write('roadmap', roadmapPage())
 await write('pricing', pricingPage())
 
-const releases = parseChangelog(await readFile(join(repo, 'CHANGELOG.md'), 'utf8'))
 await write('changelog', changelogPage(releases))
 
 // Inject the generated module grid wherever a page asks for it.
@@ -663,8 +667,13 @@ for (const file of ['index.html', ...modules.map((m) => `modules/${m.id}/index.h
   const path = join(dist, file)
   if (!existsSync(path)) continue
   const html = await readFile(path, 'utf8')
-  if (!html.includes(marker)) continue
-  await writeFile(path, html.replace(marker, moduleGrid()), 'utf8')
+  let out = html
+  if (out.includes(marker)) out = out.replace(marker, moduleGrid())
+  out = out.replace(
+    '<p>© 2026 Appa Technologies Pty Ltd</p>',
+    `<p>© 2026 Appa Technologies Pty Ltd · <a href="/changelog">v${LATEST}</a></p>`,
+  )
+  if (out !== html) await writeFile(path, out, 'utf8')
 }
 
 await writeFile(

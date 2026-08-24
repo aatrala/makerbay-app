@@ -48,7 +48,8 @@ body.hosted header .close { display: none; }
 }
 .msg .rate button:hover { opacity: 1; }
 
-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
+/* The chat composer only - page forms (.pform) lay out as documents. */
+form#form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
 input {
   flex: 1; padding: 10px 13px; border: 1px solid var(--border); border-radius: 20px;
   font-size: 14px; font-family: inherit; outline: none; min-width: 0;
@@ -135,3 +136,31 @@ header .book-cta {
 }
 header .book-cta:hover { background: rgba(255,255,255,.26); }
 .msg.bot a { color: var(--brand); font-weight: 600; text-decoration: underline; word-break: break-all; }
+
+/* Identity lockup + quick actions + instant cards */
+header .avatar.photo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+header .who { min-width: 0; }
+header .who .name { font-weight: 650; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+header .who .sub { font-size: 11.5px; opacity: .85; }
+.chips { display: flex; gap: 8px; padding: 8px 12px 0; overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; border: 1px solid var(--border); background: #fff; color: var(--text);
+  border-radius: 16px; padding: 6px 13px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.chip:hover { border-color: var(--brand); color: var(--brand); }
+.msg.card { background: #fff; border: 1px solid var(--border); max-width: 92%; }
+.card-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.svc-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); }
+.svc-nm { font-weight: 600; font-size: 14px; }
+.svc-ds { color: var(--muted); font-size: 12.5px; }
+.svc-pr { white-space: nowrap; font-size: 13px; color: var(--text); }
+.hrs-row { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; font-size: 13.5px; }
+.hrs-row span:first-child { font-weight: 600; }
+.open-label { color: #15803d; font-weight: 650; font-size: 13px; margin-bottom: 6px; }
+.about-p { font-size: 13.5px; margin: 4px 0 6px; white-space: pre-wrap; }
+.card-act {
+  display: inline-block; margin: 10px 8px 0 0; background: var(--brand); color: #fff;
+  border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 650; text-decoration: none;
+}
+.card-act.ghosted { background: transparent; color: var(--brand); border: 1px solid var(--border); }

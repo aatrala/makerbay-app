@@ -31,10 +31,12 @@ import {
   type MessageRow,
   type SourceRow,
   businessFacts,
+  businessProfile,
 } from './db'
 import {
   buildCitations,
   generateAnswer,
+  generateHelpMeta,
   getIngestionStatus,
   retrieveChunks,
   startIngestion,
@@ -181,6 +183,9 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
 
   const config = { ...DEFAULT_CONFIG, ...(await getConfig(tenant.tenantId)) }
   if (!config.helpEnabled) return renderNotFound()
+  // The centre is the BUSINESS's help, not the assistant's - default the
+  // title from the business name, not the bot's display name.
+  if (!config.helpTitle?.trim()) config.helpTitle = `${tenant.name} help centre`
   // Same rule as the chat surface: the page's accent colour wins, so the
   // help centre, the page and the chat read as one business.
   const presence = await ddbRaw.send(
@@ -253,7 +258,10 @@ async function publicRoute(
       new GetCommand({ TableName: process.env.TABLE_PRESENCECONFIG!, Key: { tenantId: resolved.tenantId } }),
     ).catch(() => undefined)
     const accent = String(presence?.Item?.accentColor ?? '')
-    const bookingEnt = await getEffectiveEntitlement(resolved.tenantId, 'booking')
+    const [bookingEnt, tenantRow] = await Promise.all([
+      getEffectiveEntitlement(resolved.tenantId, 'booking'),
+      getTenant(resolved.tenantId),
+    ])
     return json(200, {
       assistant: {
         name: config.name,
@@ -264,6 +272,9 @@ async function publicRoute(
         // the assistant describing one in prose.
         bookingEnabled: bookingEnt.enabled,
       },
+      // Structured facts the chat renders as instant cards - a visitor never
+      // pays a conversation turn for a price or an opening time.
+      business: await businessProfile(resolved.tenantId, tenantRow?.name ?? config.name),
     })
   }
 
@@ -560,7 +571,20 @@ async function setPublished(
   if (source.status !== 'ready' && body.published === true) {
     return json(409, { error: 'not_ready', message: 'Wait until this source has finished processing.' })
   }
-  const updated = { ...source, published: body.published === true, updatedAt: new Date().toISOString() }
+  const updated: SourceRow = { ...source, published: body.published === true, updatedAt: new Date().toISOString() }
+
+  // First publish (or explicit regenerate): one model call turns a filename
+  // into a customer-facing title, a one-line description and a category the
+  // help centre groups by. Best-effort - publishing never fails on it.
+  if (body.published === true && (!updated.helpMeta || body.regenerate === true)) {
+    const text = await sourceText(source)
+    if (text) {
+      const tenant = await getTenant(tenantId)
+      const meta = await generateHelpMeta(tenant?.name ?? '', source.name, text)
+      if (meta) updated.helpMeta = meta
+    }
+  }
+
   await putSource(updated)
   return json(200, { source: updated })
 }

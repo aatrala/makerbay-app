@@ -30,6 +30,8 @@ export interface SourceRow {
   warning?: string
   /** Published sources appear in the public help centre. Off by default. */
   published?: boolean
+  /** Generated at publish time: customer-facing title/description/category. */
+  helpMeta?: { title: string; description: string; category: string }
   createdAt: string
   updatedAt: string
 }
@@ -254,5 +256,104 @@ export async function businessFacts(tenantId: string, businessName: string): Pro
   } catch {
     // Grounding is an enhancement; a failed read must never block an answer.
     return ''
+  }
+}
+
+export interface BusinessProfile {
+  name: string
+  headline?: string
+  intro?: string
+  photoUrl?: string
+  areas: string[]
+  phone?: string
+  email?: string
+  currency: string
+  services: Array<{ name: string; description?: string; priceCents?: number; durationMinutes: number }>
+  timezone?: string
+  hours: Partial<Record<string, Array<{ from: string; to: string }>>>
+  openLabel?: string
+}
+
+const DAY_FULL: Record<string, string> = {
+  mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+  fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
+}
+
+/** "Open now, until 17:00" in the business's own timezone. */
+function openNowLabel(
+  hours: Partial<Record<string, Array<{ from: string; to: string }>>>,
+  timezone: string,
+): string | undefined {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+    const parts = Object.fromEntries(fmt.formatToParts(new Date()).map((p) => [p.type, p.value]))
+    const day = String(parts.weekday ?? 'Mon').slice(0, 3).toLowerCase()
+    const hhmm = `${String(Number(parts.hour) % 24).padStart(2, '0')}:${parts.minute}`
+    const windows = hours[day] ?? []
+    const within = windows.find((w) => hhmm >= w.from && hhmm < w.to)
+    if (within) return `Open now, until ${within.to}`
+    const later = windows.find((w) => hhmm < w.from)
+    if (later) return `Closed now, opens at ${later.from}`
+    const order = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+    const start = order.indexOf(day)
+    for (let i = 1; i <= 7; i++) {
+      const next = order[(start + i) % 7]
+      const w = hours[next]?.[0]
+      if (w) return `Closed now, back ${i === 1 ? 'tomorrow' : DAY_FULL[next]} at ${w.from}`
+    }
+    return 'Closed'
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The same workspace facts as businessFacts, but structured: the chat surface
+ * renders these as instant cards (services, hours, contact) so a visitor
+ * never pays a conversation turn - or the tenant an AI message - for a fact
+ * the workspace already holds.
+ */
+export async function businessProfile(tenantId: string, businessName: string): Promise<BusinessProfile> {
+  const [services, bookingCfg, presence, quotesCfg] = await Promise.all([
+    ddb.send(new QueryCommand({
+      TableName: Tables.bookingServices(),
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+    })).then((r) => r.Items ?? []).catch(() => []),
+    ddb.send(new GetCommand({ TableName: Tables.bookingConfig(), Key: { tenantId } }))
+      .then((r) => r.Item).catch(() => undefined),
+    ddb.send(new GetCommand({ TableName: Tables.presenceConfig(), Key: { tenantId } }))
+      .then((r) => r.Item).catch(() => undefined),
+    ddb.send(new GetCommand({ TableName: Tables.quotesConfig(), Key: { tenantId } }))
+      .then((r) => r.Item).catch(() => undefined),
+  ])
+
+  const timezone = bookingCfg?.timezone ? String(bookingCfg.timezone) : undefined
+  const hours = (bookingCfg?.hours ?? {}) as BusinessProfile['hours']
+  const hasHours = Object.values(hours).some((w) => Array.isArray(w) && w.length)
+
+  return {
+    name: businessName,
+    headline: presence?.headline ? String(presence.headline) : undefined,
+    intro: presence?.intro ? String(presence.intro).slice(0, 600) : undefined,
+    photoUrl: presence?.photoKey ? `/${String(presence.photoKey)}` : undefined,
+    areas: Array.isArray(presence?.serviceAreas) ? presence.serviceAreas.map(String) : [],
+    phone: presence?.phone ? String(presence.phone) : undefined,
+    email: presence?.email ? String(presence.email) : undefined,
+    currency: String(quotesCfg?.currency ?? 'AUD'),
+    services: services
+      .filter((s) => s.active)
+      .slice(0, 20)
+      .map((s) => ({
+        name: String(s.name),
+        description: s.description ? String(s.description) : undefined,
+        priceCents: s.priceCents != null ? Number(s.priceCents) : undefined,
+        durationMinutes: Number(s.durationMinutes),
+      })),
+    timezone,
+    hours,
+    openLabel: hasHours && timezone ? openNowLabel(hours, timezone) : undefined,
   }
 }
