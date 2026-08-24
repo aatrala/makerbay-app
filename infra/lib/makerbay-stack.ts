@@ -112,6 +112,16 @@ export class MakerbayStack extends cdk.Stack {
     // One row per Stripe Checkout attempt. The webhook flips pending to paid;
     // nothing else may.
     const payments = table('Payments', 'tenantId', 'paymentId')
+    // Genie conversations: working memory, not records (the audit trail is
+    // the record). TTL expires them after 90 days.
+    const genieSessions = new dynamodb.Table(this, 'GenieSessions', {
+      tableName: 'makerbay-geniesessions',
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
     // The workspace activity trail (tenant-facing; Genie's memory of what
     // happened). Partitioned per month like Usage; TTL keeps ~13 months.
     const audit = new dynamodb.Table(this, 'Audit', {
@@ -443,6 +453,24 @@ export class MakerbayStack extends cdk.Stack {
       // Get found, and the no-Reviews fallback ask reads the same config.
       TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
     })
+    // Genie: the owner's read-everything copilot. Same chat model as the
+    // assistant; its own session table; read-only views over the business.
+    const genieFn = fn('GenieApiFn', 'modules/genie/api/src/handler.ts', {
+      ...tableEnv,
+      TABLE_GENIESESSIONS: genieSessions.tableName,
+      TABLE_AUDIT: audit.tableName,
+      TABLE_BOOKINGS: bookings.tableName,
+      TABLE_REQUESTS: requests.tableName,
+      TABLE_QUOTES: quotes.tableName,
+      TABLE_INVOICES: invoices.tableName,
+      TABLE_PAYMENTS: payments.tableName,
+      TABLE_REVIEWS: reviews.tableName,
+      TABLE_BOOKINGSERVICES: bookingServices.tableName,
+      TABLE_PRESENCECONFIG: presenceConfig.tableName,
+      TABLE_QUOTESCONFIG: quotesConfig.tableName,
+      CHAT_MODEL_ID,
+    }, { timeoutSeconds: 60, memorySize: 512 })
+
     const paymentsFn = fn('PaymentsApiFn', 'modules/payments/api/src/handler.ts', {
       ...moduleEnv,
       TABLE_PAYMENTS: payments.tableName,
@@ -753,6 +781,21 @@ export class MakerbayStack extends cdk.Stack {
       targets: [new eventsTargets.LambdaFunction(reviewsFn)],
     })
 
+    // Genie: its sessions read-write; everything else read-only - v1 cannot
+    // change a thing, and the IAM policy says so as loudly as the prompt.
+    genieSessions.grantReadWriteData(genieFn)
+    for (const t of [audit, bookings, requests, quotes, invoices, payments, reviews,
+      bookingServices, presenceConfig, quotesConfig, tenants, users, apiKeys, entitlements, grants, usage]) {
+      t.grantReadData(genieFn)
+    }
+    bus.grantPutEventsTo(genieFn)
+    genieFn.addToRolePolicy(new iam.PolicyStatement({
+      // Same shape as the assistant: inference profiles fan out to models in
+      // sibling regions, so scoping to one region's ARNs breaks silently.
+      actions: ['bedrock:InvokeModel'],
+      resources: ['*'],
+    }))
+
     // Payments: its own table plus read-only views of the documents it
     // charges for, Contacts, the Stripe key, and the tenant row (Connect
     // state lives there).
@@ -987,6 +1030,12 @@ export class MakerbayStack extends cdk.Stack {
       path: '/v1/public/presence',
       methods: [apigwv2.HttpMethod.GET],
       integration: new HttpLambdaIntegration('PublicPresenceIntegration', presenceFn),
+    })
+    httpApi.addRoutes({
+      path: '/v1/genie/{proxy+}',
+      methods: routeMethods,
+      integration: new HttpLambdaIntegration('GenieIntegration', genieFn),
+      authorizer,
     })
     httpApi.addRoutes({
       path: '/v1/assistant/{proxy+}',

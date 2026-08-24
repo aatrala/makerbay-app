@@ -1,0 +1,49 @@
+{
+  "id": "genie",
+  "name": "Genie",
+  "tagline": "Run your business from a conversation on your phone",
+  "status": "in-development",
+  "version": {
+    "api": "0.1.0",
+    "web": "0.1.0"
+  },
+  "routes": [
+    "/v1/genie/*"
+  ],
+  "meteredMetrics": [
+    "genie.message"
+  ],
+  "entitlementKey": "genie",
+  "pricing": "paid",
+  "dependsOn": [
+    "contacts"
+  ],
+  "roadmap": {
+    "order": 11,
+    "note": "V1 sees everything - briefings, bookings, requests, money, reviews, the activity trail - from a mobile chat. Acting on things ships next, every action behind your explicit confirmation and on the audit trail."
+  },
+  "marketing": {
+    "summary": "Ask your business anything: what happened today, who is waiting on you, what is unpaid, what is booked tomorrow. Genie reads everything your workspace knows and answers in plain sentences, on your phone, between jobs.",
+    "audience": "Owners who want the day's picture without opening five screens.",
+    "features": [
+      {
+        "title": "The morning briefing",
+        "body": "One tap: what happened, what is booked, who is waiting, what is unpaid."
+      },
+      {
+        "title": "It cites, not guesses",
+        "body": "Every answer comes from your workspace's own records and the activity trail - the same one you can check."
+      },
+      {
+        "title": "Actions with a receipt",
+        "body": "Coming next: reply, book and send from the chat - every action confirmed by you first and written to the audit trail."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Can it change things?",
+        "a": "Not yet, by design. Reading shipped first; writes ship behind explicit confirmation cards, so nothing ever happens because a model felt like it."
+      }
+    ]
+  }
+}

@@ -83,7 +83,15 @@ export async function putDomain(
   const gate = await requirePro(tenantId)
   if (gate) return gate
 
-  const domain = String(b.domain ?? '').trim().toLowerCase().replace(/\.$/, '')
+  // People paste URLs, not hostnames. Take what they meant: strip protocol,
+  // path, port and trailing dot before judging validity.
+  const domain = String(b.domain ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/:\d+$/, '')
+    .replace(/\.$/, '')
   if (!isOwnable(domain)) {
     return json(400, { error: 'invalid_domain', message: 'Enter a domain you own, like smithplumbing.com.au.' })
   }
@@ -148,12 +156,26 @@ export async function getDomain(tenantId: string): Promise<APIGatewayProxyResult
   const certStatus = cert.Certificate?.Status
 
   if (certStatus === 'ISSUED' && !config.distributionId) {
-    const dist = await createDistribution(tenantId, config.customDomain, config.domainCertArn)
-    config.distributionId = dist.id
-    config.distributionDomain = dist.domainName
-    config.domainStatus = 'pending_dns'
-    config.updatedAt = new Date().toISOString()
-    await putPresenceConfig(config)
+    try {
+      const dist = await createDistribution(tenantId, config.customDomain, config.domainCertArn)
+      config.distributionId = dist.id
+      config.distributionDomain = dist.domainName
+      config.domainStatus = 'pending_dns'
+      config.updatedAt = new Date().toISOString()
+      await putPresenceConfig(config)
+    } catch (err) {
+      // One CNAME per distribution, globally. A recently removed setup can
+      // still hold the alias until its disable deploys (a few minutes).
+      if (/^CNAMEAlreadyExists/.test((err as { name?: string }).name ?? '')) {
+        return json(409, {
+          ...view(config),
+          certStatus,
+          error: 'alias_busy',
+          message: 'This domain is still attached to a previous setup here. Wait a few minutes and press Check status again.',
+        })
+      }
+      throw err
+    }
   }
 
   if (config.domainStatus === 'pending_dns' && config.distributionId) {
@@ -185,7 +207,9 @@ async function createDistribution(
   const r = await cf.send(
     new CreateDistributionCommand({
       DistributionConfig: {
-        CallerReference: `makerbay-presence-${tenantId}`,
+        // Unique per creation: a static reference would forbid ever
+        // re-creating a distribution for the same tenant after a remove.
+        CallerReference: `makerbay-presence-${tenantId}-${Date.now()}`,
         Comment: `MakerBay presence page for ${domain}`,
         Enabled: true,
         Aliases: { Quantity: 1, Items: [domain] },
@@ -234,18 +258,22 @@ export async function deleteDomain(tenantId: string): Promise<APIGatewayProxyRes
   const config = await getPresenceConfig(tenantId)
   if (!config.customDomain) return json(200, { domain: null })
 
-  // Disable the distribution so the domain stops serving. Full deletion needs
-  // the disable to deploy first; the disabled distribution costs nothing and
+  // Disable the distribution so the domain stops serving, and RELEASE its
+  // alias - CloudFront enforces one distribution per CNAME globally, so a
+  // disabled distribution still holding the alias would block the domain
+  // from ever being connected again. Full deletion needs the disable to
+  // deploy first; the disabled, alias-free distribution costs nothing and
   // can be cleaned up by hand later.
   if (config.distributionId) {
     try {
       const current = await cf.send(new GetDistributionConfigCommand({ Id: config.distributionId }))
-      if (current.DistributionConfig?.Enabled) {
+      const cfg = current.DistributionConfig
+      if (cfg && (cfg.Enabled || (cfg.Aliases?.Quantity ?? 0) > 0)) {
         await cf.send(
           new UpdateDistributionCommand({
             Id: config.distributionId,
             IfMatch: current.ETag,
-            DistributionConfig: { ...current.DistributionConfig, Enabled: false },
+            DistributionConfig: { ...cfg, Enabled: false, Aliases: { Quantity: 0, Items: [] } },
           }),
         )
       }

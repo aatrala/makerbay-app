@@ -109,9 +109,6 @@ export default function Billing() {
 
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
-      {testMode === false && (
-        <Notice tone="ok"><strong>Live mode.</strong> Real cards are charged and real money moves.</Notice>
-      )}
       {testMode && (
         <Notice tone="warn">
           <strong>Stripe test mode.</strong> Checkout uses test cards — no real money moves.

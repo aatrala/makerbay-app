@@ -344,3 +344,74 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
 .side-body { min-height: 0; }
 .share-steps { margin: 0 0 0 20px; }
 .share-steps li { padding: 4px 0; color: var(--body); font-size: 15px; }
+.qr-block { display: flex; gap: 18px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+.qr-block canvas { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 4px; }
+.qr-block > div { min-width: 220px; flex: 1; }
+
+/* ── Sidebar Variant A: module links, groups, account popover ─────────── */
+.side nav .modlink {
+  display: flex; align-items: center; gap: 10px; position: relative; font-weight: 550;
+}
+.side nav .modlink svg {
+  width: 16px; height: 16px; flex-shrink: 0; stroke: currentColor; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .85;
+}
+.side nav .modlink.on::before {
+  content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2.5px;
+  border-radius: 2px; background: var(--accent, #c2410c);
+}
+.account { position: relative; padding: 6px 8px 10px; }
+.acct-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none;
+  color: #e7e5e4; font: inherit; cursor: pointer; padding: 8px; border-radius: 8px; text-align: left;
+}
+.acct-btn:hover { background: #292524; }
+.acct-btn .av {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--accent, #c2410c); color: #fff;
+  display: grid; place-items: center; font-weight: 700; font-size: 13px; flex-shrink: 0;
+}
+.acct-btn .who { min-width: 0; flex: 1; line-height: 1.3; }
+.acct-btn .who strong { display: block; font-size: 13.5px; color: #e7e5e4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-btn .who small { display: block; font-size: 11px; color: #a8a29e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-btn .chev { color: #78716c; font-size: 11px; }
+.acct-pop {
+  position: absolute; bottom: 58px; left: 8px; right: 8px; background: #292524;
+  border: 1px solid #3f3b37; border-radius: 12px; padding: 8px; z-index: 30;
+  box-shadow: 0 14px 34px rgba(0,0,0,.4);
+}
+.acct-pop a, .acct-pop button.linkish {
+  display: block; width: 100%; text-align: left; color: #d6d3d1; text-decoration: none;
+  padding: 8px 10px; border-radius: 7px; font-size: 13.5px; font-weight: 550;
+}
+.acct-pop a:hover, .acct-pop button.linkish:hover { background: #3b3734; color: #fff; }
+.acct-pop a.active { background: #44403c; color: #fff; }
+.acct-pop .sep { border-top: 1px solid #3f3b37; margin: 6px 0; }
+.acct-pop .ver { color: #78716c; font-size: 11.5px; padding: 6px 10px; }
+.acct-pop .ver:hover { color: #a8a29e; background: none; }
+
+/* Module tabs above the screen: derived from the module's nav. */
+.modtabs { margin-bottom: 18px; }
+.modtabs a { text-decoration: none; }
+.modtabs a {
+  padding: 9px 16px; font-size: 14px; font-weight: 600; color: var(--body);
+  border-bottom: 2px solid transparent; white-space: nowrap;
+}
+.modtabs a:hover { color: var(--ink); }
+.modtabs a.active { color: var(--accent, #c2410c); border-bottom-color: var(--accent, #c2410c); }
+
+/* ── Genie chat ───────────────────────────────────────────────────────── */
+.genie-card { display: flex; flex-direction: column; max-height: calc(100vh - 210px); min-height: 420px; }
+.genie-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 12px; }
+.genie-empty { margin: auto; text-align: center; max-width: 40ch; }
+.gmsg { max-width: 88%; padding: 10px 14px; border-radius: 14px; line-height: 1.55; white-space: pre-wrap; font-size: 15px; }
+.gmsg.user { align-self: flex-end; background: var(--accent, #c2410c); color: #fff; border-bottom-right-radius: 4px; }
+.gmsg.assistant { align-self: flex-start; background: var(--bg, #faf9f7); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.gmsg.thinking { color: var(--muted); font-style: italic; }
+.genie-chips { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; flex-shrink: 0; scrollbar-width: none; }
+.genie-chips .chip {
+  flex: none; border: 1px solid var(--line); background: #fff; color: var(--ink);
+  border-radius: 16px; padding: 6px 13px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.genie-chips .chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.genie-form { display: flex; gap: 8px; flex-shrink: 0; }
+.genie-form input { flex: 1; }

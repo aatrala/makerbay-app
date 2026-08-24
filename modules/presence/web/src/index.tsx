@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Route } from 'react-router-dom'
 import SharePage from './SharePage'
+import QrBlock from './Qr'
 import {
   Notice,
   Skeleton,
@@ -367,6 +368,7 @@ function AddressCard({ pageUrl, onChanged }: { pageUrl: string; onChanged: () =>
             stays free. The same address serves your chat and help centre — or connect your own
             domain below.
           </p>
+          <QrBlock url={pageUrl} label="Your page" />
         </>
       ) : (
         <form onSubmit={save}>
@@ -494,6 +496,17 @@ function DomainCard() {
           <div className="row mt">
             <button className="ghost" disabled={busy} onClick={() => run(async () => { setState(await api('GET', '/v1/presence/domain')) })}>
               Check status
+            </button>
+            <button className="ghost" disabled={busy}
+              onClick={() => {
+                if (window.confirm(`Swap ${state.domain} for a different domain? The current one stops serving your page.`)) {
+                  run(async () => {
+                    setState(await api('DELETE', '/v1/presence/domain'))
+                    setNote('Removed. Enter the new domain below. If it was connected here before, give it a few minutes first.')
+                  })
+                }
+              }}>
+              Use a different domain
             </button>
             <button className="danger" disabled={busy}
               onClick={() => { if (window.confirm('Remove this domain? The page stays on makerbay.app.')) run(async () => { setState(await api('DELETE', '/v1/presence/domain')) }) }}>

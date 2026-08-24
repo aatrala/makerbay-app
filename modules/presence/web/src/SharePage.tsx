@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Notice, type Me } from '@makerbay/web-kit'
+import QrBlock from './Qr'
 
 /**
  * Put your links where your customers already are. Every network gets plain
@@ -130,6 +131,14 @@ export default function SharePage({ me }: { me: Me }) {
           )}
         </div>
       ))}
+
+      <div className="card">
+        <h2>QR codes</h2>
+        <p className="meta">Print-ready codes — one scan takes a customer straight there.</p>
+        <QrBlock url={pageUrl} label="Your page" />
+        <QrBlock url={bookUrl} label="Book a time" />
+        <QrBlock url={chatUrl} label="Ask a question" />
+      </div>
 
       <div className="card">
         <h2>Widget for your own website</h2>

@@ -11,6 +11,33 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.6.0 - 2026-08-24
+
+> **Meet Genie, and a dashboard that fits on one screen** — Genie answers questions about your whole business from a chat on your phone. And the sidebar shrank from thirty-six rows to twelve: one link per module, sub-pages as tabs.
+
+- Added `genie` Genie v1: ask your business anything - what happened today,
+  what is booked, who is waiting on you, what is unpaid - and get plain
+  answers with the real numbers, from a mobile chat. Read-only by design in
+  v1: acting on things ships next, behind your explicit confirmation, with
+  every action on the activity trail. Rolling out with the Genie plan.
+- Changed `platform` The dashboard sidebar: one link per module with icons,
+  grouped Work then Grow, sub-pages as tabs above each screen, workspace
+  items and the version behind the account popover. The test-billing badge
+  stays; the live-mode banner is gone - live is just reality.
+- Added `presence` QR codes: print-size downloads for your page, booking and
+  chat links - on Your page and the Share screen. Plus a Share screen with
+  per-network steps (WhatsApp, LinkedIn, Telegram, Facebook, Google) and
+  one-tap share buttons.
+- Fixed `presence` Connecting a custom domain: pasted URLs are cleaned up
+  ("https://foo.com/" works), a removed domain can be connected again (the
+  old setup now releases its claim properly), and swapping to a different
+  domain is a single button instead of a scary remove.
+- Fixed `assistant` The booking and review forms inside the chat widget laid
+  out sideways; they stack properly everywhere now.
+- Added `assistant` The chat surface shows who you are talking to - business
+  name, photo and live open-hours state - with quick-answer buttons for
+  services, prices, hours and contact that cost no waiting and no AI.
+
 ## 2.5.0 - 2026-08-24
 
 > **One price for everything, and a trail of what happened** — Pricing is now two honest tiers: Free runs your business online, Trade at $29 switches everything on. And every workspace gains an Activity feed - one plain sentence for everything that happens.

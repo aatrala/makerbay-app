@@ -1,15 +1,13 @@
 {
-  "name": "@makerbay/presence-web",
+  "name": "@makerbay/genie-web",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": "./src/index.tsx"
   },
   "dependencies": {
-    "@makerbay/web-kit": "*",
-    "@types/qrcode": "^1.5.6",
-    "qrcode": "^1.5.4"
+    "@makerbay/web-kit": "*"
   },
   "peerDependencies": {
     "react": "^18.3.1",

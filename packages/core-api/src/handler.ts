@@ -14,6 +14,7 @@ import {
   getTenantBySlug,
   getUser,
   isValidSlug,
+  listGrants,
   listApiKeys,
   putApiKey,
   MODULES,
@@ -255,6 +256,14 @@ async function me(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {
       plan: 'free',
       limits: freeModuleLimits(m.id),
     }
+  }
+  // A live GRANT alone must also light the module up - a comp or a bundle
+  // grant is real access, whether or not an entitlements row was written.
+  const now = new Date().toISOString()
+  for (const g of await listGrants(user.tenantId)) {
+    if (g.status !== 'active' || (g.expiresAt && g.expiresAt <= now)) continue
+    if (modules[g.moduleId]?.enabled) continue
+    modules[g.moduleId] = { enabled: true, plan: g.planTier, limits: g.limits }
   }
   return json(200, { user, tenant, entitlements: { ...entitlements, modules } })
 }

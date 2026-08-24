@@ -12,6 +12,7 @@
     "@makerbay/assistant-web": "*",
     "@makerbay/booking-web": "*",
     "@makerbay/contacts-web": "*",
+    "@makerbay/genie-web": "*",
     "@makerbay/payments-web": "*",
     "@makerbay/presence-web": "*",
     "@makerbay/quotes-web": "*",
