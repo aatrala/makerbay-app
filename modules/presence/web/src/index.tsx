@@ -135,7 +135,8 @@ function PagePage() {
         </div>
         <p className="meta mt">
           Put this on your van, your invoices and your Google Business Profile. It is free and it
-          stays free.
+          stays free. Want a different address? <Link to="/workspace">Edit it under Workspace → Settings</Link>
+          {' '}— or connect your own domain below.
         </p>
       </div>
 
