@@ -63,7 +63,12 @@
     .then(function (r) { return r.ok ? r.json() : null })
     .then(function (d) {
       var c = d && d.assistant && d.assistant.brandColor
-      if (c && /^#[0-9a-fA-F]{6}$/.test(c)) document.documentElement.style.setProperty('--brand', c)
+      if (c && /^#[0-9a-fA-F]{6}$/.test(c)) {
+        document.documentElement.style.setProperty('--brand', c)
+        var n = parseInt(c.slice(1), 16)
+        var lum = 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)
+        document.documentElement.style.setProperty('--brand-fg', lum > 186 ? '#1c1917' : '#fff')
+      }
     })
     .catch(function () { /* default colour is fine */ })
 

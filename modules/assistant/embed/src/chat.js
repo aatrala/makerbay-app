@@ -60,7 +60,9 @@
     .catch(function () { fail('This assistant is unavailable right now.') })
 
   function render() {
-    document.documentElement.style.setProperty('--brand', config.brandColor || '#0f6bff')
+    var brand = config.brandColor || '#0f6bff'
+    document.documentElement.style.setProperty('--brand', brand)
+    document.documentElement.style.setProperty('--brand-fg', readableOn(brand))
     var bizName = (business && business.name) || config.name || 'Chat'
     document.title = bizName
     app.className = ''
@@ -100,6 +102,16 @@
    * config payload - instant, free, and never a Bedrock call. A chip with no
    * data behind it is not shown. Book a time is first: it is the conversion.
    */
+  /* White text on a dark brand, near-black on a light one - a tenant can
+     pick any colour and every brand-filled button stays readable. */
+  function readableOn(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim())
+    if (!m) return '#fff'
+    var n = parseInt(m[1], 16)
+    var lum = 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)
+    return lum > 186 ? '#1c1917' : '#fff'
+  }
+
   function renderChips() {
     var row = document.getElementById('chips')
     if (!row || !business) return

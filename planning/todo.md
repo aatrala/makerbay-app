@@ -131,6 +131,17 @@ read".
 greenlightyourapp.com → pick the /docs pages → they add with real
 titles (first page takes ~10s while the browser cold-starts).
 
+### 44 — Unreadable red-on-red button in the AI assistant ✅
+The "Book a time" button inside the Services card inherited the answer-link
+rule (brand-coloured text) on a brand-coloured background - invisible.
+Fixed the specificity clash, and added a computed readable foreground:
+every brand-filled button (header, send, cards, booking pages) now picks
+white or near-black automatically from the brand colour's brightness, so
+any accent a business chooses stays readable.
+**Test:** demo page → Ask a question → "Services & prices" chip → the
+"Book a time" button inside the card is white-on-red. (Hard-refresh if
+your browser cached the old stylesheet.)
+
 ## Approved queue (on me)
 
 1. **Voice latency probe** — Stage 1 of spec-voice-live-agent.md (~1
