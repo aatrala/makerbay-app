@@ -1,0 +1,49 @@
+{
+  "id": "visibility",
+  "name": "Get found",
+  "tagline": "Be findable for what you do, where you do it",
+  "status": "planned",
+  "version": {
+    "api": "0.0.0",
+    "web": "0.0.0"
+  },
+  "routes": [
+    "/v1/visibility/*"
+  ],
+  "meteredMetrics": [
+    "listing.impression"
+  ],
+  "entitlementKey": "visibility",
+  "pricing": "paid",
+  "dependsOn": [
+    "presence"
+  ],
+  "roadmap": {
+    "order": 7,
+    "note": "Needs pages to exist before there is a directory. Under independent analysis - we will not sell rankings we cannot control."
+  },
+  "marketing": {
+    "summary": "A directory of the businesses on MakerBay, searchable by what you need and where you are, with every listing backed by a real page that answers questions and takes bookings.",
+    "audience": "Service businesses whose customers search before they call.",
+    "features": [
+      {
+        "title": "One listing, kept current",
+        "body": "Your directory entry is your page. Change your hours once and both are right."
+      },
+      {
+        "title": "Findable by service and area",
+        "body": "Customers browse by what they need and the suburb they are in, and land somewhere that can book them in."
+      },
+      {
+        "title": "Honest about what we control",
+        "body": "We build fast, correctly marked-up pages and a directory worth using. We do not sell search rankings, because nobody can."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Will this get me to the top of Google?",
+        "a": "We will not promise that, and you should not believe anyone who does. What we control is a fast page, correct local markup and a directory that is genuinely useful. What Google does with that is Google's."
+      }
+    ]
+  }
+}

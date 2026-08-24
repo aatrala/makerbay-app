@@ -3,7 +3,10 @@ import bookingManifest from '../../../modules/booking/module.json'
 import contactsManifest from '../../../modules/contacts/module.json'
 import quotesManifest from '../../../modules/quotes/module.json'
 import requestsManifest from '../../../modules/requests/module.json'
+import presenceManifest from '../../../modules/presence/module.json'
 import reviewsManifest from '../../../modules/reviews/module.json'
+import visibilityManifest from '../../../modules/visibility/module.json'
+import voiceManifest from '../../../modules/voice/module.json'
 
 /**
  * One manifest per module, and one place that knows the platform version.
@@ -55,14 +58,17 @@ export interface ModuleManifest {
 }
 
 /** Platform version: the core (tenancy, auth, entitlements, billing) itself. */
-export const PLATFORM_VERSION = '1.10.0'
+export const PLATFORM_VERSION = '1.11.0'
 
 export const MODULES: ModuleManifest[] = [
-  assistantManifest,
   contactsManifest,
+  assistantManifest,
   requestsManifest,
   bookingManifest,
   quotesManifest,
+  presenceManifest,
+  visibilityManifest,
+  voiceManifest,
   reviewsManifest,
 ] as ModuleManifest[]
 

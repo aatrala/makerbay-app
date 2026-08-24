@@ -1,0 +1,51 @@
+{
+  "id": "voice",
+  "name": "Voice",
+  "tagline": "Answers the phone when you cannot",
+  "status": "planned",
+  "version": {
+    "api": "0.0.0",
+    "web": "0.0.0"
+  },
+  "routes": [
+    "/v1/voice/*"
+  ],
+  "meteredMetrics": [
+    "call.answered",
+    "call.minutes"
+  ],
+  "entitlementKey": "voice",
+  "pricing": "paid",
+  "dependsOn": [
+    "presence",
+    "booking"
+  ],
+  "roadmap": {
+    "order": 8,
+    "note": "Highest value and highest risk in the portfolio. Real per-minute cost, and a bad call is worse than voicemail. Under independent analysis."
+  },
+  "marketing": {
+    "summary": "Forward your phone when the shop is shut or you are up a ladder. The call is answered, the question is handled from your own documents, and a booking or a callback lands in your diary.",
+    "audience": "Anyone whose hands are busy during the hours customers ring, and for whom a missed call is a lost job.",
+    "features": [
+      {
+        "title": "Answers instead of voicemail",
+        "body": "Most people do not leave a voicemail. They ring the next name on the list."
+      },
+      {
+        "title": "Knows your business",
+        "body": "Answers from the same documents your assistant uses, so the phone and the website say the same thing."
+      },
+      {
+        "title": "Fails safe",
+        "body": "When it is not sure, it takes a message and tells you - it never guesses on your behalf."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Will it pretend to be a person?",
+        "a": "No. It says what it is. Customers mind being deceived far more than they mind talking to a machine that is useful."
+      }
+    ]
+  }
+}

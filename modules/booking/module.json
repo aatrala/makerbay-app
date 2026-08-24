@@ -20,7 +20,7 @@
     "contacts"
   ],
   "roadmap": {
-    "order": 3,
+    "order": 4,
     "note": "Shipped. Single calendar, several services; deposits and calendar sync are deliberately not in v1."
   },
   "marketing": {

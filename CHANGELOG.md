@@ -9,6 +9,13 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 1.11.0 - 2026-08-24
+
+- Added `platform` The roadmap now shows where the product is going: a page per
+  business, being findable by service and suburb, and a voice agent that
+  answers when you cannot. What each one will and will not do is written down
+  before any of it is built.
+
 ## 1.10.0 - 2026-08-24
 
 - Changed `platform` Contacts, Requests and Quotes are free on every workspace,

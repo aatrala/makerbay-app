@@ -1,0 +1,62 @@
+{
+  "id": "presence",
+  "name": "Your page",
+  "tagline": "A page that gets you found, answers questions and takes bookings",
+  "status": "in-development",
+  "version": {
+    "api": "0.1.0",
+    "web": "0.1.0"
+  },
+  "routes": [
+    "/v1/presence/*",
+    "/v1/public/presence/*"
+  ],
+  "meteredMetrics": [],
+  "entitlementKey": null,
+  "pricing": "free",
+  "dependsOn": [
+    "contacts",
+    "assistant",
+    "booking"
+  ],
+  "roadmap": {
+    "order": 6,
+    "note": "Next. Mostly assembly of what is already built - it is what turns the modules into one product a customer can be sold."
+  },
+  "marketing": {
+    "summary": "Every workspace gets a real page from the moment it is created - your services, your opening hours, a live booking form and an assistant that answers from your own documents. Not a template to fill in: a page that already works, which you then edit.",
+    "audience": "Any service business whose customers find them online and then have to phone to get anywhere.",
+    "features": [
+      {
+        "title": "It exists before you do anything",
+        "body": "Built from what your workspace already knows: your services, your hours, your documents. You edit a headline, not a page builder."
+      },
+      {
+        "title": "Booking, not a contact form",
+        "body": "Customers pick a real free slot from your actual diary. No back and forth, no phone tag."
+      },
+      {
+        "title": "Answers at 11pm",
+        "body": "The assistant is on the page, answering from your documents, when you are asleep."
+      },
+      {
+        "title": "Built to be found",
+        "body": "Server-rendered, fast, and marked up so search engines understand what you do and where you do it."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Do I need a website already?",
+        "a": "No. This is the website, for a lot of businesses. If you do have one, put the chat bubble on it and use this page as your booking link."
+      },
+      {
+        "q": "Can I take payment on it?",
+        "a": "Not yet. Money going into your account needs a payment setup we are still building, and we would rather say so than half-do it."
+      },
+      {
+        "q": "Can I use my own domain?",
+        "a": "Not in the first version. Your page lives at makerbay.app/p/your-business until then."
+      }
+    ]
+  }
+}

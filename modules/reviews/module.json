@@ -20,7 +20,7 @@
     "contacts"
   ],
   "roadmap": {
-    "order": 5,
+    "order": 9,
     "note": "Needs a completed job or appointment to trigger from, so it follows Bookings and Quotes."
   },
   "marketing": {
