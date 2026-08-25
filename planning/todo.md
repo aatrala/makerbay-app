@@ -342,11 +342,15 @@ form. The alarm email is the trigger to revisit.
 
 ## Approved queue (on me)
 
-1. **Voice latency probe** — IN PROGRESS (Stage 1 started 2026-08-25):
-   Connect instance `makerbay-voice-probe` ACTIVE, probe DID claimed
-   **+1 (414) 219-1295** (~$1.20/mo + usage). Next: contact flow + KVS
-   media streaming + Nova 2 Sonic bridge, then scripted dual-channel
-   test calls against the <1,200ms median / <900ms p95 gate.
+1. **Voice latency probe** — ⛔ 30-min founder console task, then calls.
+   Architecture settled: Amazon Connect shipped NATIVE Nova Sonic
+   agentic self-service (Nov 2025, us-east-1) - no custom bridge needed;
+   the probe measures the real production stack. Standing: instance
+   `makerbay-voice-probe` ACTIVE + DID **+1 (414) 219-1295**. Blocked
+   on: the AI-agent configuration lives in Connect's console-only "AI
+   agent designer" - docs/probe-voice-latency.md has the exact ~30-min
+   steps, the 10-call test script, and my measurement plan against the
+   <1,200ms median / <900ms p95 gate.
 
 ## Awaiting your decision 💬
 
