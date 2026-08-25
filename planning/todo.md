@@ -243,7 +243,22 @@ your picks.**
 The old "ask for a phone number" checkbox duplicated the new Form fields
 Phone selector - removed; the selector is the single control.
 
-### 63 — Stripe Connect onboarding broken ⛔ founder action
+### 60b/61b — Approved builds shipped ✅
+2026-08-25: Edit+Style merged into one Page screen (Content / Appearance
+/ Publish sections with a sticky jump rail beside the live preview; old
+Style links redirect). Quotes/invoices: overdue aging chips, invoice
+tabs + outstanding total, Create-invoice in the accepted-quote header,
+empty-state links, and documents in the owner's colours (public bold
+band + a ThemePreview showing YOUR name, accent and top price lines).
+Deferred to next batch: ABN/licence footer line, quotes pipeline value
+strip, logo on documents.
+
+### 63 — Stripe Connect onboarding ⛔ ONE last founder step
+Accounts Write is through (thank you). Stripe now asks for the one-time
+**Connect platform profile**: dashboard.stripe.com/settings/connect/
+platform-profile - the loss-liability questionnaire every Connect
+platform completes once. Finish it and onboarding starts working
+immediately; I retest on your word and then run the full payments e2e.
 Root cause from the Lambda logs: the restricted key lacks **Accounts
 Write** (connected_account_write) - the one scope Connect onboarding
 needs (Checkout works; that scope you added). Fix in Stripe → API keys →
