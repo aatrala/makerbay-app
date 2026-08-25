@@ -186,6 +186,22 @@ async function renderFor(
   ])
   const reviews = reviewsEnt.enabled ? await publishedReviews(tenant.tenantId) : undefined
 
+  // The scan-to-book QR (issue 60): rendered server-side as a data URI so
+  // the page stays JavaScript-free. Points at the booking flow when it
+  // exists, else the chat - the action, not the page itself.
+  let qr: { dataUri: string; label: string } | undefined
+  if (config.showQr) {
+    try {
+      const { toDataURL } = await import('qrcode')
+      const target = bookingEnt.enabled && services.length
+        ? { url: `https://chat.makerbay.app/booking?slug=${encodeURIComponent(tenant.slug)}`, label: 'Scan to book on your phone' }
+        : { url: canonicalUrl ?? `https://makerbay.app/p/${tenant.slug}`, label: 'Scan to open on your phone' }
+      qr = { dataUri: await toDataURL(target.url, { width: 240, margin: 1 }), label: target.label }
+    } catch (err) {
+      console.warn('qr generation failed', { tenantId: tenant.tenantId, err: String(err) })
+    }
+  }
+
   const page = renderPage({
     config,
     businessName: tenant.name,
@@ -203,6 +219,7 @@ async function renderFor(
     canonicalUrl,
     now: new Date(),
     sub,
+    qr,
   })
   return html(200, page)
 }
@@ -296,6 +313,7 @@ async function writeConfig(tenantId: string, event: Event): Promise<APIGatewayPr
     email: String(b.email ?? existing.email).slice(0, 200),
     showBooking: b.showBooking === undefined ? existing.showBooking : b.showBooking === true,
     showAssistant: b.showAssistant === undefined ? existing.showAssistant : b.showAssistant === true,
+    showQr: b.showQr === undefined ? existing.showQr : b.showQr === true,
     published: b.published === undefined ? existing.published : b.published === true,
     websiteUrl: websiteUrl || undefined,
     accentColor: b.accentColor === undefined

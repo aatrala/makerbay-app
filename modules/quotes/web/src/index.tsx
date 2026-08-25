@@ -755,7 +755,9 @@ function PriceList() {
               <div className="grow">
                 <label htmlFor="q-notify">Send quote notifications to</label>
                 <input id="q-notify" type="email" value={config.notifyEmail ?? ''}
+                  placeholder="you@yourbusiness.com.au"
                   onChange={(e) => setConfig({ ...config, notifyEmail: e.target.value })} />
+                <p className="meta">Accepted, declined and deposit-paid emails land here.</p>
               </div>
               <div className="grow">
                 <label htmlFor="q-prefix">Document prefix</label>

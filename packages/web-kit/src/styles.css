@@ -351,6 +351,9 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
 }
 
 /* ── Editor + live preview side by side (issue 51 variant A) ─────────── */
+/* The shell's 980px column made the editor+preview pair read like two
+   phones (issue 60); pages carrying the grid get the full width. */
+.main:has(.pagegrid) { max-width: 1500px; }
 .pagegrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 18px; }
 @media (min-width: 1100px) {
   .pagegrid { grid-template-columns: minmax(0, 1fr) minmax(360px, 44%); align-items: start; }
@@ -520,6 +523,13 @@ tr.rowlink:hover td { background: rgba(79, 70, 229, .05); }
 .grich-list { margin: 0 0 8px; padding-left: 20px; }
 .grich-list li { margin: 2px 0; }
 .gtools { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted, #78716c); }
+/* Briefing cards inside Genie bubbles (issue 53B) */
+.gblock { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 8px 10px; }
+.gblock-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted, #78716c); margin-bottom: 4px; }
+.gblock-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--bg, #faf9f7); font-size: 13.5px; }
+.gblock-row:first-of-type { border-top: none; }
+.gblock-row .grow { min-width: 0; }
+.gblock-row button { padding: 3px 10px; font-size: 12px; }
 .genie-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 12px; }
 .genie-empty { margin: auto; text-align: center; max-width: 40ch; }
 .gmsg { max-width: 88%; padding: 10px 14px; border-radius: 14px; line-height: 1.55; white-space: pre-wrap; font-size: 15px; }

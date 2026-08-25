@@ -214,6 +214,44 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+### 60 — Page edit improvements ✅ (fixes) / 💬 (merge proposal)
+Shipped 2026-08-25: scan-to-book QR toggle on the page (off by default;
+server-rendered, points at booking when it exists - verified live on the
+demo); editor now uses the full desktop width (the 980px shell cap made
+it read like two phones); business name editable in the Words card (it
+is the page's big title - the "Aatral Arasu" confusion); checklist leads
+with a progress bar + the single next step, full list behind a
+disclosure. Merge proposal (consult): ONE "Page" tab with a sticky
+section rail - Content / Appearance / Publish - checklist as a one-line
+strip, nav becomes Page | Share; form-save only in Content, everything
+else instant-save. **Waiting on your go for the merge.**
+
+### 53B — Genie briefing cards ✅
+Shipped 2026-08-25: diary and unpaid-invoice answers carry compact cards
+with real ids; Done / Cancel / Chase buttons propose deterministically
+(no model call) into the same confirmation-card flow. Verified live:
+card button → accurate proposal → decline.
+
+### 61 — Quote notifications placeholder ✅ / invoice design 💬
+Placeholder + explainer shipped. Consult delivered on invoice
+configurability (use the brand accent on documents + real-config
+preview + optional ABN/licence footer line; skip template editors) and 8
+ranked dashboard improvements led by unpaid-invoice aging. **Waiting on
+your picks.**
+
+### 62 — Duplicate phone question in request settings ✅
+The old "ask for a phone number" checkbox duplicated the new Form fields
+Phone selector - removed; the selector is the single control.
+
+### 63 — Stripe Connect onboarding broken ⛔ founder action
+Root cause from the Lambda logs: the restricted key lacks **Accounts
+Write** (connected_account_write) - the one scope Connect onboarding
+needs (Checkout works; that scope you added). Fix in Stripe → API keys →
+edit the restricted key → enable Accounts Write. Meanwhile the API now
+answers with an honest "our Stripe configuration is missing a
+permission" instead of a mystery 500. **The live payment + Connect e2e
+verification is blocked on this same scope.**
+
 ### 56 — Genie checkout shows "Genie and 1 more" (Trade) ✅
 Cause: the Genie subscription reused the Trade product's usage-metered
 assistant-messages price, so Stripe named both products. Fixed: the

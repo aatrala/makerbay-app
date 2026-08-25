@@ -41,6 +41,8 @@ export interface PageInput {
   now: Date
   /** Rendering a sub-page (grow/storefront styles) instead of the home page. */
   sub?: SubPage
+  /** Pre-generated scan-to-book QR (issue 60), when the owner enables it. */
+  qr?: { dataUri: string; label: string }
 }
 
 export type SubPage = 'services' | 'faq' | 'reviews'
@@ -299,6 +301,10 @@ const styles = (brand: string, theme: ThemeStyle, config: PresenceConfigRow) => 
   .hours-row.today .d::after { content: ' · today'; color: var(--brand); font-size: 12.5px; }
 
   .contact a { color: var(--brand); text-decoration: none; font-weight: 600; }
+  .contact-row { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; justify-content: space-between; }
+  .qr-side { display: flex; align-items: center; gap: 12px; }
+  .qr-side img { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 4px; }
+  .qr-side span { color: var(--muted); font-size: 13.5px; max-width: 14ch; }
   footer { border-top: 1px solid var(--line); margin-top: 20px; padding: 26px 0 96px; }
   footer p { color: var(--muted); font-size: 13.5px; }
   footer a { color: var(--muted); }
@@ -546,8 +552,11 @@ ${showAssistant ? `<button class="mb-fab" id="mb-fab">Ask a question</button>` :
   const aboutBlock = config.intro.trim()
     ? `<section id="about"><h2>About</h2><p class="intro">${esc(config.intro.trim())}</p></section>`
     : ''
-  const contactBlock = contactBits.length
-    ? `<section class="contact" id="contact"><h2>Contact</h2><p>${contactBits.join(' · ')}</p></section>`
+  const qrBlock = input.qr
+    ? `<div class="qr-side"><img src="${input.qr.dataUri}" alt="QR code" width="120" height="120" /><span>${esc(input.qr.label)}</span></div>`
+    : ''
+  const contactBlock = contactBits.length || qrBlock
+    ? `<section class="contact" id="contact"><h2>Contact</h2><div class="contact-row"><p>${contactBits.join(' · ')}</p>${qrBlock}</div></section>`
     : ''
 
   // Which sub-pages exist for this page (content present + block visible +

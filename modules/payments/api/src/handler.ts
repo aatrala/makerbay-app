@@ -93,6 +93,14 @@ export const handler = async (
     return json(404, { error: 'not_found' })
   } catch (err) {
     console.error('payments error', { path, method, err })
+    // A platform-key permissions gap is the operator's problem, and saying
+    // so beats a mystery 500 (issue 63).
+    if ((err as { code?: string }).code === 'more_permissions_required') {
+      return json(503, {
+        error: 'stripe_permissions',
+        message: 'Payments setup is temporarily unavailable - our Stripe configuration is missing a permission and we are on it. Nothing is wrong with your account.',
+      })
+    }
     return json(500, { error: 'internal_error' })
   }
 }

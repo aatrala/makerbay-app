@@ -22,6 +22,8 @@ export interface PresenceConfigRow {
   photoKey?: string
   showBooking: boolean
   showAssistant: boolean
+  /** A scan-to-book QR on the page - desktop visitors finish on their phone. */
+  showQr?: boolean
   published: boolean
   /**
    * The tradie's own website, when they have one. Its presence flips our page

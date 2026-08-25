@@ -286,13 +286,6 @@ function RequestSettings() {
             <label htmlFor="prompt">What the assistant says when it offers</label>
             <input id="prompt" value={String(config.handoffPrompt ?? '')} onChange={set('handoffPrompt')} />
 
-            <label className="pick">
-              <input type="checkbox" checked={config.collectPhone === true}
-                onChange={(e) => { setConfig({ ...config, collectPhone: e.target.checked }); setSaved(false) }} />
-              <span>Ask for a phone number as well as an email</span>
-            </label>
-            <p className="meta">Every extra field costs completions. Ask for it only if you will use it.</p>
-
             <label htmlFor="auto">What the customer sees after sending</label>
             <input id="auto" value={String(config.autoReply ?? '')} onChange={set('autoReply')} />
 

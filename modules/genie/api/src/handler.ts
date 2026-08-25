@@ -85,6 +85,12 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
         ? await confirmAction(tenantId, act[1], event)
         : await declineAction(tenantId, act[1])
     }
+    // Briefing-card buttons (issue 53B): a deterministic proposal with no
+    // model in the loop - the card row knows its own id. Confirmation is
+    // still the only way anything happens.
+    if (method === 'POST' && path === '/v1/genie/actions/propose') {
+      return await proposeDirect(tenantId, body(event))
+    }
 
     return json(404, { error: 'not_found' })
   } catch (err) {
@@ -335,6 +341,29 @@ const WRITE_TOOLS: Record<string, WriteTool> = {
   },
 }
 
+async function proposeDirect(tenantId: string, b: Record<string, unknown>): Promise<APIGatewayProxyResultV2> {
+  const tool = WRITE_TOOLS[String(b.tool ?? '')]
+  if (!tool) return json(400, { error: 'unknown_tool' })
+  const sessionId = /^[A-Z0-9]{10,32}$/.test(String(b.sessionId ?? '')) ? String(b.sessionId) : ulid()
+  const proposed = await tool.propose(tenantId, (b.params ?? {}) as Record<string, unknown>)
+  if ('error' in proposed) return json(409, { error: proposed.error })
+  const actionId = ulid()
+  await putAction({
+    pk: `${tenantId}#action#${actionId}`,
+    sk: 'action',
+    tenantId,
+    sessionId,
+    actionId,
+    tool: String(b.tool),
+    params: proposed.params,
+    summary: proposed.summary,
+    status: 'proposed',
+    createdAt: new Date().toISOString(),
+    expiresAt: Math.floor(Date.now() / 1000) + 600,
+  })
+  return json(201, { pendingAction: { actionId, summary: proposed.summary }, sessionId })
+}
+
 async function confirmAction(tenantId: string, actionId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const action = await getAction(tenantId, actionId)
   if (!action || action.status !== 'proposed') return json(404, { error: 'not_found' })
@@ -554,6 +583,10 @@ async function chat(
   let text = ''
   const toolsUsed: string[] = []
   let pending: { actionId: string; summary: string } | undefined
+  // Raw read-tool results this turn: the same data the model summarised
+  // becomes compact cards with real ids (issue 53B) - prose for the story,
+  // cards for the actions.
+  const readResults: Record<string, ToolResult> = {}
   for (let turn = 0; turn < 8; turn++) {
     const r = await runtime.send(new ConverseCommand({
       modelId: MODEL_ID(),
@@ -616,6 +649,7 @@ async function chat(
             result = runner
               ? await runner(tenantId, (block.toolUse.input ?? {}) as Record<string, unknown>)
               : { error: 'unknown_tool' }
+            if (!('error' in result)) readResults[name] = result
           } catch (err) {
             console.warn('genie tool failed', { tool: name, err: String(err) })
             result = { error: 'tool_failed' }
@@ -641,11 +675,29 @@ async function chat(
   await saveMessage(tenantId, sessionId, 'assistant', text)
   await emitUsage({ tenantId, moduleId: 'genie', metric: 'genie.message', quantity: 1 })
 
+  // Structured blocks under the prose: upcoming bookings and unpaid
+  // invoices, each row carrying its id so card buttons can act.
+  const blocks: Array<Record<string, unknown>> = []
+  const bk = readResults.bookings?.bookings
+  if (Array.isArray(bk) && bk.length) {
+    blocks.push({
+      type: 'bookings',
+      items: (bk as Array<Record<string, unknown>>)
+        .filter((x) => x.status === 'confirmed')
+        .slice(0, 8),
+    })
+  }
+  const inv = readResults.money?.unpaidInvoices
+  if (Array.isArray(inv) && inv.length) {
+    blocks.push({ type: 'invoices', items: (inv as unknown[]).slice(0, 8) })
+  }
+
   return json(200, {
     sessionId,
     text,
     toolsUsed: [...new Set(toolsUsed)],
     remaining: Math.max(0, cap - used - 1),
     ...(pending ? { pendingAction: pending } : {}),
+    ...(blocks.length ? { blocks } : {}),
   })
 }

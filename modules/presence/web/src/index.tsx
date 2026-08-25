@@ -10,6 +10,7 @@ import {
   api,
   explain,
   type DashboardModule,
+  type Me,
 } from '@makerbay/web-kit'
 
 interface PresenceConfig {
@@ -21,6 +22,7 @@ interface PresenceConfig {
   photoKey?: string
   showBooking: boolean
   showAssistant: boolean
+  showQr?: boolean
   published: boolean
   websiteUrl?: string
   accentColor?: string
@@ -48,12 +50,13 @@ const THEME_LABELS: Record<string, string> = {
   bold: 'Bold — dark header, strong type',
 }
 
-function PagePage() {
+function PagePage({ me }: { me: Me }) {
   const [config, setConfig] = useState<PresenceConfig | null>(null)
   const [indexing, setIndexing] = useState<Indexing | null>(null)
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [pageUrl, setPageUrl] = useState('')
   const [areas, setAreas] = useState('')
+  const [bizName, setBizName] = useState(me.tenant?.name ?? '')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -84,6 +87,11 @@ function PagePage() {
     e.preventDefault()
     if (!config) return
     void run(async () => {
+      // The page's big title IS the workspace name - editable here so the
+      // owner never hunts for it (issue 60).
+      if (bizName.trim().length >= 2 && bizName.trim() !== (me.tenant?.name ?? '')) {
+        await api('PATCH', '/v1/core/workspace', { name: bizName.trim() })
+      }
       const r = await api('PUT', '/v1/presence/config', {
         ...config,
         serviceAreas: areas.split(',').map((s) => s.trim()).filter(Boolean),
@@ -155,29 +163,46 @@ function PagePage() {
         </Notice>
       )}
 
-      {checklist.length > 0 && (
-        <div className="card">
-          <h2>Page checklist</h2>
-          <p className="meta">
-            The path from "page exists" to "page earns work". {checklist.filter((c) => c.done).length} of{' '}
-            {checklist.filter((c) => !c.soon).length} done.
-          </p>
-          <ul className="checklist">
-            {checklist.map((c) => (
-              <li key={c.key} className={c.done ? 'done' : c.soon ? 'soon' : ''}>
-                <span aria-hidden="true">{c.done ? '✓' : c.soon ? '·' : '○'}</span>{' '}
-                {c.soon ? (
-                  <span className="meta">{c.label} — coming with payments setup</span>
-                ) : c.done || !c.to ? (
-                  c.label
-                ) : (
-                  <Link to={c.to}>{c.label}</Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {checklist.length > 0 && (() => {
+        const real = checklist.filter((c) => !c.soon)
+        const done = real.filter((c) => c.done).length
+        const next = real.find((c) => !c.done)
+        const pct = Math.round((done / Math.max(1, real.length)) * 100)
+        return (
+          <div className="card">
+            <div className="row baseline">
+              <h2 className="grow">Page checklist</h2>
+              <span className="meta">{done} of {real.length} done</span>
+            </div>
+            <div className="bar"><div style={{ width: `${pct}%` }} /></div>
+            {next ? (
+              <div className="row mt" style={{ alignItems: 'center' }}>
+                <span className="grow"><strong>Next:</strong> {next.label}</span>
+                {next.to && <Link className="btn" to={next.to}>Do it</Link>}
+              </div>
+            ) : (
+              <p className="mt">✓ All done — this page has everything that earns work.</p>
+            )}
+            <details className="mt">
+              <summary className="meta" style={{ cursor: 'pointer' }}>All steps</summary>
+              <ul className="checklist">
+                {checklist.map((c) => (
+                  <li key={c.key} className={c.done ? 'done' : c.soon ? 'soon' : ''}>
+                    <span aria-hidden="true">{c.done ? '✓' : c.soon ? '·' : '○'}</span>{' '}
+                    {c.soon ? (
+                      <span className="meta">{c.label} — coming with payments setup</span>
+                    ) : c.done || !c.to ? (
+                      c.label
+                    ) : (
+                      <Link to={c.to}>{c.label}</Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        )
+      })()}
 
       {config && (
         <>
@@ -199,6 +224,11 @@ function PagePage() {
           <div className="card">
             <h2>Words</h2>
             <form onSubmit={save}>
+              <label htmlFor="p-bizname">Business name</label>
+              <input id="p-bizname" value={bizName} maxLength={80}
+                onChange={(e) => setBizName(e.target.value)} />
+              <p className="meta">The big title at the top of your page — and your workspace's name everywhere.</p>
+
               <label htmlFor="p-headline">Headline</label>
               <input id="p-headline" value={config.headline} onChange={set('headline')}
                 placeholder="Emergency electrician, Coimbatore" />
@@ -262,6 +292,10 @@ function PagePage() {
               <label className="pick">
                 <input type="checkbox" checked={config.showAssistant} onChange={toggle('showAssistant')} />
                 <span>Show the ask-a-question link (when the assistant has knowledge)</span>
+              </label>
+              <label className="pick">
+                <input type="checkbox" checked={config.showQr === true} onChange={toggle('showQr')} />
+                <span>Show a scan-to-book QR code on the page (desktop visitors finish on their phone)</span>
               </label>
               <label className="pick">
                 <input type="checkbox" checked={config.published} onChange={toggle('published')} />
@@ -608,7 +642,7 @@ export const presenceDashboard: DashboardModule = {
   ],
   routes: ({ me }) => (
     <>
-      <Route path="/page" element={<PagePage />} />
+      <Route path="/page" element={<PagePage me={me} />} />
       <Route path="/page/style" element={<StylePage />} />
       <Route path="/page/share" element={<SharePage me={me} />} />
     </>

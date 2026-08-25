@@ -11,6 +11,23 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.20.0 - 2026-08-25
+
+> **Genie's briefings grow buttons** — the diary and unpaid invoices arrive as cards you can act on, and your page can wear a scan-to-book QR.
+
+- Added `genie` Briefing cards: when Genie checks your diary or your
+  money, the answer carries compact cards - upcoming bookings with Done
+  and Cancel, unpaid invoices with Chase. Every button proposes the same
+  confirmation card as asking in words; nothing happens until you
+  confirm.
+- Added `presence` A scan-to-book QR on your public page (off by
+  default): desktop visitors point their phone at it and land straight
+  in your booking flow.
+- Changed `presence` The editor uses the full width of a desktop screen;
+  your business name - the page's big title - is now editable right in
+  the Words card; the checklist leads with a progress bar and the single
+  next step instead of a wall of items.
+
 ## 2.19.0 - 2026-08-25
 
 > **Genie, priced and presented properly** — checkout says one product, the homepage shows all three plans, and the pricing page stops calling a live product "coming".

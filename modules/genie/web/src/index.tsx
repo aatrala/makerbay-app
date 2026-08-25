@@ -2,7 +2,12 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Route } from 'react-router-dom'
 import { api, explain, Notice, type DashboardModule, type Me } from '@makerbay/web-kit'
 
-interface Msg { role: 'user' | 'assistant'; text: string; tools?: string[] }
+interface Msg {
+  role: 'user' | 'assistant'
+  text: string
+  tools?: string[]
+  blocks?: Array<{ type: 'bookings' | 'invoices'; items: Array<Record<string, unknown>> }>
+}
 interface Pending { actionId: string; summary: string }
 
 /**
@@ -105,8 +110,25 @@ function GeniePage({ me }: { me?: Me }) {
     setBusy(true)
     void api('POST', '/v1/genie/chat', { sessionId: sessionId || undefined, message: q })
       .then((r) => {
-        setMessages((m) => [...m, { role: 'assistant', text: r.text, tools: r.toolsUsed }])
+        setMessages((m) => [...m, { role: 'assistant', text: r.text, tools: r.toolsUsed, blocks: r.blocks }])
         setRemaining(r.remaining ?? null)
+        setPending(r.pendingAction ?? null)
+        if (r.sessionId && r.sessionId !== sessionId) {
+          setSessionId(r.sessionId)
+          sessionStorage.setItem('mb.genieSession', r.sessionId)
+        }
+      })
+      .catch((e) => setError(explain(e)))
+      .finally(() => setBusy(false))
+  }
+
+  // Card buttons (issue 53B): a deterministic proposal - no model call -
+  // that lands in the same confirmation card as everything else.
+  const propose = (tool: string, params: Record<string, string>) => {
+    if (busy) return
+    setBusy(true); setError('')
+    void api('POST', '/v1/genie/actions/propose', { tool, params, sessionId: sessionId || undefined })
+      .then((r) => {
         setPending(r.pendingAction ?? null)
         if (r.sessionId && r.sessionId !== sessionId) {
           setSessionId(r.sessionId)
@@ -169,6 +191,51 @@ function GeniePage({ me }: { me?: Me }) {
           {messages.map((m, i) => (
             <div key={i} className={`gmsg ${m.role}`}>
               {m.role === 'assistant' ? renderRich(m.text) : m.text}
+              {(m.blocks ?? []).map((b, bi) => (
+                <div key={bi} className="gblock">
+                  {b.type === 'bookings' ? (
+                    <>
+                      <div className="gblock-title">Diary</div>
+                      {b.items.map((it, ii) => (
+                        <div key={ii} className="gblock-row">
+                          <span className="grow">
+                            <strong>{String(it.service ?? '')}</strong>
+                            {it.customer ? ` · ${String(it.customer)}` : ''}
+                            <span className="meta"> · {String(it.startsAt ?? '').slice(5, 16).replace('T', ' ')}</span>
+                          </span>
+                          {it.kind !== 'block' && it.bookingId ? (
+                            <>
+                              <button className="ghost" disabled={busy}
+                                onClick={() => propose('complete_booking', { bookingId: String(it.bookingId) })}>Done</button>
+                              <button className="ghost" disabled={busy}
+                                onClick={() => propose('cancel_booking', { bookingId: String(it.bookingId) })}>Cancel</button>
+                            </>
+                          ) : null}
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <div className="gblock-title">Unpaid invoices</div>
+                      {b.items.map((it, ii) => (
+                        <div key={ii} className="gblock-row">
+                          <span className="grow">
+                            <strong>{String(it.label ?? '')}</strong>
+                            {it.customer ? ` · ${String(it.customer)}` : ''}
+                            <span className="meta"> · {typeof it.totalCents === 'number'
+                              ? new Intl.NumberFormat('en', { style: 'currency', currency: String(it.currency ?? 'AUD') }).format((it.totalCents as number) / 100)
+                              : ''}</span>
+                          </span>
+                          {it.invoiceId ? (
+                            <button className="ghost" disabled={busy}
+                              onClick={() => propose('send_invoice', { invoiceId: String(it.invoiceId) })}>Chase</button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ))}
               {m.role === 'assistant' && (m.tools?.length ?? 0) > 0 && (
                 <div className="gtools">checked: {m.tools!.filter((t) => !t.includes('_')).join(', ') || m.tools!.join(', ')}</div>
               )}
