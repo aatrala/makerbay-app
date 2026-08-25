@@ -88,6 +88,8 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     }
     const enableMatch = path.match(/^\/v1\/core\/modules\/([a-z0-9-]+)\/enable$/)
     if (method === 'POST' && enableMatch) return await enableModule(ctx, enableMatch[1])
+    const disableMatch = path.match(/^\/v1\/core\/modules\/([a-z0-9-]+)\/disable$/)
+    if (method === 'POST' && disableMatch) return await disableModule(ctx, disableMatch[1])
     if (method === 'GET' && path === '/v1/core/workspace/slug') return await checkSlug(event)
     if (method === 'PATCH' && path === '/v1/core/workspace') return await patchWorkspace(ctx, event)
     if (method === 'GET' && path === '/v1/core/support/tickets') {
@@ -167,6 +169,13 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
     role: 'owner',
     createdAt: now,
   })
+  // Every switchable module starts ON (issue 69). The old flow enabled only
+  // the assistant and nothing exposed the enable button afterwards, so new
+  // owners never found Booking or Reviews. Anything unwanted is one click
+  // off on the Workspace page.
+  for (const [moduleId, entry] of Object.entries(MODULE_CATALOG)) {
+    await setModuleEntitlement(tenant.tenantId, moduleId, entry)
+  }
   return json(201, { tenant })
 }
 
@@ -466,8 +475,28 @@ async function enableModule(ctx: CallerContext, moduleId: string): Promise<APIGa
   if (!tenantId) return json(403, { error: 'owner_required' })
   const catalogEntry = MODULE_CATALOG[moduleId]
   if (!catalogEntry) return json(404, { error: 'unknown_module' })
-  await setModuleEntitlement(tenantId, moduleId, catalogEntry)
-  return json(200, { moduleId, entitlement: catalogEntry })
+  // Re-enabling after a switch-off must not stomp a paid plan's limits -
+  // keep whatever entry exists and only flip the switch.
+  const current = (await getEntitlements(tenantId)).modules[moduleId]
+  const entitlement = { ...(current ?? catalogEntry), enabled: true }
+  await setModuleEntitlement(tenantId, moduleId, entitlement)
+  return json(200, { moduleId, entitlement })
+}
+
+/**
+ * The other half of the switch (issue 69): hide a module the business does
+ * not use. Nothing is deleted - data, config and any paid plan stay put, and
+ * a module kept alive by a live paid grant simply stays on.
+ */
+async function disableModule(ctx: CallerContext, moduleId: string): Promise<APIGatewayProxyResultV2> {
+  const tenantId = await requireOwner(ctx)
+  if (!tenantId) return json(403, { error: 'owner_required' })
+  const catalogEntry = MODULE_CATALOG[moduleId]
+  if (!catalogEntry) return json(404, { error: 'unknown_module' })
+  const current = (await getEntitlements(tenantId)).modules[moduleId]
+  const entitlement = { ...(current ?? catalogEntry), enabled: false }
+  await setModuleEntitlement(tenantId, moduleId, entitlement)
+  return json(200, { moduleId, entitlement })
 }
 
 async function usage(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {

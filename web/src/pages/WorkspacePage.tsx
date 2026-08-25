@@ -134,11 +134,13 @@ function ModulesCard({ me, onSaved }: { me: Me; onSaved?: () => void }) {
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
 
-  const turnOn = async (id: string, name: string) => {
+  const flip = async (id: string, name: string, on: boolean) => {
     setBusy(id); setError(''); setDone('')
     try {
-      await api('POST', `/v1/core/modules/${id}/enable`, {})
-      setDone(`${name} is on - it appears in the menu now.`)
+      await api('POST', `/v1/core/modules/${id}/${on ? 'disable' : 'enable'}`, {})
+      setDone(on
+        ? `${name} is off - hidden from the menu. Nothing was deleted; switch it back on any time.`
+        : `${name} is on - it appears in the menu now.`)
       onSaved?.()
     } catch (err) {
       setError(explain(err))
@@ -151,8 +153,9 @@ function ModulesCard({ me, onSaved }: { me: Me; onSaved?: () => void }) {
     <div className="card">
       <h2>Modules</h2>
       <p className="meta">
-        Contacts, Requests, Quotes and Your page are part of every workspace. These are optional -
-        switch on what you need. Genie lives under Billing.
+        Contacts, Requests, Quotes and Your page are part of every workspace. These can be switched
+        on and off - switching off only hides a module from the menu, nothing is deleted. Genie
+        lives under Billing.
       </p>
       {done && <Notice tone="ok" onClose={() => setDone('')}>{done}</Notice>}
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
@@ -164,11 +167,9 @@ function ModulesCard({ me, onSaved }: { me: Me; onSaved?: () => void }) {
               <strong>{m.name}</strong>
               <span className="meta"> — {m.blurb}</span>
             </span>
-            {on
-              ? <span className="meta">On</span>
-              : <button disabled={busy !== ''} onClick={() => void turnOn(m.id, m.name)}>
-                  {busy === m.id ? 'Switching on…' : 'Turn on'}
-                </button>}
+            <button className={on ? 'ghost' : ''} disabled={busy !== ''} onClick={() => void flip(m.id, m.name, on)}>
+              {busy === m.id ? 'Switching…' : on ? 'Switch off' : 'Turn on'}
+            </button>
           </div>
         )
       })}

@@ -11,6 +11,14 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.23.2 - 2026-08-25
+
+- Changed `platform` Booking and Reviews start switched ON for every
+  workspace - new signups and existing ones alike. The Modules card on
+  Workspace now switches modules off as well as on: off just hides a
+  module from the menu, nothing is deleted, and a paid plan's limits
+  survive the round trip.
+
 ## 2.23.1 - 2026-08-25
 
 - Fixed `platform` Booking and Reviews can finally be switched on from

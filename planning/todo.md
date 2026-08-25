@@ -214,6 +214,16 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+### 69 — Bookings/Reviews on by default + switch-off ✅
+Shipped 2026-08-25: new workspaces start with Assistant, Booking AND
+Reviews on (server-side at creation); every existing active workspace
+was backfilled the same way (yours included - Booking is in your menu
+now, no click needed). The Modules card gained "Switch off": it only
+hides the module from the menu - data, config and paid-plan limits all
+survive, and enable/disable no longer stomps a pro plan's limits.
+**Test:** Workspace → Modules → Switch off Reviews → it leaves the
+menu → Turn on → it returns.
+
 ### 68 — No way to configure booking times (aatrala@gmail.com) ✅
 Root cause: Booking was never switched on for your workspace, and since
 onboarding only enables the assistant there was NO screen anywhere to
