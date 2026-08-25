@@ -23,8 +23,8 @@ progress · 💬 awaiting your decision · ⛔ blocked · 📋 spec'd/deferred
 | 16 | Marketplace | 📋 Spec'd, deferred to ~1,000 customers as you directed |
 | 17 | Demo theme = site theme | ✅ Shipped (#c2410c everywhere) |
 | 18 | Tier pricing + PAYG | ✅ Live; Genie tier added on top (see 38/billing) |
-| 19 | Voice / Nova Sonic | 💬→⏳ You approved the ~1-week <$100 latency probe (2026-08-24); it is next in my queue as a dedicated session |
-| 20 | Admin panel supportability | ✅ P0 shipped (2026-08-24): find-by-email, tenant 360, password resets, suspend/reinstate kill switch + docs/runbook-support.md. P1 awaits your scope pick (see below) |
+| 19 | Voice / Nova Sonic | ⛔ Probe ready; blocked on your ~30-min Connect console setup + 10 test calls (docs/probe-voice-latency.md, DID +1 414 219 1295) |
+| 20 | Admin panel supportability | ✅ P0 + P1 + overhaul all shipped (see 46, 48b): find-by-email, tenant 360, password resets, kill switch, suppression viewer, conversation viewer, audit log, privacy scripts, dashboard |
 | 21 | Docs/README refresh | ✅ Shipped |
 | 22 | Roadmap/changelog redesign | ✅ Variant B live |
 | 23 | Chat greeting / blue page / unclickable links | ✅ All fixed + verified |
@@ -172,10 +172,10 @@ MakerBay assistant answers first (V2), tickets with full threads below
 Staff answer from the console Tickets queue; replies land in the
 customer dashboard and inbox. Verified live: ticket created on the demo
 tenant (priority, listed), staff routes refuse unauthenticated calls.
-**Caveats:** SES is still in sandbox - ticket notification emails to the
-founder need the aatrala@gmail.com identity verified (verification email
-sent 2026-08-25 - click it), and customer-reply emails will only deliver
-to verified addresses until SES production access is granted.
+**Caveats:** aatrala@gmail.com is verified (confirmed 2026-08-25), so
+YOUR notification emails deliver. SES is still in sandbox, so emails to
+other customers only deliver once SES production access is granted
+(request pending under External waits).
 **Test:** app → account menu → Support & feedback → send a ticket →
 answer it in the console → see the reply appear in the app.
 
@@ -214,6 +214,19 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+### 68 — No way to configure booking times (aatrala@gmail.com) ✅
+Root cause: Booking was never switched on for your workspace, and since
+onboarding only enables the assistant there was NO screen anywhere to
+switch other modules on - the API existed, the button didn't. Shipped
+2026-08-25: a **Modules card on the Workspace page** (Assistant /
+Booking / Reviews with one-click Turn on; the free stuff is labelled as
+always-included, Genie points to Billing).
+**How to set up booking:** Workspace → Modules → Turn on Booking →
+Booking appears in the menu → **Services** (add each service with
+duration + price) → **Hours** (your weekly working hours) → Diary shows
+bookings; then Your page → show booking so customers can book. Free
+includes 20 bookings/month.
+
 ### 64 — Help centre empty / no authoring ✅ (day 1) / 💬 (native articles)
 Diagnosis: your 19 sources were ALL ready but publishing lived only on
 the Knowledge page, so the centre stayed empty. Shipped 2026-08-25: the
@@ -228,16 +241,14 @@ Help centre tab (a text editor creating a text source - it trains the
 assistant automatically via the existing ingestion), edit them later,
 and a "help article" badge on Knowledge. No new tier caps.
 
-### 65 — Help centre presentation + bulk + counts 🔶 (quick wins ✅ / rest 💬)
-Quick wins shipped 2026-08-25: Unpublish + Unpublish-all next to
-Publish-all; the centre index now refreshes in ~1 min after a publish
-(was up to 5 - that was the "took a while"). **The 40+ vs 18:** the
-crawl stopped at the source cap - limits.sources is 20 per workspace,
-your GreenLight docs crawl stored 19 pages (18 published + llms.txt)
-and silently dropped the rest. Fix options in the proposal below.
-Remaining (proposal): real article formatting (headings/paragraphs
-instead of raw text), images, orderable categories/TOC, cap raise +
-visible cap meter.
+### 65 — Help centre presentation + bulk + counts ✅
+Quick wins shipped 2026-08-25 (Unpublish/Unpublish-all, ~1-min index
+refresh); everything else shipped the same day inside the 66 build:
+article formatting, category reordering, popular strip, cap raise
+(20/60/150) with a visible meter + crawl-truncation warning. **The
+40+ vs 18 mystery:** your GreenLight crawl silently stopped at the old
+20-source cap (19 stored, 18 published) - now visible and raised.
+Still out of scope: images in articles (queued with native authoring).
 
 ### 66 — Help centre themes ✅ (v2 shipped after two-agent consult)
 Approved 2026-08-25 and built the same day (docs/spec-help-themes.md).
@@ -305,19 +316,15 @@ The deferred trio (ABN/licence footer, pipeline value strip, document
 logo) shipped 2026-08-25 - see 61. Genie checkout is now a single line
 (the usage line attaches automatically after subscribe).
 
-### 63 — Stripe Connect onboarding ⛔ ONE last founder step
-Accounts Write is through (thank you). Stripe now asks for the one-time
-**Connect platform profile**: dashboard.stripe.com/settings/connect/
-platform-profile - the loss-liability questionnaire every Connect
-platform completes once. Finish it and onboarding starts working
-immediately; I retest on your word and then run the full payments e2e.
-Root cause from the Lambda logs: the restricted key lacks **Accounts
-Write** (connected_account_write) - the one scope Connect onboarding
-needs (Checkout works; that scope you added). Fix in Stripe → API keys →
-edit the restricted key → enable Accounts Write. Meanwhile the API now
-answers with an honest "our Stripe configuration is missing a
-permission" instead of a mystery 500. **The live payment + Connect e2e
-verification is blocked on this same scope.**
+### 63 — Stripe Connect onboarding ⛔ awaiting Stripe's review
+Progress to date: Accounts Write scope enabled (verified working), the
+one-time **Connect platform profile** questionnaire submitted by you
+2026-08-25. The last blocker is on Stripe's side: account creation
+returns "review the responsibilities of managing losses" until their
+review of the profile completes (retested live - still pending). Ping
+me when Stripe's approval email lands; I then retest onboarding and
+run the already-approved full Connect + live payment e2e. Meanwhile
+the Get Paid page shows an honest message instead of a mystery 500.
 
 ### 56 — Genie checkout shows "Genie and 1 more" (Trade) ✅
 Cause: the Genie subscription reused the Trade product's usage-metered
@@ -421,29 +428,38 @@ form. The alarm email is the trigger to revisit.
 
 ## Awaiting your decision 💬
 
+- **Native help-article authoring** (64 proposal A) — write and edit
+  articles directly in the Help centre tab; each is a text source, so
+  it trains the assistant automatically; "help article" badge on
+  Knowledge. Images in articles ride along. Say go and I build.
 - **WhatsApp surface for Genie** — text your Genie on WhatsApp instead
   of opening the app; same briefings + confirmation cards. Costs: WABA
   number, Meta verification, per-conversation fees. Parked until you say go.
-- **Admin console P1** — SES suppression viewer, read-only conversation
-  viewer, scripted privacy export/delete, audit log reader (~4-5 days).
-  Recommended before ~100 customers; pick any subset.
+- **Quotes/invoice extras** (from 61 consult) — remaining ranked
+  dashboard ideas beyond what shipped; pick during testing if wanted.
 
 ## Blocked on you (quick) ⛔
 
-- **Stripe restricted key scopes** — add write scopes: Accounts, Account
-  Links, Checkout Sessions, Payment Intents, Refunds, **Products, Prices,
-  Subscriptions** (Genie plan product is created via API on first
-  checkout). Add `checkout.session.completed` + `account.updated` to the
-  webhook. Then I verify Connect onboarding + live payment + Genie
-  checkout end to end.
-- **Disk space** — your C: drive hit 100% full on 2026-08-25 (broke three
-  deploys). I freed ~12GB from the npm cache; please clear more when you
-  can.
+- **SNS abuse-alert confirmation** — the subscription email to
+  aatrala@gmail.com is still PendingConfirmation; until you click it,
+  the cost-tripwire alarms (issue 47) cannot email you.
+- **Voice probe console setup** — ~30 min in the Amazon Connect console
+  (docs/probe-voice-latency.md) + 10 test calls to +1 (414) 219-1295;
+  then I run the latency measurement against the go/no-go gate.
+- **Disk space** — your C: drive hit 100% full on 2026-08-25 (broke
+  three deploys). I freed ~12GB from the npm cache; please clear more
+  when you can.
 
 ## External waits
 
-- Chime SDK Voice enablement (AWS support case) — gates voice go-live.
+- **Stripe Connect platform-profile review** (issue 63) — you submitted
+  the questionnaire; account creation stays blocked until Stripe
+  approves. Ping me when the email lands and I retest + run the full
+  Connect onboarding and live payment e2e (already approved). Key
+  scopes are DONE - Accounts Write confirmed working.
 - SES production access. SMS origination identity registration.
+- ~~Chime SDK Voice enablement~~ — no longer needed: the probe now uses
+  Amazon Connect's native Nova Sonic agentic self-service.
 
 ## On hold (deliberate)
 
@@ -453,7 +469,7 @@ form. The alarm email is the trigger to revisit.
 
 ## Standing facts
 
-- Releases: CHANGELOG.md (2.14.0). Platform 1.24.0.
+- Releases: CHANGELOG.md (2.23.1). Platform 1.33.0.
 - Founder workspace (aatralarasu) comps: Presence Pro + Genie 2500,
   seeded via scripts/seed-founder-grants.mjs.
 - Demo workspace (makerbay-demo / Southside Plumbing): docPrefix SP,

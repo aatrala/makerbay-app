@@ -111,6 +111,67 @@ export default function WorkspacePage({ me, onSaved }: { me: Me; onSaved?: () =>
         </div>
         <p className="meta mt">A custom domain for your page is available with Presence Pro, under Your page.</p>
       </div>
+
+      <ModulesCard me={me} onSaved={onSaved} />
     </>
+  )
+}
+
+/**
+ * Switchable modules, finally switchable from the dashboard (issue 68).
+ * Onboarding turns on the assistant and nothing else, and until this card
+ * existed there was no way to add Booking or Reviews afterwards - the nav
+ * simply never showed them.
+ */
+const SWITCHABLE: { id: string; name: string; blurb: string }[] = [
+  { id: 'assistant', name: 'Assistant', blurb: 'The chat widget, knowledge base and help centre.' },
+  { id: 'booking', name: 'Booking', blurb: 'Services, working hours and a diary customers book into. 20 bookings a month free.' },
+  { id: 'reviews', name: 'Reviews', blurb: 'Ask happy customers for a Google review at the right moment. 20 asks a month free.' },
+]
+
+function ModulesCard({ me, onSaved }: { me: Me; onSaved?: () => void }) {
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [done, setDone] = useState('')
+
+  const turnOn = async (id: string, name: string) => {
+    setBusy(id); setError(''); setDone('')
+    try {
+      await api('POST', `/v1/core/modules/${id}/enable`, {})
+      setDone(`${name} is on - it appears in the menu now.`)
+      onSaved?.()
+    } catch (err) {
+      setError(explain(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Modules</h2>
+      <p className="meta">
+        Contacts, Requests, Quotes and Your page are part of every workspace. These are optional -
+        switch on what you need. Genie lives under Billing.
+      </p>
+      {done && <Notice tone="ok" onClose={() => setDone('')}>{done}</Notice>}
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {SWITCHABLE.map((m) => {
+        const on = me.entitlements?.modules[m.id]?.enabled === true
+        return (
+          <div key={m.id} className="row" style={{ borderTop: '1px solid var(--line)', padding: '10px 0' }}>
+            <span className="grow">
+              <strong>{m.name}</strong>
+              <span className="meta"> — {m.blurb}</span>
+            </span>
+            {on
+              ? <span className="meta">On</span>
+              : <button disabled={busy !== ''} onClick={() => void turnOn(m.id, m.name)}>
+                  {busy === m.id ? 'Switching on…' : 'Turn on'}
+                </button>}
+          </div>
+        )
+      })}
+    </div>
   )
 }

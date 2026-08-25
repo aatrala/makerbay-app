@@ -11,6 +11,13 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.23.1 - 2026-08-25
+
+- Fixed `platform` Booking and Reviews can finally be switched on from
+  the dashboard: Workspace now has a Modules card. Onboarding only ever
+  enabled the assistant, and there was no button anywhere to add the
+  others - the menu just silently never showed them.
+
 ## 2.23.0 - 2026-08-25
 
 > **A help centre that dresses for the job** — five themes, articles that
