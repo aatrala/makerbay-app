@@ -214,6 +214,34 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+### 56 — Genie checkout shows "Genie and 1 more" (Trade) ✅
+Cause: the Genie subscription reused the Trade product's usage-metered
+assistant-messages price, so Stripe named both products. Fixed: the
+Genie product now carries its own metered price on the same meter and
+allowance (created automatically at next checkout; no Stripe dashboard
+action needed). Existing behaviour and billing unchanged - only the
+label. **Test:** Billing → Genie upgrade → checkout should read
+"Subscribe to MakerBay Genie" with two lines, both under Genie.
+
+### 57 — Pricing page UI + homepage missing Genie ✅
+Homepage now shows all three plans (Genie card added, heading "Three
+plans. No homework."); pricing page sells Genie as live with the correct
+2,500-message allowance, the confirm-card story, and priority support
+(now real - the ticket queue honours it); "when Genie ships" copy
+retensed; Genie moved out of the roadmap's Next column and its module
+status is live.
+
+### 58 — Marketing site: footer presentation + stale content ✅
+The one hand-written module page (Assistant) carried an old single-line
+footer - now the standard columned footer everywhere. Stale content
+swept with 57: Genie tense, allowances, roadmap. Remaining hand-written
+copy on the Assistant page reads fine.
+
+### 59 — GitHub source + tracker upkeep ✅
+All work through issue 58 committed and pushed; repo has no stray files
+(site/dist and build outputs are gitignored); this tracker now updates
+in the same commit as every issue.
+
 ### 55 — Billing page never returns from Stripe ✅
 Root cause was in the browser, not the flow: checkout and portal both
 return live Stripe URLs in about a second (your new key scopes are

@@ -206,8 +206,10 @@ async function proPrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
 async function geniePrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
   const plan = PLANS.genie
   const baseLookup = `${GENIE_PRODUCT_KEY}-base`
-  const existing = await stripe.prices.list({ lookup_keys: [baseLookup], limit: 5 })
+  const meteredLookup = `${GENIE_PRODUCT_KEY}-messages`
+  const existing = await stripe.prices.list({ lookup_keys: [baseLookup, meteredLookup], limit: 10 })
   let base = existing.data.find((p) => p.lookup_key === baseLookup)
+  let metered = existing.data.find((p) => p.lookup_key === meteredLookup)
 
   const products = await stripe.products.search({ query: `metadata['key']:'${GENIE_PRODUCT_KEY}'` })
   let product = products.data[0]
@@ -227,7 +229,26 @@ async function geniePrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
       lookup_key: baseLookup,
     })
   }
-  return { base, product }
+  // The metered assistant-messages price on the GENIE product (issue 56):
+  // reusing Trade's metered price made checkout read "Genie and 1 more -
+  // MakerBay Trade". Same meter, same allowance, right label.
+  if (!metered) {
+    const meter = await assistantMeter(stripe)
+    metered = await stripe.prices.create({
+      product: product.id,
+      currency: 'usd',
+      billing_scheme: 'tiered',
+      tiers_mode: 'graduated',
+      tiers: [
+        { up_to: plan.includedMessages, unit_amount: 0 },
+        { up_to: 'inf', unit_amount: plan.overageCentsPerMessage },
+      ],
+      recurring: { interval: 'month', usage_type: 'metered', meter: meter.id },
+      lookup_key: meteredLookup,
+      nickname: 'Assistant messages',
+    })
+  }
+  return { base, metered, product }
 }
 
 /** The annual base: two months free, no metered item (see ANNUAL_PRICE_CENTS). */
@@ -269,11 +290,15 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
   // monthly metering, and the honest alternative to overage is a pause at
   // the allowance, not a catch-up bill at renewal. Genie is month-to-month
   // for now - it is new, and nobody should prepay a year of it.
-  const lineItems = wantGenie
-    ? [{ price: (await geniePrices(stripe)).base.id, quantity: 1 }, { price: metered.id }]
-    : interval === 'year'
-      ? [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
-      : [{ price: base.id, quantity: 1 }, { price: metered.id }]
+  let lineItems: Array<{ price: string; quantity?: number }>
+  if (wantGenie) {
+    const genie = await geniePrices(stripe)
+    lineItems = [{ price: genie.base.id, quantity: 1 }, { price: genie.metered.id }]
+  } else if (interval === 'year') {
+    lineItems = [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
+  } else {
+    lineItems = [{ price: base.id, quantity: 1 }, { price: metered.id }]
+  }
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',

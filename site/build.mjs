@@ -236,11 +236,6 @@ const NEXT_ITEMS = [
     gate: 'Gate: telephony enablement — built and proven, awaiting carrier access',
   },
   {
-    name: 'Genie', price: null,
-    body: 'Your whole business from a conversation on your phone — see what happened, reply, book, quote. Every action confirmed by you, everything on an audit trail.',
-    gate: 'Gate: the audit trail ships first; every write needs your explicit confirm',
-  },
-  {
     name: 'After-hours voice', price: null,
     body: 'A phone agent that answers when you cannot, grounded in the same knowledge as your chat assistant.',
     gate: 'Gate: must beat our published latency bar on real calls — measured, not promised',
@@ -351,11 +346,11 @@ const pricingPage = () => {
     path: '/pricing',
     body: `<div class="hero">
   <div class="wrap">
-    <h1>Two prices. No homework.</h1>
+    <h1>Three plans. No homework.</h1>
     <p class="lead">
       You should not need a spreadsheet to buy software. Free runs your business
       online. Trade switches everything on for what competitors charge to start.
-      That is the whole decision.
+      Genie runs it from a conversation. That is the whole decision.
     </p>
     <div class="cta"><a class="btn lg" href="${APP}">Start free</a></div>
     <small>Same prices worldwide, in USD &middot; Month to month &middot; No card to start &middot; Cancel any time</small>
@@ -395,18 +390,18 @@ const pricingPage = () => {
         <a class="btn" href="${APP}">Get started</a>
         <p class="meta" style="margin-top:12px">$290 a year — 2 months free.</p>
       </div>
-      <div class="price coming">
+      <div class="price">
         <h3>Genie</h3>
         <div class="amount">$99<span> / month</span></div>
         <p class="tier-pitch">An office manager for less than one billable hour a week.</p>
         <ul>
           <li>Everything in Trade, plus:</li>
-          <li><strong>Genie</strong>: run the business from a conversation on your phone — see what happened, reply, book, quote</li>
-          <li>Every Genie action confirmed by you, on an audit trail</li>
+          <li><strong>Genie</strong>: 2,500 messages a month — briefings, answers and actions from a conversation on your phone</li>
+          <li>Send quotes and invoices, manage bookings, block out time — every action behind a card only you confirm, on your activity trail</li>
           <li>After-hours voice answering, when it passes our latency bar</li>
-          <li>6,000 assistant messages &middot; priority support</li>
+          <li>Priority support — your tickets answered first</li>
         </ul>
-        <span class="tag soon" style="margin-top:6px">In design — not for sale yet</span>
+        <a class="btn ghost" href="${APP}">Get started</a>
       </div>
     </div>
     <p class="meta" style="margin-top:20px">
@@ -423,9 +418,9 @@ const pricingPage = () => {
     <div class="sec-head">
       <h2>A taste of Genie on every plan</h2>
       <p>
-        When Genie ships, Free workspaces get 25 Genie messages a month and Trade
-        gets 250 — enough for the morning briefing habit. Running the whole
-        business by chat is what the $99 tier is for.
+        Every plan includes Genie today: Free workspaces get 25 Genie messages a
+        month and Trade gets 250 — enough for the morning briefing habit. Running
+        the whole business by chat is what the $99 tier is for.
       </p>
     </div>
   </div>

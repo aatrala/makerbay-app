@@ -11,6 +11,22 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.19.0 - 2026-08-25
+
+> **Genie, priced and presented properly** — checkout says one product, the homepage shows all three plans, and the pricing page stops calling a live product "coming".
+
+- Fixed `platform` Subscribing to Genie no longer shows "MakerBay Genie
+  and 1 more": the usage-metered assistant-messages line now belongs to
+  the Genie product itself, so checkout reads as one product with the
+  same allowance and pricing.
+- Changed `platform` The homepage pricing section shows all three plans
+  including Genie at $99; the pricing page sells Genie as live (it is),
+  with the right message allowance and the priority-support promise the
+  ticket queue now actually honours; the roadmap moved Genie out of
+  "Next" - it shipped.
+- Fixed `platform` The assistant module page carried an old one-line
+  footer; every marketing page now shares the same columned footer.
+
 ## 2.18.0 - 2026-08-25
 
 > **Leads on your terms, a Genie you can scan, and pages you can see** — the contact form asks what you choose, Genie's briefings read like briefings, and every edit shows up beside the form as you work.

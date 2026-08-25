@@ -2,7 +2,7 @@
   "id": "genie",
   "name": "Genie",
   "tagline": "Run your business from a conversation on your phone",
-  "status": "in-development",
+  "status": "live",
   "version": {
     "api": "0.2.0",
     "web": "0.2.0"
