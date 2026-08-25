@@ -39,6 +39,20 @@ export default function Billing() {
       })
   }, [])
 
+  // Coming BACK from Stripe with the browser's back button restores this
+  // page from the back/forward cache exactly as it was left: buttons
+  // disabled, still saying "Opening Stripe…" - forever (issue 55). A
+  // bfcache restore fires pageshow with persisted=true; reset and reload.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return
+      setBusy(false)
+      void api('GET', '/v1/core/billing/summary').then(setData).catch(() => {})
+    }
+    window.addEventListener('pageshow', onShow)
+    return () => window.removeEventListener('pageshow', onShow)
+  }, [])
+
   const go = async (path: string, body: Record<string, unknown> = {}) => {
     setBusy(true)
     setError('')
