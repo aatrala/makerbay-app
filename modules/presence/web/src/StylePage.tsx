@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Notice, Skeleton, api, explain, when } from '@makerbay/web-kit'
-import PreviewPane from './PreviewPane'
 
 /**
  * The Page style screen (issue 45, docs/spec-page-styles.md). Every option
@@ -39,7 +38,12 @@ const FONTS: Array<{ id: string; name: string }> = [
   { id: 'friendly', name: 'Friendly — Nunito' },
 ]
 
-export default function StylePage() {
+/**
+ * The Appearance sections, embeddable in the merged Page screen (issue 60):
+ * layout, blocks, FAQ, colours, fonts, versions. Owns its own state; tells
+ * the parent when a save landed so the shared preview refreshes.
+ */
+export function StyleSections({ onSaved }: { onSaved?: () => void }) {
   const [page, setPage] = useState<PageSettings | null>(null)
   const [tier, setTier] = useState<Tier>('free')
   const [versions, setVersions] = useState<Array<{ sk: string; at: string; label: string; style: string }> | null>(null)
@@ -47,15 +51,12 @@ export default function StylePage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [drag, setDrag] = useState<number | null>(null)
-  const [pageUrl, setPageUrl] = useState('')
-  const [previewNonce, setPreviewNonce] = useState(0)
 
   const load = useCallback(async () => {
     try {
       const r = await api('GET', '/v1/presence/page')
       setPage(r.page)
       setTier(r.tier ?? 'free')
-      void api('GET', '/v1/presence/config').then((c) => setPageUrl(c.pageUrl ?? '')).catch(() => {})
       if (r.tier !== 'free') {
         void api('GET', '/v1/presence/versions').then((v) => setVersions(v.versions ?? [])).catch(() => {})
       }
@@ -69,7 +70,7 @@ export default function StylePage() {
     void api('PUT', '/v1/presence/page', partial)
       .then((r) => {
         setPage(r.page)
-        setPreviewNonce((n) => n + 1)
+        if (onSaved) onSaved()
         setNote('Saved - the preview shows it now. Visitors see it within about 5 minutes.')
         if (tier !== 'free') void api('GET', '/v1/presence/versions').then((v) => setVersions(v.versions ?? [])).catch(() => {})
       })
@@ -79,7 +80,6 @@ export default function StylePage() {
 
   if (!page) return (
     <>
-      <h1>Page style</h1>
       {error && <Notice tone="err">{error}</Notice>}
       <div className="card"><Skeleton rows={6} /></div>
     </>
@@ -104,16 +104,8 @@ export default function StylePage() {
 
   return (
     <>
-      <h1>Page style</h1>
-      <p>
-        How your public page is laid out. Your content is the same in every style — switch any
-        time, nothing is lost. <span className="meta">Free looks good · Trade is arranged your way · Genie is fully branded.</span>
-      </p>
       {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
-
-      <div className="pagegrid">
-      <div className="pg-main">
       <div className="card">
         <h2>Layout</h2>
         <div className="row" style={{ alignItems: 'stretch', flexWrap: 'wrap' }}>
@@ -231,11 +223,6 @@ export default function StylePage() {
           ))}
         </div>
       )}
-      </div>
-      <div className="pg-side">
-        <PreviewPane pageUrl={pageUrl} refreshKey={previewNonce} />
-      </div>
-      </div>
     </>
   )
 }

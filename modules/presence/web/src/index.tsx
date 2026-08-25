@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, Route } from 'react-router-dom'
+import { Link, Navigate, Route } from 'react-router-dom'
 import SharePage from './SharePage'
-import StylePage from './StylePage'
+import { StyleSections } from './StylePage'
 import PreviewPane from './PreviewPane'
 import QrBlock from './Qr'
 import {
@@ -139,7 +139,11 @@ function PagePage({ me }: { me: Me }) {
 
       <div className="pagegrid">
       <div className="pg-main">
-      <AddressCard pageUrl={pageUrl} onChanged={load} />
+      <nav className="secrail" aria-label="Page sections">
+        <a href="#content">Content</a>
+        <a href="#appearance">Appearance</a>
+        <a href="#publish">Publish</a>
+      </nav>
 
       {indexing && !indexing.ownSite && (
         indexing.complete ? (
@@ -206,6 +210,7 @@ function PagePage({ me }: { me: Me }) {
 
       {config && (
         <>
+          <h2 className="sechead" id="content">Content</h2>
           <div className="card">
             <h2>Photo</h2>
             <p className="hint">
@@ -306,6 +311,11 @@ function PagePage({ me }: { me: Me }) {
             </form>
           </div>
 
+          <h2 className="sechead" id="appearance">Appearance</h2>
+          <StyleSections onSaved={() => setPreviewNonce((n) => n + 1)} />
+
+          <h2 className="sechead" id="publish">Publish</h2>
+          <AddressCard pageUrl={pageUrl} onChanged={load} />
         </>
       )}
 
@@ -636,14 +646,13 @@ export const presenceDashboard: DashboardModule = {
   id: 'presence',
   label: 'Your page',
   nav: [
-    { to: '/page', label: 'Edit page' },
-    { to: '/page/style', label: 'Style' },
+    { to: '/page', label: 'Page' },
     { to: '/page/share', label: 'Share' },
   ],
   routes: ({ me }) => (
     <>
       <Route path="/page" element={<PagePage me={me} />} />
-      <Route path="/page/style" element={<StylePage />} />
+      <Route path="/page/style" element={<Navigate to="/page#appearance" replace />} />
       <Route path="/page/share" element={<SharePage me={me} />} />
     </>
   ),

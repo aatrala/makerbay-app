@@ -500,7 +500,7 @@
           // bold: heavy header band, big total - reads at arm's length.
           (theme === 'bold'
             ? '.inv h2{font-size:1.6em;font-weight:800}' +
-              '.inv .i-band{background:#111;color:#fff;padding:1rem;border-radius:8px;margin-bottom:1rem}' +
+              '.inv .i-band{background:var(--brand,#111);color:var(--brand-fg,#fff);padding:1rem;border-radius:8px;margin-bottom:1rem}' +
               '.inv .i-band h2{margin:0}.inv .i-band p{margin:.25rem 0 0;opacity:.8}' +
               '.inv .i-total td{font-size:1.25em}' +
               '.inv .i-paid{background:#1b5e20;color:#fff}.inv .i-pay{background:rgba(128,128,128,.12)}'

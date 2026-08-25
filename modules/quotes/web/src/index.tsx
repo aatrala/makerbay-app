@@ -8,6 +8,7 @@ import {
   explain,
   when,
   type DashboardModule,
+  type Me,
 } from '@makerbay/web-kit'
 
 interface PriceItem {
@@ -71,6 +72,15 @@ interface Invoice {
 
 const invoiceLabel = (i: Pick<Invoice, 'number' | 'label'>) =>
   i.label ?? `INV-${String(i.number).padStart(3, '0')}`
+
+/** "due in 3d" / "12d overdue": cash flow at a glance (issue 61). */
+const aging = (i: Pick<Invoice, 'status' | 'dueAt'>) => {
+  if (i.status !== 'sent') return null
+  const days = Math.floor((Date.now() - new Date(i.dueAt).getTime()) / 86_400_000)
+  if (days > 0) return <span className="chip failed">{days}d overdue</span>
+  if (days > -4) return <span className="chip warn">due in {-days || 0}d</span>
+  return <span className="meta">due {when(i.dueAt)}</span>
+}
 
 const cash = (cents: number, currency = 'AUD') =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(cents / 100)
@@ -312,7 +322,20 @@ function QuoteDetail() {
   return (
     <>
       <p className="meta"><Link to="/quotes">← All quotes</Link></p>
-      <h1>Quote {quote.label ?? `#${quote.number}`}</h1>
+      <div className="row baseline">
+        <h1 className="grow">Quote {quote.label ?? `#${quote.number}`}</h1>
+        {quote.status === 'accepted' && (
+          <button disabled={busy} onClick={() => void (async () => {
+            setBusy(true); setError('')
+            try {
+              const r = await api('POST', `/v1/quotes/${quoteId}/invoice`, {})
+              navigate(`/quotes/invoices/${r.invoice.invoiceId}`)
+            } catch (e) { setError(explain(e)); setBusy(false) }
+          })()}>
+            Create invoice
+          </button>
+        )}
+      </div>
       <p>
         {quote.customerName || quote.customerEmail} ·{' '}
         <Link to={`/contacts/${quote.contactId}`}>see their history</Link> ·{' '}
@@ -423,6 +446,7 @@ function QuoteDetail() {
 
 function InvoicesList() {
   const [invoices, setInvoices] = useState<Invoice[] | null>(null)
+  const [filter, setFilter] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -431,6 +455,10 @@ function InvoicesList() {
       .catch((e) => { setError(explain(e)); setInvoices([]) })
   }, [])
 
+  const shown = (invoices ?? []).filter((i) => !filter || i.status === filter)
+  const outstanding = (invoices ?? []).filter((i) => i.status === 'sent')
+  const outstandingTotal = outstanding.reduce((s, i) => s + i.totalCents, 0)
+
   return (
     <>
       <h1>Invoices</h1>
@@ -438,22 +466,37 @@ function InvoicesList() {
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
       <div className="card">
-        {!invoices ? <Skeleton rows={4} /> : invoices.length === 0 ? (
-          <Empty title="No invoices yet">
-            Open an accepted quote and press Create invoice — the agreed price carries over exactly.
+        <div className="row baseline">
+          <div className="tabs grow">
+            {['', 'sent', 'paid', 'draft', 'void'].map((f) => (
+              <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
+                {f === '' ? 'All' : f === 'sent' ? 'unpaid' : f}
+              </button>
+            ))}
+          </div>
+          {outstanding.length > 0 && (
+            <span className="meta nowrap">
+              outstanding: <strong>{cash(outstandingTotal, outstanding[0].currency)}</strong>
+            </span>
+          )}
+        </div>
+        {!invoices ? <div className="mt"><Skeleton rows={4} /></div> : shown.length === 0 ? (
+          <Empty title={filter ? 'Nothing with that status' : 'No invoices yet'}>
+            Open an <Link to="/quotes?status=accepted">accepted quote</Link> and press Create
+            invoice — the agreed price carries over exactly.
           </Empty>
         ) : (
-          <div className="scroll-x">
+          <div className="scroll-x mt">
             <table>
               <thead><tr><th>#</th><th>Customer</th><th className="num">Total</th><th>Status</th><th>Due</th></tr></thead>
               <tbody>
-                {invoices.map((i) => (
+                {shown.map((i) => (
                   <tr key={i.invoiceId}>
                     <td><Link to={`/quotes/invoices/${i.invoiceId}`}>{invoiceLabel(i)}</Link></td>
                     <td>{i.customerName || i.customerEmail || <span className="meta">no name</span>}</td>
                     <td className="num">{cash(i.totalCents, i.currency)}</td>
                     <td><span className={`chip ${STATUS_CHIP[i.status]}`}>{i.status}</span></td>
-                    <td className="nowrap">{when(i.dueAt)}</td>
+                    <td className="nowrap">{aging(i) ?? when(i.dueAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -585,23 +628,30 @@ function InvoiceDetail() {
  * layout rules as pages.js, so what the owner previews is what the customer
  * gets, minus their real numbers.
  */
-function ThemePreview({ theme, currency, taxLabel, docPrefix = '' }: {
+function ThemePreview({ theme, currency, taxLabel, docPrefix = '', accent = '#c2410c', bizName = 'Your Business Name', items = [] }: {
   theme: string; currency: string; taxLabel: string; docPrefix?: string
+  accent?: string; bizName?: string; items?: Array<{ description: string; unitCents: number }>
 }) {
   const money = (cents: number) => cash(cents, currency)
   const sample = `${docPrefix ? `${docPrefix}-` : ''}INV-042`
   const serif = theme === 'classic'
   const dense = theme === 'compact'
   const band = theme === 'bold'
+  // The preview wears the owner's own accent and lines - a mock in someone
+  // else's colours sells nothing (issue 61).
+  const line1 = items[0] ?? { description: 'Labour — qualified trade', unitCents: 28000 }
+  const line2 = items[1] ?? { description: 'Materials', unitCents: 9250 }
+  const lum = (h: string) => { const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255) }
+  const accentFg = lum(accent) > 186 ? '#1c1917' : '#fff'
   return (
     <div style={{
       border: '1px solid #e7e5e4', borderRadius: 10, padding: dense ? 14 : 20, maxWidth: 460,
       fontSize: dense ? 12.5 : 14, background: '#fff', color: '#1c1917',
     }}>
       {band ? (
-        <div style={{ background: '#111', color: '#fff', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
+        <div style={{ background: accent, color: accentFg, padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
           <strong style={{ fontSize: 16 }}>{sample}</strong>
-          <div style={{ opacity: 0.8, fontSize: 12 }}>Your Business Name</div>
+          <div style={{ opacity: 0.8, fontSize: 12 }}>{bizName}</div>
         </div>
       ) : (
         <h3 style={{
@@ -613,20 +663,20 @@ function ThemePreview({ theme, currency, taxLabel, docPrefix = '' }: {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <tbody>
           <tr style={{ borderBottom: serif ? '1px solid #e7e5e4' : undefined }}>
-            <td style={{ padding: '4px 0' }}>Labour — qualified trade</td>
-            <td style={{ textAlign: 'right' }}>{money(28000)}</td>
+            <td style={{ padding: '4px 0' }}>{line1.description}</td>
+            <td style={{ textAlign: 'right' }}>{money(line1.unitCents)}</td>
           </tr>
           <tr>
-            <td style={{ padding: '4px 0' }}>Materials</td>
-            <td style={{ textAlign: 'right' }}>{money(9250)}</td>
+            <td style={{ padding: '4px 0' }}>{line2.description}</td>
+            <td style={{ textAlign: 'right' }}>{money(line2.unitCents)}</td>
           </tr>
           <tr>
             <td style={{ padding: '4px 0', color: '#57534e' }}>{taxLabel}</td>
-            <td style={{ textAlign: 'right', color: '#57534e' }}>{money(3725)}</td>
+            <td style={{ textAlign: 'right', color: '#57534e' }}>{money(Math.round((line1.unitCents + line2.unitCents) * 0.1))}</td>
           </tr>
-          <tr style={{ borderTop: '2px solid #1c1917', fontWeight: 700, fontSize: band ? '1.2em' : undefined }}>
+          <tr style={{ borderTop: `2px solid ${band ? accent : '#1c1917'}`, fontWeight: 700, fontSize: band ? '1.2em' : undefined }}>
             <td style={{ padding: '6px 0' }}>Total due</td>
-            <td style={{ textAlign: 'right' }}>{money(40975)}</td>
+            <td style={{ textAlign: 'right' }}>{money(Math.round((line1.unitCents + line2.unitCents) * 1.1))}</td>
           </tr>
         </tbody>
       </table>
@@ -634,10 +684,11 @@ function ThemePreview({ theme, currency, taxLabel, docPrefix = '' }: {
   )
 }
 
-function PriceList() {
+function PriceList({ me }: { me?: Me }) {
   const [items, setItems] = useState<PriceItem[] | null>(null)
   const [form, setForm] = useState({ description: '', unit: 'hour', dollars: '' })
   const [config, setConfig] = useState<any>(null)
+  const [accent, setAccent] = useState('#c2410c')
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -646,6 +697,9 @@ function PriceList() {
     try {
       setItems((await api('GET', '/v1/quotes/items')).items)
       setConfig((await api('GET', '/v1/quotes/config')).config)
+      void api('GET', '/v1/presence/config')
+        .then((r) => setAccent(r.config?.accentColor ?? '#c2410c'))
+        .catch(() => {})
     } catch (e) { setError(explain(e)); setItems([]) }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -811,7 +865,9 @@ function PriceList() {
 
             <label className="mt">Theme preview</label>
             <ThemePreview theme={config.invoiceTheme ?? 'classic'} currency={config.currency ?? 'AUD'}
-              taxLabel={config.taxLabel ?? 'Tax'} docPrefix={config.docPrefix ?? ''} />
+              taxLabel={config.taxLabel ?? 'Tax'} docPrefix={config.docPrefix ?? ''}
+              accent={accent} bizName={me?.tenant?.name ?? 'Your Business Name'}
+              items={(items ?? []).filter((i: PriceItem) => i.active).slice(0, 2)} />
             <p className="meta">How the invoice page reads to your customer. The quote page uses the same accent and currency.</p>
 
             <div className="mt"><button disabled={busy}>Save settings</button></div>
@@ -830,11 +886,11 @@ export const quotesDashboard: DashboardModule = {
     { to: '/quotes/invoices', label: 'Invoices' },
     { to: '/quotes/prices', label: 'Price list' },
   ],
-  routes: () => (
+  routes: ({ me }) => (
     <>
       <Route path="/quotes" element={<QuotesList />} />
       <Route path="/quotes/new" element={<NewQuote />} />
-      <Route path="/quotes/prices" element={<PriceList />} />
+      <Route path="/quotes/prices" element={<PriceList me={me} />} />
       <Route path="/quotes/invoices" element={<InvoicesList />} />
       <Route path="/quotes/invoices/:invoiceId" element={<InvoiceDetail />} />
       <Route path="/quotes/:quoteId" element={<QuoteDetail />} />

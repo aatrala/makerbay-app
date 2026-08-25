@@ -11,6 +11,24 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.21.0 - 2026-08-25
+
+> **One Page screen, and invoices that watch your cash** — content, appearance and publishing in a single place beside the live preview; unpaid invoices tell you how overdue they are, in your own colours.
+
+- Changed `presence` Edit page and Style merged into one "Page" screen:
+  Content (photo, words), Appearance (layout, blocks, FAQ, colours,
+  fonts, versions) and Publish (address, domain) as jumpable sections
+  beside the always-visible live preview. Old Style links land in the
+  right place.
+- Added `quotes` Cash-flow at a glance: unpaid invoices show "due in 3d"
+  or "12d overdue" in red, the invoice list gains unpaid/paid/draft tabs
+  and an outstanding total, and an accepted quote offers Create invoice
+  right in its header.
+- Changed `quotes` Documents wear your colours: the bold invoice theme's
+  band uses your accent on the customer page, and the theme preview
+  renders YOUR business name, accent and top price-list lines instead of
+  a stranger's mock.
+
 ## 2.20.0 - 2026-08-25
 
 > **Genie's briefings grow buttons** — the diary and unpaid invoices arrive as cards you can act on, and your page can wear a scan-to-book QR.

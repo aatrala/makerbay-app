@@ -362,6 +362,15 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
   .pg-side .desktop-frame iframe { height: min(72vh, 780px); }
   .pg-side .phone-frame iframe { height: min(68vh, 640px); }
 }
+/* The merged Page screen's section rail + headers (issue 60). */
+.secrail { position: sticky; top: 0; z-index: 15; display: flex; gap: 6px; background: var(--bg, #faf9f7);
+  padding: 8px 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.secrail a { padding: 6px 14px; border-radius: 16px; border: 1px solid var(--line); font-size: 13px;
+  font-weight: 600; color: var(--text, #1c1917); }
+.secrail a:hover { border-color: var(--accent, #c2410c); color: var(--accent, #c2410c); text-decoration: none; }
+.sechead { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted, #78716c);
+  margin: 26px 0 10px; scroll-margin-top: 60px; }
+
 /* Style-picker thumbnails: the layout at a glance. */
 .style-thumb { height: 64px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px;
   background: linear-gradient(var(--accent, #c2410c) 30%, #fff 30%); position: relative; overflow: hidden; }
