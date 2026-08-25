@@ -135,9 +135,14 @@ function RescuePage() {
                 Read by a natural voice, re-recorded whenever you save. Keep it short - the text
                 with your booking link arrives while they listen.
               </p>
-              <label htmlFor="r-notify">Tell me about missed calls at</label>
+              <label htmlFor="r-notify">Email me about missed calls at</label>
               <input id="r-notify" type="email" value={config.notifyEmail}
+                placeholder="you@yourbusiness.com.au"
                 onChange={(e) => setConfig({ ...config, notifyEmail: e.target.value })} />
+              <p className="meta">
+                An email per rescued call: who rang, what the text said, and whether they booked.
+                The caller gets an SMS; this address is for you.
+              </p>
               <div className="mt"><button disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></div>
             </form>
           </div>

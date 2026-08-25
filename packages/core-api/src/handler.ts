@@ -34,6 +34,8 @@ import {
   type ModuleEntitlement,
 } from '@makerbay/core'
 
+import { createTicket, listTickets, replyTicket } from './support'
+
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
 // Module catalog: what can be enabled, and free-plan limits.
@@ -88,6 +90,23 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && enableMatch) return await enableModule(ctx, enableMatch[1])
     if (method === 'GET' && path === '/v1/core/workspace/slug') return await checkSlug(event)
     if (method === 'PATCH' && path === '/v1/core/workspace') return await patchWorkspace(ctx, event)
+    if (method === 'GET' && path === '/v1/core/support/tickets') {
+      const t = await freshTenantId(ctx)
+      return t ? await listTickets(t) : json(404, { error: 'no_tenant' })
+    }
+    if (method === 'POST' && path === '/v1/core/support/tickets') {
+      const t = await freshTenantId(ctx)
+      return t
+        ? await createTicket(t, { userId: ctx.userId, email: ctx.email }, JSON.parse(event.body ?? '{}'))
+        : json(404, { error: 'no_tenant' })
+    }
+    const ticketReply = path.match(/^\/v1\/core\/support\/tickets\/([0-9A-Z]{26})\/reply$/)
+    if (method === 'POST' && ticketReply) {
+      const t = await freshTenantId(ctx)
+      return t
+        ? await replyTicket(t, ticketReply[1], { userId: ctx.userId, email: ctx.email }, JSON.parse(event.body ?? '{}'))
+        : json(404, { error: 'no_tenant' })
+    }
     if (method === 'GET' && path === '/v1/core/workspace/aliases') return await getAliases(ctx)
     if (method === 'POST' && path === '/v1/core/workspace/aliases') return await addAlias(ctx, event)
     const aliasDel = path.match(/^\/v1\/core\/workspace\/aliases\/([a-z0-9-]{3,40})$/)

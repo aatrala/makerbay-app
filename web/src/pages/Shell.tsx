@@ -124,6 +124,7 @@ export default function Shell({ me, modules, stripeMode }: {
                 <NavLink to="/activity">Activity</NavLink>
                 <NavLink to="/usage">Usage</NavLink>
                 <NavLink to="/billing">Billing</NavLink>
+                <NavLink to="/support">Support &amp; feedback</NavLink>
                 <div className="sep" />
                 <button className="linkish" onClick={logout}>Sign out</button>
                 <a className="ver" href="https://makerbay.app/changelog" target="_blank" rel="noopener">

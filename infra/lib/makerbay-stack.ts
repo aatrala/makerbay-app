@@ -65,6 +65,9 @@ export class MakerbayStack extends cdk.Stack {
     })
     // Page-settings snapshots (issue 45): one row per save, newest 20 kept.
     const presenceVersions = table('PresenceVersions', 'tenantId', 'sk')
+    // Support tickets (issue 49): customers write in-app, staff answer in
+    // the console, email carries the notifications both ways.
+    const tickets = table('Tickets', 'tenantId', 'ticketId')
     // Extra public addresses that 301 to the primary slug. Redirect, never
     // serve: two URLs carrying the same page would read as duplicate content
     // to Google and hurt the local SEO the page exists for.
@@ -427,7 +430,16 @@ export class MakerbayStack extends cdk.Stack {
       USER_POOL_ID: userPool.userPoolId,
       USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
     })
-    const coreFn = fn('CoreApiFn', 'packages/core-api/src/handler.ts', tableEnv)
+    const coreFn = fn('CoreApiFn', 'packages/core-api/src/handler.ts', {
+      ...tableEnv,
+      TABLE_TICKETS: tickets.tableName,
+      // Where new-ticket and reply notifications land (the founder's inbox).
+      SUPPORT_EMAIL: 'aatrala@gmail.com',
+      EMAIL_FROM: `hello@${DOMAIN}`,
+      EMAIL_CONFIG_SET: emailConfigSet.configurationSetName,
+    })
+    coreFn.addToRolePolicy(sesSendPolicy)
+    tickets.grantReadWriteData(coreFn)
     const contactsFn = fn('ContactsApiFn', 'modules/contacts/api/src/handler.ts', tableEnv, {
       // A CSV import writes one row at a time; give it room for a real list.
       timeoutSeconds: 29,
@@ -720,6 +732,7 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_SOURCES: sources.tableName,
       TABLE_PRESENCECONFIG: presenceConfig.tableName,
       TABLE_CONVERSATIONS: conversations.tableName,
+      TABLE_TICKETS: tickets.tableName,
       STAFF_POOL_ID: staffPool.userPoolId,
       STAFF_CLIENT_ID: staffClient.userPoolClientId,
     }
@@ -972,6 +985,7 @@ export class MakerbayStack extends cdk.Stack {
       t.grantReadData(adminApiFn)
     }
     grants.grantReadWriteData(adminApiFn)
+    tickets.grantReadWriteData(adminApiFn)
     // Suspend/unsuspend writes the tenant status field - nothing else.
     tenants.grantWriteData(adminApiFn)
     staffDirectory.grantReadData(adminAuthorizerFn)

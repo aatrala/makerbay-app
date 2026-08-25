@@ -1,29 +1,20 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Empty, Notice, Skeleton, when } from '@makerbay/web-kit'
 import { adminApi, explainAdmin, type TenantSummary } from '../api'
 
+/**
+ * The workspace directory doubling as a triage queue: health flags mark what
+ * needs a look, and one omnibox does everything - an email address jumps
+ * straight to its workspace, anything else filters the list. `/` focuses it.
+ */
 export default function Tenants() {
-  const [tenants, setTenants] = useState<TenantSummary[] | null>(null)
+  const [tenants, setTenants] = useState<Array<TenantSummary & { flags?: string[] }> | null>(null)
   const [q, setQ] = useState('')
-  const [email, setEmail] = useState('')
-  const [lookupBusy, setLookupBusy] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
-
-  // Every ticket arrives as an email address; this is the triage front door.
-  const lookup = (e: FormEvent) => {
-    e.preventDefault()
-    if (!email.includes('@') || lookupBusy) return
-    setLookupBusy(true); setError('')
-    void adminApi('GET', `/admin/v1/lookup?email=${encodeURIComponent(email.trim())}`)
-      .then((r) => {
-        if (r.tenant?.tenantId) navigate(`/tenants/${r.tenant.tenantId}`)
-        else setError('That user exists but has no workspace.')
-      })
-      .catch((e) => setError(explainAdmin(e)))
-      .finally(() => setLookupBusy(false))
-  }
+  const box = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     void adminApi('GET', '/admin/v1/tenants')
@@ -31,10 +22,35 @@ export default function Tenants() {
       .catch((e) => { setError(explainAdmin(e)); setTenants([]) })
   }, [])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault()
+        box.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    const needle = q.trim()
+    if (!needle.includes('@') || busy) return
+    setBusy(true); setError('')
+    void adminApi('GET', `/admin/v1/lookup?email=${encodeURIComponent(needle)}`)
+      .then((r) => {
+        if (r.tenant?.tenantId) navigate(`/tenants/${r.tenant.tenantId}`)
+        else setError('That user exists but has no workspace.')
+      })
+      .catch((e) => setError(explainAdmin(e)))
+      .finally(() => setBusy(false))
+  }
+
   const shown = useMemo(() => {
     if (!tenants) return []
     const needle = q.trim().toLowerCase()
-    if (!needle) return tenants
+    if (!needle || needle.includes('@')) return tenants
     return tenants.filter((t) =>
       [t.name, t.slug, t.tenantId, t.plan].some((v) => String(v).toLowerCase().includes(needle)),
     )
@@ -43,30 +59,20 @@ export default function Tenants() {
   return (
     <>
       <h1>Workspaces</h1>
-      <p>Every customer workspace. Open one to see its entitlements and grant access.</p>
+      <p>Every customer workspace. Type to filter — or type an email address and press Enter to jump straight to its workspace.</p>
 
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
       <div className="card">
-        <h2>Find by email</h2>
-        <form onSubmit={lookup}>
+        <form onSubmit={submit}>
           <div className="row">
-            <input className="grow" type="email" placeholder="customer@example.com" value={email}
-              onChange={(e) => setEmail(e.target.value)} aria-label="Customer email" />
-            <button disabled={lookupBusy || !email.includes('@')}>
-              {lookupBusy ? 'Looking…' : 'Open workspace'}
-            </button>
+            <input ref={box} className="grow" value={q}
+              placeholder="Filter by name, slug or id — or an email address ( / to focus )"
+              onChange={(e) => setQ(e.target.value)} aria-label="Find a workspace" />
+            {q.includes('@') && <button disabled={busy}>{busy ? 'Looking…' : 'Open workspace'}</button>}
+            {tenants && !q.includes('@') && <span className="meta">{shown.length} of {tenants.length}</span>}
           </div>
         </form>
-        <p className="meta">Jumps straight to the workspace that email belongs to.</p>
-      </div>
-
-      <div className="card">
-        <div className="row">
-          <input className="grow" placeholder="Search by name, slug or id" value={q}
-            onChange={(e) => setQ(e.target.value)} aria-label="Search workspaces" />
-          {tenants && <span className="meta">{shown.length} of {tenants.length}</span>}
-        </div>
 
         {!tenants ? <div className="mt"><Skeleton rows={5} /></div> : shown.length === 0 ? (
           <Empty title={q ? 'Nothing matches that search' : 'No workspaces yet'}>
@@ -76,20 +82,25 @@ export default function Tenants() {
           <div className="scroll-x mt">
             <table>
               <thead>
-                <tr><th>Workspace</th><th>Plan</th><th>Subscription</th><th>Created</th></tr>
+                <tr><th>Workspace</th><th>Plan</th><th>Subscription</th><th>Health</th><th>Created</th></tr>
               </thead>
               <tbody>
                 {shown.map((t) => (
-                  <tr key={t.tenantId}>
+                  <tr key={t.tenantId} className="rowlink" onClick={() => navigate(`/tenants/${t.tenantId}`)}>
                     <td>
-                      <Link to={`/tenants/${t.tenantId}`}>{t.name}</Link>
+                      <strong>{t.name}</strong>
                       <div className="meta trunc">{t.slug} · {t.tenantId}</div>
                     </td>
-                    <td><span className={`chip ${t.plan === 'pro' ? 'ready' : 'awaiting_upload'}`}>{t.plan}</span></td>
+                    <td><span className={`chip ${t.plan === 'pro' || t.plan === 'genie' ? 'ready' : 'dim'}`}>{t.plan}</span></td>
                     <td>
                       {t.subscriptionStatus === 'none'
                         ? <span className="meta">none</span>
                         : <span className={`chip ${t.subscriptionStatus === 'active' ? 'ready' : 'processing'}`}>{t.subscriptionStatus}</span>}
+                    </td>
+                    <td>
+                      {(t.flags ?? []).length === 0
+                        ? <span className="chip ready">ok</span>
+                        : (t.flags ?? []).map((f) => <span key={f} className="chip warn" style={{ marginRight: 4 }}>{f}</span>)}
                     </td>
                     <td className="nowrap">{when(t.createdAt)}</td>
                   </tr>

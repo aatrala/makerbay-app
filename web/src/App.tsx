@@ -9,6 +9,7 @@ import Billing from './pages/Billing'
 import UsagePage from './pages/UsagePage'
 import WorkspacePage from './pages/WorkspacePage'
 import ActivityPage from './pages/ActivityPage'
+import Support from './pages/Support'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/billing" element={<Billing />} />
         <Route path="/workspace" element={<WorkspacePage me={me} onSaved={() => void reload()} />} />
         <Route path="/activity" element={<ActivityPage />} />
+        <Route path="/support" element={<Support />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

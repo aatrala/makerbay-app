@@ -6,6 +6,8 @@ import Tenants from './pages/Tenants'
 import TenantDetail from './pages/TenantDetail'
 import Email from './pages/Email'
 import Audit from './pages/Audit'
+import Dashboard from './pages/Dashboard'
+import Tickets from './pages/Tickets'
 
 interface Whoami {
   staff: { staffEmail?: string; staffSub: string }
@@ -29,7 +31,7 @@ export default function App() {
   if (!isSignedIn()) return <SignIn onSignedIn={() => { setChecked(false); void load() }} />
 
   return (
-    <div className="shell">
+    <div className="shell staff">
       <aside className="side">
         <div className="side-head">
           <div className="logo">Maker<span>Bay</span></div>
@@ -37,7 +39,9 @@ export default function App() {
         <div className="side-body">
           <nav>
             <div className="navlabel">Staff</div>
-            <Link className={location.pathname === '/' ? 'active' : ''} to="/">Workspaces</Link>
+            <Link className={location.pathname === '/' ? 'active' : ''} to="/">Overview</Link>
+            <Link className={location.pathname.startsWith('/tenants') ? 'active' : ''} to="/tenants">Workspaces</Link>
+            <Link className={location.pathname === '/tickets' ? 'active' : ''} to="/tickets">Tickets</Link>
             <Link className={location.pathname === '/email' ? 'active' : ''} to="/email">Email</Link>
             <Link className={location.pathname === '/audit' ? 'active' : ''} to="/audit">Audit log</Link>
           </nav>
@@ -52,8 +56,10 @@ export default function App() {
       </aside>
       <main className="main">
         <Routes>
-          <Route path="/" element={<Tenants />} />
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/tenants" element={<Tenants />} />
           <Route path="/tenants/:tenantId" element={<TenantDetail />} />
+          <Route path="/tickets" element={<Tickets />} />
           <Route path="/email" element={<Email staffEmail={who?.staff.staffEmail} />} />
           <Route path="/audit" element={<Audit />} />
           <Route path="*" element={<Navigate to="/" replace />} />

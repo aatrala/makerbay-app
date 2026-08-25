@@ -11,6 +11,23 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.17.0 - 2026-08-25
+
+> **Talk to us from where you work** — support and feedback live in your dashboard now: quick answers from the assistant, real tickets with a thread, and replies that reach your inbox too.
+
+- Added `platform` Support & feedback under your account menu: ask the
+  MakerBay assistant for instant how-to answers, or open a ticket
+  (problem, question or idea). You see the whole thread in the dashboard,
+  replies also arrive by email, and your own reply re-opens the
+  conversation. Paid workspaces are answered first.
+- Changed `platform` The staff console grew up: an overview dashboard
+  (signups, subscriptions, open tickets, near-cap workspaces), a tickets
+  queue, health flags on the workspace list, one search box that also
+  understands email addresses, inline confirmations instead of browser
+  popups, usage bars against real limits, an onboarding checklist per
+  workspace, Stripe deep links, audit notes and filters, and its own
+  colour so staff always know which app they are in.
+
 ## 2.16.0 - 2026-08-25
 
 > **Your page, your way** — three page styles, drag-to-arrange blocks, an FAQ in your own words, colours and fonts, real sub-pages on your own domain, and version history that never loses a thing.

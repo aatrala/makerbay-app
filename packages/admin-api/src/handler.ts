@@ -96,6 +96,17 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     const convs = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/conversations$/)
     if (method === 'GET' && convs) return await conversations(staff, convs[1], event)
 
+    if (method === 'GET' && path === '/admin/v1/overview') return await overview()
+    if (method === 'GET' && path === '/admin/v1/tickets') return await listAllTickets()
+    const tk = path.match(/^\/admin\/v1\/tickets\/([A-Z0-9]{26})\/([A-Z0-9]{26})\/(reply|close)$/)
+    if (method === 'POST' && tk) {
+      return tk[3] === 'reply'
+        ? await staffReply(staff, tk[1], tk[2], event)
+        : await closeTicket(staff, tk[1], tk[2])
+    }
+    const note = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/note$/)
+    if (method === 'POST' && note) return await addNote(staff, note[1], event)
+
     return json(404, { error: 'not_found' })
   } catch (err) {
     console.error('admin error', { path, method, err })
@@ -196,15 +207,24 @@ async function audit(
 async function listTenants(): Promise<APIGatewayProxyResultV2> {
   // Small table at this stage; revisit when tenant count makes a scan silly.
   const r = await ddb.send(new ScanCommand({ TableName: process.env.TABLE_TENANTS! }))
-  const tenants = (r.Items ?? []).map((t) => ({
-    tenantId: t.tenantId,
-    name: t.name,
-    slug: t.slug,
-    plan: t.plan,
-    status: t.status,
-    subscriptionStatus: t.subscriptionStatus ?? 'none',
-    createdAt: t.createdAt,
-  }))
+  const tenants = (r.Items ?? []).map((t) => {
+    // Health flags turn the directory into a triage queue - each one is
+    // derivable from the tenant row alone, so the list stays one scan.
+    const flags: string[] = []
+    if (t.status === 'suspended') flags.push('suspended')
+    if (t.stripeCustomerId && !t.lastWebhookAt) flags.push('no webhook events')
+    if (t.stripeAccountId && !t.payoutsEnabled) flags.push('Connect incomplete')
+    return {
+      tenantId: t.tenantId,
+      name: t.name,
+      slug: t.slug,
+      plan: t.plan,
+      status: t.status,
+      subscriptionStatus: t.subscriptionStatus ?? 'none',
+      createdAt: t.createdAt,
+      flags,
+    }
+  })
   tenants.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
   return json(200, { tenants, count: tenants.length })
 }
@@ -325,6 +345,144 @@ async function resetPassword(staff: StaffContext, userId: string, event: Event):
   }
   await audit(staff, 'user.reset_password', '-', { userId, reason })
   return json(200, { reset: userId, note: 'Cognito emailed the user a reset code.' })
+}
+
+/**
+ * The home dashboard: the numbers a solo founder checks between jobs.
+ * Everything comes from tables this Lambda already reads; a scan at this
+ * scale is instant and honest.
+ */
+async function overview(): Promise<APIGatewayProxyResultV2> {
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
+  const [tenantScan, ticketScan, auditMonth] = await Promise.all([
+    ddb.send(new ScanCommand({ TableName: process.env.TABLE_TENANTS! })),
+    ddb.send(new ScanCommand({ TableName: process.env.TABLE_TICKETS! })),
+    ddb.send(new QueryCommand({
+      TableName: process.env.TABLE_ADMINAUDIT!,
+      KeyConditionExpression: 'pk = :p',
+      ExpressionAttributeValues: { ':p': `AUDIT#${new Date().toISOString().slice(0, 7)}` },
+      ScanIndexForward: false,
+      Limit: 20,
+    })),
+  ])
+  const tenants = tenantScan.Items ?? []
+  const ticketRows = ticketScan.Items ?? []
+
+  // Near-cap sweep: usage vs assistant message limits, the cap people hit.
+  const nearCap: Array<{ tenantId: string; name: string; metric: string; used: number; limit: number }> = []
+  const month = new Date().toISOString().slice(0, 7)
+  await Promise.all(tenants.map(async (t) => {
+    try {
+      const usage = await getMonthUsage(String(t.tenantId), month)
+      const ent = await getEffectiveEntitlement(String(t.tenantId), 'assistant')
+      const used = usage['assistant.message'] ?? 0
+      const limit = ent.limits.messagesPerMonth ?? 0
+      if (limit > 0 && used >= limit * 0.8) {
+        nearCap.push({ tenantId: String(t.tenantId), name: String(t.name), metric: 'assistant messages', used, limit })
+      }
+    } catch { /* one bad tenant never hides the dashboard */ }
+  }))
+
+  return json(200, {
+    tenants: tenants.length,
+    signups7d: tenants.filter((t) => String(t.createdAt) >= weekAgo).length,
+    activeSubscriptions: tenants.filter((t) => ['active', 'trialing'].includes(String(t.subscriptionStatus))).length,
+    suspended: tenants.filter((t) => t.status === 'suspended').length,
+    openTickets: ticketRows.filter((t) => t.status !== 'closed').length,
+    priorityTickets: ticketRows.filter((t) => t.status !== 'closed' && t.priority === 'priority').length,
+    nearCap,
+    recentAudit: (auditMonth.Items ?? []).map((e) => ({
+      ts: e.ts, staffEmail: e.staffEmail, action: e.action, targetTenantId: e.targetTenantId,
+    })),
+  })
+}
+
+// ── Tickets (issue 49) ───────────────────────────────────────────────────
+
+async function listAllTickets(): Promise<APIGatewayProxyResultV2> {
+  const r = await ddb.send(new ScanCommand({ TableName: process.env.TABLE_TICKETS! }))
+  const rows = (r.Items ?? []).sort((a, b) => {
+    // Open before answered before closed; priority first inside a status;
+    // then most recently touched.
+    const rank = (t: Record<string, unknown>) =>
+      (t.status === 'open' ? 0 : t.status === 'answered' ? 1 : 2) * 10 +
+      (t.priority === 'priority' ? 0 : 1)
+    return rank(a) - rank(b) || String(b.updatedAt).localeCompare(String(a.updatedAt))
+  })
+  return json(200, { tickets: rows })
+}
+
+async function staffReply(
+  staff: StaffContext,
+  tenantId: string,
+  ticketId: string,
+  event: Event,
+): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const text = String(body.message ?? '').trim().slice(0, 4000)
+  if (text.length < 2) return json(400, { error: 'message_required' })
+
+  const r = await ddb.send(new GetCommand({ TableName: process.env.TABLE_TICKETS!, Key: { tenantId, ticketId } }))
+  const ticket = r.Item
+  if (!ticket) return json(404, { error: 'not_found' })
+
+  const now = new Date().toISOString()
+  const updated = {
+    ...ticket,
+    status: 'answered',
+    messages: [...(ticket.messages as unknown[]), { from: 'staff', text, at: now, by: staff.staffEmail }],
+    updatedAt: now,
+  }
+  await ddb.send(new PutCommand({ TableName: process.env.TABLE_TICKETS!, Item: updated }))
+
+  if (ticket.openedByEmail) {
+    try {
+      await ses.send(new SendEmailCommand({
+        FromEmailAddress: process.env.EMAIL_FROM!,
+        Destination: { ToAddresses: [String(ticket.openedByEmail)] },
+        ConfigurationSetName: process.env.EMAIL_CONFIG_SET,
+        Content: {
+          Simple: {
+            Subject: { Data: `Re: ${ticket.subject}` },
+            Body: {
+              Text: {
+                Data: [
+                  text,
+                  '',
+                  '—',
+                  'MakerBay support. Reply from your dashboard: https://app.makerbay.app/support',
+                ].join('\n'),
+              },
+            },
+          },
+        },
+      }))
+    } catch (err) {
+      console.warn('ticket reply email failed', { ticketId, err: String(err) })
+    }
+  }
+  await audit(staff, 'ticket.replied', tenantId, { ticketId, subject: ticket.subject })
+  return json(200, { ticket: updated })
+}
+
+async function closeTicket(staff: StaffContext, tenantId: string, ticketId: string): Promise<APIGatewayProxyResultV2> {
+  const r = await ddb.send(new GetCommand({ TableName: process.env.TABLE_TICKETS!, Key: { tenantId, ticketId } }))
+  if (!r.Item) return json(404, { error: 'not_found' })
+  await ddb.send(new PutCommand({
+    TableName: process.env.TABLE_TICKETS!,
+    Item: { ...r.Item, status: 'closed', updatedAt: new Date().toISOString() },
+  }))
+  await audit(staff, 'ticket.closed', tenantId, { ticketId, subject: r.Item.subject })
+  return json(200, { closed: ticketId })
+}
+
+/** The runbook's audit-note rule, finally a first-class action. */
+async function addNote(staff: StaffContext, tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
+  const body = JSON.parse(event.body ?? '{}')
+  const text = String(body.text ?? '').trim().slice(0, 1000)
+  if (text.length < 5) return json(400, { error: 'text_required' })
+  await audit(staff, 'note.added', tenantId, { text })
+  return json(201, { noted: true })
 }
 
 /** G8: the staff audit trail, one month per request, newest first. */
