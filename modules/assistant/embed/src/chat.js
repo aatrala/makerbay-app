@@ -147,6 +147,11 @@
         act: function () { askAi('Which areas do you service?') },
       })
     }
+    defs.push({
+      label: 'Leave your details',
+      show: true,
+      act: function () { openHandoffForm() },
+    })
     defs.forEach(function (d) {
       if (!d.show) return
       var b = document.createElement('button')
@@ -157,6 +162,112 @@
       row.appendChild(b)
     })
     if (!row.children.length) row.remove()
+  }
+
+  /**
+   * The handoff form (issue 50): a real person will get back to you. The
+   * fields come from the owner's Requests settings, fetched on first use.
+   */
+  var handoffFields = null
+  function openHandoffForm() {
+    if (handoffFields) return addCard(handoffCard())
+    fetch(API + '/v1/public/requests/config?' + query)
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status) })
+      .then(function (cfg) {
+        handoffFields = cfg.fields || { phone: 'optional', address: 'off', preferredTime: 'off' }
+        addCard(handoffCard())
+      })
+      .catch(function () {
+        handoffFields = { phone: 'optional', address: 'off', preferredTime: 'off' }
+        addCard(handoffCard())
+      })
+  }
+
+  function handoffCard() {
+    var f = handoffFields
+    var wrap = cardShell('Leave your details')
+    var form = document.createElement('form')
+    form.className = 'pform hform'
+
+    function field(label, type, id, required) {
+      var l = document.createElement('label')
+      l.textContent = label + (required ? '' : ' (optional)')
+      l.htmlFor = id
+      var i = document.createElement(type === 'textarea' ? 'textarea' : 'input')
+      if (type !== 'textarea') i.type = type
+      else i.rows = 3
+      i.id = id
+      if (required) i.required = true
+      form.appendChild(l)
+      form.appendChild(i)
+      return i
+    }
+
+    var name = field('Your name', 'text', 'h-name', true)
+    var email = field('Email', 'email', 'h-email', false)
+    var phone = null
+    if (f.phone !== 'off') phone = field('Phone', 'tel', 'h-phone', f.phone === 'required')
+    var address = f.address !== 'off' ? field('Address or suburb', 'text', 'h-address', false) : null
+    var preferred = f.preferredTime !== 'off' ? field('When suits you?', 'text', 'h-when', false) : null
+    var custom = f.custom && f.custom.enabled && f.custom.label
+      ? field(f.custom.label, 'text', 'h-custom', false)
+      : null
+    var message = field('What do you need?', 'textarea', 'h-msg', true)
+
+    var err = document.createElement('div')
+    err.className = 'form-err'
+    form.appendChild(err)
+    var btn = document.createElement('button')
+    btn.type = 'submit'
+    btn.className = 'primary'
+    btn.textContent = 'Send'
+    form.appendChild(btn)
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault()
+      err.textContent = ''
+      if (!email.value.trim() && !(phone && phone.value.trim())) {
+        err.textContent = 'Leave an email or a phone number so we can get back to you.'
+        return
+      }
+      btn.disabled = true
+      var payload = identify({
+        kind: 'handoff',
+        name: name.value.trim(),
+        email: email.value.trim(),
+        phone: phone ? phone.value.trim() : '',
+        message: message.value.trim(),
+        sessionId: sessionId || undefined,
+      })
+      if (address && address.value.trim()) payload.address = address.value.trim()
+      if (preferred && preferred.value.trim()) payload.preferredTime = preferred.value.trim()
+      if (custom && custom.value.trim()) payload.custom = custom.value.trim()
+      fetch(API + '/v1/public/requests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data } }) })
+        .then(function (res) {
+          if (!res.ok) {
+            err.textContent = (res.data && res.data.message) || 'That did not go through - try again.'
+            btn.disabled = false
+            return
+          }
+          form.innerHTML = ''
+          var done = document.createElement('p')
+          done.className = 'about-p'
+          done.textContent = (res.data && res.data.autoReply) || 'Got it - a real person will get back to you.'
+          form.appendChild(done)
+        })
+        .catch(function () {
+          err.textContent = 'That did not go through - try again.'
+          btn.disabled = false
+        })
+    })
+
+    wrap.appendChild(form)
+    return wrap
   }
 
   /** A chip that asks the assistant rather than rendering a local card. */

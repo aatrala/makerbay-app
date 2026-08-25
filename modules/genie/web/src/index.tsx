@@ -2,8 +2,45 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Route } from 'react-router-dom'
 import { api, explain, Notice, type DashboardModule, type Me } from '@makerbay/web-kit'
 
-interface Msg { role: 'user' | 'assistant'; text: string }
+interface Msg { role: 'user' | 'assistant'; text: string; tools?: string[] }
 interface Pending { actionId: string; summary: string }
+
+/**
+ * Markdown-lite for Genie's answers: bold, bullet lists and paragraphs -
+ * enough hierarchy to scan a briefing, small enough to never surprise.
+ * Built with React nodes, so escaping stays automatic.
+ */
+function renderRich(text: string) {
+  const bold = (line: string, key: number) => {
+    const parts = line.split(/\*\*([^*]+)\*\*/g)
+    return (
+      <span key={key}>
+        {parts.map((p, i) => (i % 2 === 1 ? <strong key={i}>{p}</strong> : p))}
+      </span>
+    )
+  }
+  const lines = text.split('\n')
+  const out: JSX.Element[] = []
+  let list: string[] = []
+  const flush = () => {
+    if (!list.length) return
+    out.push(
+      <ul key={out.length} className="grich-list">
+        {list.map((li, i) => <li key={i}>{bold(li, i)}</li>)}
+      </ul>,
+    )
+    list = []
+  }
+  lines.forEach((raw, i) => {
+    const line = raw.trimEnd()
+    const m = /^\s*[-•]\s+(.*)$/.exec(line)
+    if (m) { list.push(m[1]); return }
+    flush()
+    if (line.trim()) out.push(<p key={`p${i}`} className="grich-p">{bold(line, i)}</p>)
+  })
+  flush()
+  return out.length ? out : text
+}
 
 /**
  * Genie: the owner's conversational view of the whole business. Chips are
@@ -46,6 +83,7 @@ function GeniePage({ me }: { me?: Me }) {
   const [error, setError] = useState('')
   const [remaining, setRemaining] = useState<number | null>(null)
   const [pending, setPending] = useState<Pending | null>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -67,7 +105,7 @@ function GeniePage({ me }: { me?: Me }) {
     setBusy(true)
     void api('POST', '/v1/genie/chat', { sessionId: sessionId || undefined, message: q })
       .then((r) => {
-        setMessages((m) => [...m, { role: 'assistant', text: r.text }])
+        setMessages((m) => [...m, { role: 'assistant', text: r.text, tools: r.toolsUsed }])
         setRemaining(r.remaining ?? null)
         setPending(r.pendingAction ?? null)
         if (r.sessionId && r.sessionId !== sessionId) {
@@ -94,30 +132,47 @@ function GeniePage({ me }: { me?: Me }) {
   }
 
   const submit = (e: FormEvent) => { e.preventDefault(); ask(input) }
-  const first = firstChip()
-  const chips = [first, ...moduleChips(me).filter((c) => c.label !== first.label)]
+  const started = messages.length > 0
+
+  // The permanent quick row: the four asks that earn a standing button.
+  // Everything else lives behind + once a conversation has started.
+  const mods = me?.entitlements?.modules ?? {}
+  const quick = [
+    firstChip(),
+    ...(mods.booking ? [{ label: 'Diary', q: 'What is in the diary today and tomorrow?' }] : []),
+    ...(mods.quotes || mods.payments ? [{ label: 'Money', q: 'What money came in recently, and what is still owed?' }] : []),
+    ...(mods.booking ? [{ label: 'Block time', q: 'I want to block out some time in my diary.' }] : []),
+  ].filter((c, i, all) => all.findIndex((x) => x.label === c.label) === i).slice(0, 4)
+  const extra = moduleChips(me).filter((c) => !quick.some((qc) => qc.label === c.label))
 
   return (
     <div className="genie">
-      <h1>Genie</h1>
-      <p>
-        Your whole business, asked out loud. Genie reads your real records — the diary, the
-        inbox, the money, the reviews, the activity trail — and answers with the numbers.
-        <span className="meta"> It can also send quotes and invoices, manage bookings and block out
-        time — every action behind a card only you can confirm.</span>
-      </p>
+      <div className="genie-head">
+        <h1>Genie</h1>
+        {!started && (
+          <p>
+            Your whole business, asked out loud — real records, real numbers, and actions
+            behind a card only you can confirm.
+          </p>
+        )}
+      </div>
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
       <div className="card genie-card">
         <div className="genie-log" ref={logRef}>
-          {messages.length === 0 && !busy && (
+          {!started && !busy && (
             <p className="meta genie-empty">
-              Try a chip below, or ask anything — "who booked this week?", "what did I quote
+              Try a button below, or ask anything — "who booked this week?", "what did I quote
               Sarah?", "what changed yesterday?"
             </p>
           )}
           {messages.map((m, i) => (
-            <div key={i} className={`gmsg ${m.role}`}>{m.text}</div>
+            <div key={i} className={`gmsg ${m.role}`}>
+              {m.role === 'assistant' ? renderRich(m.text) : m.text}
+              {m.role === 'assistant' && (m.tools?.length ?? 0) > 0 && (
+                <div className="gtools">checked: {m.tools!.filter((t) => !t.includes('_')).join(', ') || m.tools!.join(', ')}</div>
+              )}
+            </div>
           ))}
           {pending && !busy && (
             <div className="gaction">
@@ -133,8 +188,20 @@ function GeniePage({ me }: { me?: Me }) {
         </div>
 
         <div className="genie-chips">
-          {chips.map((c) => (
+          {quick.map((c) => (
             <button key={c.label} type="button" className="chip" disabled={busy} onClick={() => ask(c.q)}>
+              {c.label}
+            </button>
+          ))}
+          {extra.length > 0 && (
+            <button type="button" className="chip" disabled={busy} aria-expanded={moreOpen}
+              onClick={() => setMoreOpen(!moreOpen)}>
+              {moreOpen ? '−' : '+'}
+            </button>
+          )}
+          {moreOpen && extra.map((c) => (
+            <button key={c.label} type="button" className="chip" disabled={busy}
+              onClick={() => { setMoreOpen(false); ask(c.q) }}>
               {c.label}
             </button>
           ))}

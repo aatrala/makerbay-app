@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Route } from 'react-router-dom'
 import SharePage from './SharePage'
 import StylePage from './StylePage'
+import PreviewPane from './PreviewPane'
 import QrBlock from './Qr'
 import {
   Notice,
@@ -56,7 +57,6 @@ function PagePage() {
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [previewNonce, setPreviewNonce] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -92,7 +92,7 @@ function PagePage() {
       setIndexing(r.indexing)
       setChecklist(r.checklist ?? [])
       setPreviewNonce((n) => n + 1)
-      setNote('Saved. The live page updates within a few minutes.')
+      setNote('Saved - the preview shows it now. Visitors see it within about 5 minutes.')
     })
   }
 
@@ -129,6 +129,8 @@ function PagePage() {
       {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
+      <div className="pagegrid">
+      <div className="pg-main">
       <AddressCard pageUrl={pageUrl} onChanged={load} />
 
       {indexing && !indexing.ownSite && (
@@ -270,39 +272,17 @@ function PagePage() {
             </form>
           </div>
 
-          <div className="card">
-            <div className="preview-head">
-              <h2>Preview</h2>
-              <div className="preview-controls">
-                <div className="tabs seg">
-                  <button type="button" className={previewMode === 'desktop' ? 'on' : ''}
-                    onClick={() => setPreviewMode('desktop')}>Desktop</button>
-                  <button type="button" className={previewMode === 'mobile' ? 'on' : ''}
-                    onClick={() => setPreviewMode('mobile')}>Phone</button>
-                </div>
-                <button type="button" className="ghost" onClick={() => setPreviewNonce((n) => n + 1)}>Refresh</button>
-                <a className="btn ghost" href={pageUrl} target="_blank" rel="noopener">Open ↗</a>
-              </div>
-            </div>
-            <p className="meta">
-              The real live page, as a visitor sees it. Saves can take a couple of minutes to
-              appear — the page is cached.
-            </p>
-            <div className={`preview-stage${previewMode === 'mobile' ? ' phone' : ''}`}>
-              <div className={previewMode === 'mobile' ? 'phone-frame' : 'desktop-frame'}>
-                <iframe
-                  title="Page preview"
-                  src={`${pageUrl}?preview=${previewNonce}`}
-                />
-              </div>
-            </div>
-          </div>
         </>
       )}
 
       {config && <DomainCard />}
 
       {!config && !error && <div className="card"><Skeleton rows={6} /></div>}
+      </div>
+      <div className="pg-side">
+        <PreviewPane pageUrl={pageUrl} refreshKey={previewNonce} />
+      </div>
+      </div>
     </>
   )
 }

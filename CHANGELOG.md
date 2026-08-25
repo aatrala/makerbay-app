@@ -11,6 +11,30 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.18.0 - 2026-08-25
+
+> **Leads on your terms, a Genie you can scan, and pages you can see** — the contact form asks what you choose, Genie's briefings read like briefings, and every edit shows up beside the form as you work.
+
+- Added `requests` "Leave your details" in the chat widget: a real contact
+  form your visitors can always reach. Choose what it asks for - phone
+  (optional/required/off), address, preferred time, and one question of
+  your own (Trade). Answers land on the request and in your notification.
+- Changed `requests` Lead notifications by plan: Trade workspaces get an
+  email the moment each lead lands; Free workspaces get one summary every
+  morning - a lead never disappears, it just waits for breakfast.
+- Changed `genie` Briefings you can scan: bold names and amounts, real
+  bullet lists, a full-height conversation, four standing quick buttons
+  (Brief me / Diary / Money / Block time) with the rest behind +, and a
+  "checked: bookings, money" line under each answer showing where the
+  numbers came from.
+- Changed `presence` The live preview now sits beside the editor on both
+  the Edit and Style tabs - every save shows up instantly, with honest
+  words about the ~5-minute visitor cache. Style choices show thumbnail
+  previews of each layout.
+- Changed `platform` Staff console: account dropdown with quick links and
+  version, replacing the loose sign-out block. Missed-call settings now
+  say plainly: the caller gets the SMS, the email is for you.
+
 ## 2.17.0 - 2026-08-25
 
 > **Talk to us from where you work** — support and feedback live in your dashboard now: quick answers from the assistant, real tickets with a thread, and replies that reach your inbox too.

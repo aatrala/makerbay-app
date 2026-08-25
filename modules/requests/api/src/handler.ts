@@ -8,6 +8,7 @@ import {
   getTenantBySlug,
   getUser,
   hashApiKey,
+  isPaidWorkspace as isPaidTenant,
   sendEmail,
   ulid,
   upsertContact,
@@ -15,6 +16,7 @@ import {
 } from '@makerbay/core'
 import {
   DEFAULT_REQUESTS_CONFIG,
+  DEFAULT_REQUEST_FIELDS,
   countRequestsThisMonth,
   getRequest,
   getRequestsConfig,
@@ -136,6 +138,7 @@ async function publicRoute(
       handoffEnabled: config.handoffEnabled,
       handoffPrompt: config.handoffPrompt,
       collectPhone: config.collectPhone,
+      fields: config.fields ?? DEFAULT_REQUEST_FIELDS,
     })
   }
 
@@ -182,6 +185,22 @@ async function create(
   }
 
   const kind: RequestKind = KINDS.includes(b.kind as RequestKind) ? (b.kind as RequestKind) : 'handoff'
+
+  const config = await getRequestsConfig(tenantId)
+  const fields = config.fields ?? DEFAULT_REQUEST_FIELDS
+  if (fields.phone === 'required' && !phone) {
+    return json(400, { error: 'phone_required', message: 'Leave a phone number so we can reach you.' })
+  }
+  // Only the configured extras are stored - anything else posted is dropped.
+  const extra: Record<string, string> = {}
+  if (fields.address !== 'off' && b.address) extra.Address = String(b.address).trim().slice(0, 300)
+  if (fields.preferredTime !== 'off' && b.preferredTime) {
+    extra['Preferred time'] = String(b.preferredTime).trim().slice(0, 120)
+  }
+  if (fields.custom?.enabled && fields.custom.label && b.custom) {
+    extra[fields.custom.label.slice(0, 80)] = String(b.custom).trim().slice(0, 500)
+  }
+
   const contact = await upsertContact(tenantId, { name, email, phone, source: 'requests' })
 
   const now = new Date().toISOString()
@@ -205,29 +224,35 @@ async function create(
     message: message.slice(0, 5000),
     sessionId: b.sessionId ? String(b.sessionId) : undefined,
     transcript,
+    extra: Object.keys(extra).length ? extra : undefined,
     source,
     createdAt: now,
     updatedAt: now,
   }
 
-  const config = await getRequestsConfig(tenantId)
   const tenant = await getTenant(tenantId)
-  const notifyTo = config.notifyEmail || (await ownerEmail(tenantId))
-  const notice = await sendEmail({
-    to: notifyTo,
-    replyTo: contact.email,
-    subject: `New ${kind} from ${name || contact.email || contact.phone}`,
-    text: [
-      `${name || 'Someone'} left you a message through ${tenant?.name ?? 'your assistant'}.`,
-      '',
-      row.message,
-      '',
-      `Reply to: ${contact.email ?? contact.phone ?? 'no contact details'}`,
-      '',
-      `Open it: ${APP}/requests/${requestId}`,
-    ].join('\n'),
-  })
-  if (!notice.sent) row.notifyError = notice.error
+  // Instant lead alerts ride the paid tiers; free workspaces get the daily
+  // digest instead (see digest.ts) - a lead never disappears, it just
+  // arrives with the morning coffee rather than the moment it lands.
+  if (await isPaidTenant(tenantId)) {
+    const notifyTo = config.notifyEmail || (await ownerEmail(tenantId))
+    const notice = await sendEmail({
+      to: notifyTo,
+      replyTo: contact.email,
+      subject: `New ${kind} from ${name || contact.email || contact.phone}`,
+      text: [
+        `${name || 'Someone'} left you a message through ${tenant?.name ?? 'your assistant'}.`,
+        '',
+        row.message,
+        ...Object.entries(extra).map(([k, v]) => `${k}: ${v}`),
+        '',
+        `Reply to: ${contact.email ?? contact.phone ?? 'no contact details'}`,
+        '',
+        `Open it: ${APP}/requests/${requestId}`,
+      ].join('\n'),
+    })
+    if (!notice.sent) row.notifyError = notice.error
+  }
 
   await putRequest(row)
   await appendContactEvent(tenantId, contact.contactId, {
@@ -238,7 +263,7 @@ async function create(
   })
 
   await emitUsage({ tenantId, moduleId: 'requests', metric: 'request.created', quantity: 1 })
-  if (notice.sent) {
+  if (!row.notifyError) {
     await emitUsage({ tenantId, moduleId: 'requests', metric: 'notification.sent', quantity: 1 })
   }
 
@@ -350,6 +375,7 @@ async function addReply(
 
 async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const b = body(event)
+  const existing = await getRequestsConfig(tenantId)
   const config = {
     tenantId,
     notifyEmail: String(b.notifyEmail ?? '').trim().slice(0, 200),
@@ -357,7 +383,39 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
     handoffPrompt: String(b.handoffPrompt ?? DEFAULT_REQUESTS_CONFIG.handoffPrompt).slice(0, 300),
     collectPhone: b.collectPhone === true,
     autoReply: String(b.autoReply ?? DEFAULT_REQUESTS_CONFIG.autoReply).slice(0, 300),
+    fields: existing.fields,
   }
+
+  // Customising the form beyond the defaults is Trade (issue 50).
+  if (b.fields !== undefined) {
+    const f = (b.fields ?? {}) as Record<string, unknown>
+    const wanted = {
+      phone: ['optional', 'required', 'off'].includes(String(f.phone)) ? String(f.phone) : 'optional',
+      address: ['optional', 'off'].includes(String(f.address)) ? String(f.address) : 'off',
+      preferredTime: ['optional', 'off'].includes(String(f.preferredTime)) ? String(f.preferredTime) : 'off',
+      ...(f.custom && typeof f.custom === 'object'
+        ? {
+            custom: {
+              label: String((f.custom as Record<string, unknown>).label ?? '').trim().slice(0, 80),
+              enabled: (f.custom as Record<string, unknown>).enabled === true,
+            },
+          }
+        : {}),
+    }
+    const isDefault =
+      wanted.phone === DEFAULT_REQUEST_FIELDS.phone &&
+      wanted.address === DEFAULT_REQUEST_FIELDS.address &&
+      wanted.preferredTime === DEFAULT_REQUEST_FIELDS.preferredTime &&
+      !(wanted as { custom?: { enabled: boolean } }).custom?.enabled
+    if (!isDefault && !(await isPaidTenant(tenantId))) {
+      return json(402, {
+        error: 'plan_required',
+        message: 'Choosing what the form asks for comes with the Trade plan.',
+      })
+    }
+    config.fields = wanted as typeof existing.fields
+  }
+
   await putRequestsConfig(config)
   return json(200, { config })
 }

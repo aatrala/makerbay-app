@@ -179,31 +179,46 @@ to verified addresses until SES production access is granted.
 **Test:** app → account menu → Support & feedback → send a ticket →
 answer it in the console → see the reply appear in the app.
 
-### 50 — Configurable request-form fields + notification gating 💬
-Opinion delivered 2026-08-25 (see discussion message): custom fields on
-Trade; recommend keeping instant lead notifications free OR gating
-instant-vs-daily-digest rather than on/off. **Waiting on your call.**
+### 50 — Configurable request-form fields + notification tiers ✅
+Shipped 2026-08-25 as recommended: "Leave your details" form now LIVE in
+the chat widget (it previously had no surface at all); owner chooses
+phone (optional/required/off), address, preferred time, and one custom
+question - customising is Trade-gated server-side (402 with upgrade
+message on Free); extras stored on the request and in notify emails.
+Notifications: Trade = instant per lead; Free = daily 7am AEST digest
+(new RequestsDigestFn, cron 21:00 UTC) with an upgrade line. Verified
+live: config gating, extras persisted ("What suburb is the job in?" →
+Marrickville on the demo).
+**Test:** Requests → Settings → Form fields; then demo chat → "Leave
+your details".
 
-### 51 — Edit page / Style flow not intuitive 💬
-Consult delivered 2026-08-25: diagnosis (preview buried, Style tab has
-no preview at all, misleading "few minutes" copy - saves ARE instant via
-the cache-busting nonce), three variants (A side-by-side live preview /
-B merged single Page screen / C click-the-page-to-edit), quick wins
-under a day. Recommendation: quick wins now, then Variant A.
-**Waiting on your pick.**
+### 51 — Edit page / Style flow ✅ (quick wins + Variant A)
+Shipped 2026-08-25: shared PreviewPane beside the editor on BOTH Edit
+and Style tabs (sticky on wide screens), save bumps the cache-busting
+nonce so changes show instantly, honest copy ("visitors see it within
+about 5 minutes"), Open ↗ button, layout thumbnails on the style picker.
+Deferred: draft-preview endpoint for unsaved changes (follow-up).
+**Test:** Your page → Style → change anything → the preview beside it
+updates on save.
 
 ### 52 — Missed-calls notify field unexplained ✅
 Now reads "Email me about missed calls at" with a placeholder and a line
 explaining: the caller gets the SMS, this address is for you. Live.
 
-### 53 — Genie conversation cluttered + quick buttons 💬
-Consult delivered 2026-08-25: diagnosis (raw unformatted text walls,
-squeezed log, four competing zones, toolsUsed never shown), variants
-(A clean chat with markdown ~1 day / B structured briefing cards with
-row-level actions ~3-5 days / C command bar), quick-button verdict:
-Brief me / Diary / Money / Block time above the input, contextual
-actions belong on cards. Recommendation: A now, B next.
-**Waiting on your pick.**
+### 53 — Genie conversation cluttered + quick buttons ✅ (Variant A)
+Shipped 2026-08-25: markdown-lite rendering (bold, bullets, paragraphs)
+with the model prompted to use it, full-height conversation, compact
+header with the intro collapsing after the first message, four standing
+quick buttons (Brief me / Diary / Money / Block time) with the rest
+behind +, bubbles capped at a readable width, and a "checked: bookings,
+money" caption under each answer. Variant B (structured briefing cards
+with row-level actions) queued as the follow-up.
+
+### 54 — Admin sidebar + account dropdown ✅
+Shipped 2026-08-25: the staff console's bottom block is now the same
+account dropdown pattern as the customer app - avatar button opening
+quick links (customer app, changelog), sign out and the platform
+version.
 
 ### 48 — Admin OTP without a connected authenticator app ✅
 Nothing needs connecting beforehand - the first sign-in IS the setup:

@@ -237,3 +237,17 @@ export async function getEffectiveEntitlement(
   ])
   return resolveEntitlement(moduleId, grants, Boolean(enabledMap.modules[moduleId]?.enabled))
 }
+
+/**
+ * "Is this a paying workspace" for tier-split behaviour (instant vs digest
+ * notifications, ticket priority): a pro assistant plan or any live grant
+ * counts - a comp is a paying customer in every way that matters here.
+ */
+export async function isPaidWorkspace(tenantId: string): Promise<boolean> {
+  const [ent, grants] = await Promise.all([getEntitlements(tenantId), listGrants(tenantId)])
+  const now = new Date().toISOString()
+  return (
+    ent.modules.assistant?.plan === 'pro' ||
+    grants.some((g) => g.status === 'active' && (!g.expiresAt || g.expiresAt > now))
+  )
+}

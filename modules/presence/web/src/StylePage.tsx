@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Notice, Skeleton, api, explain, when } from '@makerbay/web-kit'
+import PreviewPane from './PreviewPane'
 
 /**
  * The Page style screen (issue 45, docs/spec-page-styles.md). Every option
@@ -46,12 +47,15 @@ export default function StylePage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [drag, setDrag] = useState<number | null>(null)
+  const [pageUrl, setPageUrl] = useState('')
+  const [previewNonce, setPreviewNonce] = useState(0)
 
   const load = useCallback(async () => {
     try {
       const r = await api('GET', '/v1/presence/page')
       setPage(r.page)
       setTier(r.tier ?? 'free')
+      void api('GET', '/v1/presence/config').then((c) => setPageUrl(c.pageUrl ?? '')).catch(() => {})
       if (r.tier !== 'free') {
         void api('GET', '/v1/presence/versions').then((v) => setVersions(v.versions ?? [])).catch(() => {})
       }
@@ -64,7 +68,9 @@ export default function StylePage() {
     setBusy(true); setError(''); setNote('')
     void api('PUT', '/v1/presence/page', partial)
       .then((r) => {
-        setPage(r.page); setNote('Saved. The public page picks it up within a few minutes (it is cached).')
+        setPage(r.page)
+        setPreviewNonce((n) => n + 1)
+        setNote('Saved - the preview shows it now. Visitors see it within about 5 minutes.')
         if (tier !== 'free') void api('GET', '/v1/presence/versions').then((v) => setVersions(v.versions ?? [])).catch(() => {})
       })
       .catch((e) => setError(explain(e)))
@@ -106,6 +112,8 @@ export default function StylePage() {
       {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
 
+      <div className="pagegrid">
+      <div className="pg-main">
       <div className="card">
         <h2>Layout</h2>
         <div className="row" style={{ alignItems: 'stretch', flexWrap: 'wrap' }}>
@@ -121,6 +129,7 @@ export default function StylePage() {
                   background: on ? 'rgba(194,65,12,.06)' : 'transparent',
                   opacity: isLocked ? 0.75 : 1, cursor: 'pointer',
                 }}>
+                <div className={`style-thumb ${s.id}`} aria-hidden="true" />
                 <strong>{s.name}</strong>
                 {on && <span className="chip ready" style={{ marginLeft: 8 }}>current</span>}
                 {s.tier === 'pro' && isLocked && chip('pro')}
@@ -222,6 +231,11 @@ export default function StylePage() {
           ))}
         </div>
       )}
+      </div>
+      <div className="pg-side">
+        <PreviewPane pageUrl={pageUrl} refreshKey={previewNonce} />
+      </div>
+      </div>
     </>
   )
 }

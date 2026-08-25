@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { adminApi, isSignedIn, signOut } from './api'
 import SignIn from './pages/SignIn'
@@ -18,7 +18,18 @@ interface Whoami {
 export default function App() {
   const [who, setWho] = useState<Whoami | null>(null)
   const [checked, setChecked] = useState(!isSignedIn())
+  const [acctOpen, setAcctOpen] = useState(false)
+  const acctRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
+
+  useEffect(() => { setAcctOpen(false) }, [location.pathname])
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (acctRef.current && !acctRef.current.contains(e.target as Node)) setAcctOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
   const load = useCallback(async () => {
     if (!isSignedIn()) { setChecked(true); return }
@@ -47,10 +58,24 @@ export default function App() {
           </nav>
           <div className="spacer" />
           <div className="modebadge staff">STAFF CONSOLE</div>
-          <div className="whoami">
-            <strong>{who?.staff.staffEmail ?? 'Staff'}</strong>
-            <span>platform {who?.platform}</span>
-            <button className="linkish" onClick={signOut}>Sign out</button>
+          <div className="account" ref={acctRef}>
+            {acctOpen && (
+              <div className="acct-pop">
+                <a href="https://app.makerbay.app" target="_blank" rel="noopener">Customer app ↗</a>
+                <a href="https://makerbay.app/changelog" target="_blank" rel="noopener">Changelog ↗</a>
+                <div className="sep" />
+                <button className="linkish" onClick={signOut}>Sign out</button>
+                <span className="ver">platform v{who?.platform}</span>
+              </div>
+            )}
+            <button className="acct-btn" aria-expanded={acctOpen} onClick={() => setAcctOpen(!acctOpen)}>
+              <span className="av">{(who?.staff.staffEmail ?? '?').trim().charAt(0).toUpperCase()}</span>
+              <span className="who">
+                <strong>{who?.staff.staffEmail?.split('@')[0] ?? 'Staff'}</strong>
+                <small>staff · owner</small>
+              </span>
+              <span className="chev">{acctOpen ? '▾' : '▴'}</span>
+            </button>
           </div>
         </div>
       </aside>

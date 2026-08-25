@@ -350,6 +350,29 @@ input.narrow, select.narrow { width: auto; min-width: 96px; flex: none; }
   display: flex; align-items: center; justify-content: center;
 }
 
+/* ── Editor + live preview side by side (issue 51 variant A) ─────────── */
+.pagegrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 18px; }
+@media (min-width: 1100px) {
+  .pagegrid { grid-template-columns: minmax(0, 1fr) minmax(360px, 44%); align-items: start; }
+  .pg-side { position: sticky; top: 12px; }
+  .pg-side .preview-card { margin-bottom: 0; }
+  .pg-side .desktop-frame iframe { height: min(72vh, 780px); }
+  .pg-side .phone-frame iframe { height: min(68vh, 640px); }
+}
+/* Style-picker thumbnails: the layout at a glance. */
+.style-thumb { height: 64px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px;
+  background: linear-gradient(var(--accent, #c2410c) 30%, #fff 30%); position: relative; overflow: hidden; }
+.style-thumb::after { content: ''; position: absolute; left: 8px; right: 8px; }
+.style-thumb.simple::after { top: 28px; height: 5px; border-radius: 2px; background: #f0efed;
+  box-shadow: 0 10px 0 #f0efed, 0 20px 0 #f0efed; }
+.style-thumb.grow::after { top: 28px; height: 9px; border-radius: 3px; background: #f0efed;
+  box-shadow: 0 14px 0 #f0efed; }
+.style-thumb.grow::before { content: 'see all →'; position: absolute; right: 8px; bottom: 4px;
+  font-size: 8px; color: var(--accent, #c2410c); font-weight: 700; }
+.style-thumb.storefront::before { content: ''; position: absolute; top: 6px; left: 8px; right: 40%;
+  height: 6px; border-radius: 2px; background: rgba(255,255,255,.55); }
+.style-thumb.storefront::after { top: 28px; height: 24px; border-radius: 4px; background: #f0efed; }
+
 /* ── Page preview (Your page) ─────────────────────────────────────────── */
 .preview-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -486,7 +509,17 @@ tr.rowlink:hover td { background: rgba(79, 70, 229, .05); }
 .modtabs a.active { color: var(--accent, #c2410c); border-bottom-color: var(--accent, #c2410c); }
 
 /* ── Genie chat ───────────────────────────────────────────────────────── */
-.genie-card { display: flex; flex-direction: column; max-height: calc(100vh - 210px); min-height: 420px; }
+.genie-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.genie-head h1 { margin: 0; }
+.genie-head p { margin: 0; color: var(--muted, #78716c); font-size: 14px; }
+.genie-card { display: flex; flex-direction: column; height: calc(100vh - 130px); min-height: 420px; }
+/* Briefings need hierarchy, not width: keep lines scannable. */
+.gmsg.assistant { max-width: min(68ch, 88%); }
+.grich-p { margin: 0 0 8px; }
+.grich-p:last-child { margin-bottom: 0; }
+.grich-list { margin: 0 0 8px; padding-left: 20px; }
+.grich-list li { margin: 2px 0; }
+.gtools { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted, #78716c); }
 .genie-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 12px; }
 .genie-empty { margin: auto; text-align: center; max-width: 40ch; }
 .gmsg { max-width: 88%; padding: 10px 14px; border-radius: 14px; line-height: 1.55; white-space: pre-wrap; font-size: 15px; }

@@ -271,7 +271,11 @@ function RequestSettings() {
             <label htmlFor="notify">Send notifications to</label>
             <input id="notify" type="email" value={String(config.notifyEmail ?? '')} onChange={set('notifyEmail')}
               placeholder="you@your-business.com" />
-            <p className="meta">Every new request is emailed here.</p>
+            <p className="meta">
+              On the Trade plan, an email the moment each lead lands. On Free, one summary email
+              every morning — a lead never disappears, it just waits for breakfast.{' '}
+              <Link to="/billing">See plans</Link>
+            </p>
 
             <label className="pick">
               <input type="checkbox" checked={config.handoffEnabled !== false}
@@ -291,6 +295,59 @@ function RequestSettings() {
 
             <label htmlFor="auto">What the customer sees after sending</label>
             <input id="auto" value={String(config.autoReply ?? '')} onChange={set('autoReply')} />
+
+            <h2 className="mt">Form fields <span className="chip processing">TRADE</span></h2>
+            <p className="meta">
+              What the "Leave your details" form asks for. Name, contact and message are always
+              there; choose the rest. Ask only for what you will actually use.
+            </p>
+            {(() => {
+              const f = (config.fields ?? { phone: 'optional', address: 'off', preferredTime: 'off' }) as {
+                phone: string; address: string; preferredTime: string; custom?: { label: string; enabled: boolean }
+              }
+              const setF = (patch: Partial<typeof f>) => {
+                setConfig({ ...config, fields: { ...f, ...patch } }); setSaved(false)
+              }
+              return (
+                <>
+                  <div className="row">
+                    <div className="grow">
+                      <label htmlFor="f-phone">Phone</label>
+                      <select id="f-phone" value={f.phone} onChange={(e) => setF({ phone: e.target.value })}>
+                        <option value="optional">Optional</option>
+                        <option value="required">Required</option>
+                        <option value="off">Do not ask</option>
+                      </select>
+                    </div>
+                    <div className="grow">
+                      <label htmlFor="f-addr">Address / suburb</label>
+                      <select id="f-addr" value={f.address} onChange={(e) => setF({ address: e.target.value })}>
+                        <option value="off">Do not ask</option>
+                        <option value="optional">Optional</option>
+                      </select>
+                    </div>
+                    <div className="grow">
+                      <label htmlFor="f-when">Preferred time</label>
+                      <select id="f-when" value={f.preferredTime} onChange={(e) => setF({ preferredTime: e.target.value })}>
+                        <option value="off">Do not ask</option>
+                        <option value="optional">Optional</option>
+                      </select>
+                    </div>
+                  </div>
+                  <label className="pick mt">
+                    <input type="checkbox" checked={f.custom?.enabled === true}
+                      onChange={(e) => setF({ custom: { label: f.custom?.label ?? '', enabled: e.target.checked } })} />
+                    <span>Ask one question of your own</span>
+                  </label>
+                  {f.custom?.enabled && (
+                    <input value={f.custom.label} maxLength={80}
+                      placeholder="e.g. What suburb is the job in?"
+                      onChange={(e) => setF({ custom: { label: e.target.value, enabled: true } })}
+                      aria-label="Your custom question" />
+                  )}
+                </>
+              )
+            })()}
 
             <div className="mt"><button disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button></div>
           </form>

@@ -31,6 +31,8 @@ export interface RequestRow {
   sessionId?: string
   /** The last few turns of the conversation, so the owner has context. */
   transcript?: Array<{ role: string; text: string }>
+  /** Answers to the configured extra form fields (address, time, custom). */
+  extra?: Record<string, string>
   replies?: RequestReply[]
   source: 'widget' | 'hosted' | 'api' | 'rescue'
   /** Set when the owner's notification could not be delivered. */
@@ -38,6 +40,20 @@ export interface RequestRow {
   createdAt: string
   updatedAt: string
   closedAt?: string
+}
+
+export interface RequestFields {
+  phone: 'optional' | 'required' | 'off'
+  address: 'optional' | 'off'
+  preferredTime: 'optional' | 'off'
+  /** One owner-worded extra question (Trade). */
+  custom?: { label: string; enabled: boolean }
+}
+
+export const DEFAULT_REQUEST_FIELDS: RequestFields = {
+  phone: 'optional',
+  address: 'off',
+  preferredTime: 'off',
 }
 
 export interface RequestsConfigRow {
@@ -50,6 +66,8 @@ export interface RequestsConfigRow {
   /** Every extra field costs completions, so this is deliberately short. */
   collectPhone: boolean
   autoReply: string
+  /** What the public form asks for (customising beyond defaults is Trade). */
+  fields?: RequestFields
 }
 
 export const DEFAULT_REQUESTS_CONFIG: Omit<RequestsConfigRow, 'tenantId'> = {

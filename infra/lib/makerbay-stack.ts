@@ -455,6 +455,18 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_REQUESTS: requests.tableName,
       TABLE_REQUESTSCONFIG: requestsConfig.tableName,
     })
+    // The free tier's morning lead summary (issue 50): one run a day at
+    // 21:00 UTC - breakfast on the Australian east coast.
+    const requestsDigestFn = fn('RequestsDigestFn', 'modules/requests/api/src/digest.ts', {
+      ...moduleEnv,
+      TABLE_REQUESTS: requests.tableName,
+      TABLE_REQUESTSCONFIG: requestsConfig.tableName,
+    }, { timeoutSeconds: 120 })
+    new events.Rule(this, 'RequestsDigestRule', {
+      ruleName: 'makerbay-requests-daily-digest',
+      schedule: events.Schedule.cron({ minute: '0', hour: '21' }),
+      targets: [new eventsTargets.LambdaFunction(requestsDigestFn)],
+    })
     const bookingFn = fn('BookingApiFn', 'modules/booking/api/src/handler.ts', {
       ...moduleEnv,
       TABLE_BOOKINGSERVICES: bookingServices.tableName,
@@ -818,6 +830,8 @@ export class MakerbayStack extends cdk.Stack {
       f.addToRolePolicy(sesSendPolicy)
     }
     for (const t of [requests, requestsConfig]) t.grantReadWriteData(requestsFn)
+    for (const t of [requests, requestsConfig, tenants, users, entitlements, grants]) t.grantReadData(requestsDigestFn)
+    requestsDigestFn.addToRolePolicy(sesSendPolicy)
     for (const t of [bookingServices, bookings, bookingConfig]) t.grantReadWriteData(bookingFn)
     for (const t of [priceItems, quotes, quotesConfig, invoices]) t.grantReadWriteData(quotesFn)
 
