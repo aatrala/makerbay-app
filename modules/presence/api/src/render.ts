@@ -10,7 +10,7 @@
  * down together. See docs/analysis-search-visibility.md.
  */
 
-import type { AssistantView, HoursView, PresenceConfigRow, ServiceView } from './db'
+import { DEFAULT_BLOCKS, type AssistantView, type BlockId, type FontPair, type HoursView, type PresenceConfigRow, type ServiceView } from './db'
 
 export interface ReviewView {
   rating: number
@@ -39,6 +39,38 @@ export interface PageInput {
   canonicalUrl?: string
   /** The instant of rendering, passed in so open/closed is testable. */
   now: Date
+  /** Rendering a sub-page (grow/storefront styles) instead of the home page. */
+  sub?: SubPage
+}
+
+export type SubPage = 'services' | 'faq' | 'reviews'
+export const SUB_PAGES: SubPage[] = ['services', 'faq', 'reviews']
+
+/**
+ * Curated font pairings (Genie). Each maps to Google-hosted faces loaded
+ * only when chosen - taste and speed over an endless font menu.
+ */
+const FONT_PAIR_DEFS: Record<Exclude<FontPair, 'system'>, { head: string; body: string; href: string }> = {
+  classic: {
+    head: "'Playfair Display', Georgia, serif",
+    body: "'Lora', Georgia, serif",
+    href: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Lora:wght@400;600&display=swap',
+  },
+  modern: {
+    head: "'Inter', 'Segoe UI', sans-serif",
+    body: "'Inter', 'Segoe UI', sans-serif",
+    href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap',
+  },
+  editorial: {
+    head: "'Fraunces', Georgia, serif",
+    body: "'Source Sans 3', 'Segoe UI', sans-serif",
+    href: 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600&display=swap',
+  },
+  friendly: {
+    head: "'Nunito', 'Segoe UI', sans-serif",
+    body: "'Nunito Sans', 'Segoe UI', sans-serif",
+    href: 'https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&family=Nunito+Sans:wght@400;600&display=swap',
+  },
 }
 
 export const PAGE_ORIGIN = 'https://makerbay.app'
@@ -189,10 +221,28 @@ const THEME_VARS: Record<ThemeStyle, string> = {
     --head-font: inherit; --radius: 16px;`,
 }
 
-const styles = (brand: string, theme: ThemeStyle) => `
-  :root { --brand: ${esc(brand)}; --ok: #15803d; --ok-sub: #dcfce7; ${THEME_VARS[theme]} }
+/** White on a dark button colour, near-black on a light one. */
+const readableOn = (hex: string): string => {
+  const n = parseInt(hex.slice(1), 16)
+  const lum = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)
+  return lum > 186 ? '#1c1917' : '#ffffff'
+}
+
+const styles = (brand: string, theme: ThemeStyle, config: PresenceConfigRow) => {
+  // Palette overrides (Trade) sit after the theme tokens so they win.
+  const p = config.palette ?? {}
+  const overrides = [
+    p.paper ? `--paper: ${esc(p.paper)}; --panel: ${esc(p.paper)};` : '',
+    p.ink ? `--ink: ${esc(p.ink)}; --body: ${esc(p.ink)}cc; --hero-ink: ${esc(p.ink)};` : '',
+    p.button ? `--brand: ${esc(p.button)};` : '',
+  ].join(' ')
+  const buttonColor = p.button ?? brand
+  const fp = config.fontPair && config.fontPair !== 'system' ? FONT_PAIR_DEFS[config.fontPair] : undefined
+  const fonts = fp ? `--head-font: ${fp.head}; --body-font: ${fp.body};` : ''
+  return `
+  :root { --brand: ${esc(brand)}; --brand-fg: ${readableOn(buttonColor)}; --ok: #15803d; --ok-sub: #dcfce7; ${THEME_VARS[theme]} ${overrides} ${fonts} }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  body { font-family: var(--body-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif);
     color: var(--ink); background: var(--paper); line-height: 1.65; font-size: 17px;
     -webkit-font-smoothing: antialiased; }
   .wrap { max-width: 760px; margin: 0 auto; padding: 0 22px; }
@@ -212,7 +262,7 @@ const styles = (brand: string, theme: ThemeStyle) => `
   .chip.closed { background: ${theme === 'bold' ? 'rgba(255,255,255,.12)' : 'var(--panel)'};
     color: ${theme === 'bold' ? '#e4e4e7' : 'var(--body)'}; border: 1px solid ${theme === 'bold' ? 'transparent' : 'var(--line)'}; }
   .cta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
-  .btn { display: inline-block; background: var(--brand); color: #fff; text-decoration: none;
+  .btn { display: inline-block; background: var(--brand); color: var(--brand-fg, #fff); text-decoration: none;
     padding: 13px 26px; border-radius: 10px; font-weight: 650; font-size: 16px;
     box-shadow: 0 4px 14px rgba(0,0,0,.12); }
   .btn.ghost { background: ${theme === 'bold' ? 'rgba(255,255,255,.08)' : 'transparent'};
@@ -256,7 +306,7 @@ const styles = (brand: string, theme: ThemeStyle) => `
   /* In-page chat and booking: a floating layer over the page, so nobody is
      sent away to a different site mid-thought. */
   .mb-fab { position: fixed; right: 18px; bottom: 18px; z-index: 40; border: none; cursor: pointer;
-    background: var(--brand); color: #fff; border-radius: 28px; padding: 14px 22px;
+    background: var(--brand); color: var(--brand-fg, #fff); border-radius: 28px; padding: 14px 22px;
     font: inherit; font-weight: 650; font-size: 15.5px; box-shadow: 0 8px 26px rgba(0,0,0,.25); }
   .mb-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); display: none; }
   .mb-overlay.on { display: block; }
@@ -271,6 +321,24 @@ const styles = (brand: string, theme: ThemeStyle) => `
     .mb-panel { right: 0; bottom: 0; width: 100vw; height: 92vh; border-radius: 16px 16px 0 0; }
   }
 
+  /* Storefront nav and grow-style "see all" links */
+  nav.pages { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 22px; }
+  nav.pages a { padding: 8px 16px; border-radius: 9px; text-decoration: none; font-weight: 650;
+    font-size: 15px; color: var(--hero-ink); opacity: .75; }
+  nav.pages a.on { background: var(--brand); color: var(--brand-fg, #fff); opacity: 1; }
+  h2 .seeall { float: right; font-size: 14.5px; font-weight: 650; color: var(--brand); text-decoration: none; }
+  .crumb { color: var(--muted); font-size: 14px; margin: 24px 0 0; }
+  .crumb a { color: var(--brand); text-decoration: none; font-weight: 600; }
+
+  /* FAQ accordion: native details, works with scripts off */
+  .faq details { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
+    padding: 0; margin-bottom: 10px; }
+  .faq summary { cursor: pointer; font-weight: 650; padding: 14px 18px; list-style: none; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: '+'; float: right; color: var(--brand); font-weight: 700; }
+  .faq details[open] summary::after { content: '\\2212'; }
+  .faq .a { padding: 0 18px 14px; color: var(--body); white-space: pre-wrap; }
+
   /* Small screens: generous tap targets, single column, no horizontal scroll. */
   @media (max-width: 560px) {
     body { font-size: 16px; }
@@ -280,6 +348,7 @@ const styles = (brand: string, theme: ThemeStyle) => `
     .svc-meta { margin-left: 0; text-align: left; }
   }
 `
+}
 
 const cash = (cents: number, currency = 'AUD') => {
   try {
@@ -293,10 +362,9 @@ const cash = (cents: number, currency = 'AUD') => {
 }
 
 export function renderPage(input: PageInput): string {
-  const { config, businessName, slug, services, hours, assistant, hasKnowledge, bookingEnabled } = input
+  const { config, businessName, slug, services, hours, assistant, hasKnowledge, bookingEnabled, sub } = input
   const directive = indexDirective(input)
-  const title = businessName
-  const description = (config.intro.trim() || config.headline || businessName).slice(0, 155)
+  const style = config.pageStyle ?? 'simple'
   const state = hours ? openState(hours, input.now) : undefined
   const theme: ThemeStyle = THEME_STYLES.includes(config.themeStyle as ThemeStyle)
     ? (config.themeStyle as ThemeStyle)
@@ -304,6 +372,22 @@ export function renderPage(input: PageInput): string {
   const brand = /^#[0-9a-fA-F]{6}$/.test(config.accentColor ?? '')
     ? config.accentColor!
     : assistant.brandColor
+
+  // Where sub-pages live: bare paths on a custom domain, /p/{slug}/… on ours.
+  const onCustomDomain = Boolean(input.canonicalUrl && !input.canonicalUrl.includes('/p/'))
+  const basePath = onCustomDomain ? '' : `/p/${slug}`
+  const homeHref = basePath || '/'
+  const subHref = (s: SubPage) => `${basePath}/${s}`
+  const canonicalBase = (input.canonicalUrl ?? `${PAGE_ORIGIN}/p/${slug}`).replace(/\/$/, '')
+  const canonical = sub ? `${canonicalBase}/${sub}` : input.canonicalUrl ?? `${PAGE_ORIGIN}/p/${slug}`
+  const faq = config.faq ?? []
+  const blockOrder = (config.blocks?.length ? config.blocks : DEFAULT_BLOCKS)
+    .filter((b) => b.visible)
+    .map((b) => b.id)
+
+  const SUB_TITLES: Record<SubPage, string> = { services: 'Services & prices', faq: 'FAQ', reviews: 'Reviews' }
+  const title = sub ? `${SUB_TITLES[sub]} — ${businessName}` : businessName
+  const description = (config.intro.trim() || config.headline || businessName).slice(0, 155)
 
   // The page never shows a control that does nothing (spec §3). Each block
   // renders only when the module behind it can actually respond.
@@ -322,11 +406,23 @@ export function renderPage(input: PageInput): string {
     showAssistant ? `<a class="btn ghost" data-overlay="ask" href="${askHref}">Ask a question</a>` : '',
   ].filter(Boolean).join('\n      ')
 
-  const servicesBlock = services.length
-    ? `<section id="services">
-    <h2>Services</h2>
+  // Preview sizes for the grow style: enough to sell, small enough that the
+  // sub-page earns its click.
+  const PREVIEW = { services: 3, faq: 2, reviews: 2 }
+
+  const seeAll = (s: SubPage, total: number) =>
+    `<a class="seeall" href="${subHref(s)}">See all ${total} →</a>`
+
+  const servicesBlockFor = (mode: 'full' | 'preview') => {
+    if (!services.length) return ''
+    const shown = mode === 'preview' && services.length > PREVIEW.services
+      ? services.slice(0, PREVIEW.services)
+      : services
+    const link = shown.length < services.length ? seeAll('services', services.length) : ''
+    return `<section id="services">
+    <h2>Services${link}</h2>
     <ul class="services">
-${services
+${shown
   .map(
     (s) => `      <li>
         <span><span class="svc-name">${esc(s.name)}</span>${s.description ? `<br /><span class="svc-desc">${esc(s.description)}</span>` : ''}</span>
@@ -336,6 +432,36 @@ ${services
   .join('\n')}
     </ul>
   </section>`
+  }
+
+  const faqBlockFor = (mode: 'full' | 'preview') => {
+    if (!faq.length) return ''
+    const shown = mode === 'preview' && faq.length > PREVIEW.faq ? faq.slice(0, PREVIEW.faq) : faq
+    const link = shown.length < faq.length ? seeAll('faq', faq.length) : ''
+    return `<section id="faq" class="faq">
+    <h2>Frequently asked questions${link}</h2>
+${shown
+  .map(
+    (f, i) => `    <details${i === 0 ? ' open' : ''}>
+      <summary>${esc(f.q)}</summary>
+      <div class="a">${esc(f.a)}</div>
+    </details>`,
+  )
+  .join('\n')}
+  </section>`
+  }
+
+  // FAQPage structured data, only on indexable pages with real items.
+  const faqJsonLd = faq.length && directive === 'index'
+    ? `<script type="application/ld+json">${JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faq.map((f) => ({
+          '@type': 'Question',
+          name: f.q,
+          acceptedAnswer: { '@type': 'Answer', text: f.a },
+        })),
+      }).replace(/</g, '\\u003c')}</script>`
     : ''
 
   const today = hours ? zonedParts(input.now, hours.timezone).day : ''
@@ -356,13 +482,18 @@ ${(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const)
   // Visible words only, no review structured data: Google treats review
   // markup about your own business on your own page as self-serving and
   // ignores it at best. The words still persuade the humans who land here.
-  const reviewsBlock = input.reviews && input.reviews.count > 0
-    ? `<section id="reviews">
-    <h2>What customers say</h2>
+  const reviewsBlockFor = (mode: 'full' | 'preview') => {
+    if (!input.reviews || input.reviews.count === 0) return ''
+    const cap = mode === 'preview' ? PREVIEW.reviews : 12
+    const shown = input.reviews.items.slice(0, cap)
+    const link = mode === 'preview' && input.reviews.items.length > PREVIEW.reviews
+      ? seeAll('reviews', input.reviews.count)
+      : ''
+    return `<section id="reviews">
+    <h2>What customers say${link}</h2>
     <p class="rev-sum"><span class="rev-stars">${'★'.repeat(Math.round(input.reviews.average))}</span> ${input.reviews.average.toFixed(1)} from ${input.reviews.count} review${input.reviews.count === 1 ? '' : 's'}</p>
     <div class="rev-grid">
-${input.reviews.items
-  .slice(0, 5)
+${shown
   .map(
     (r) => `    <blockquote class="rev">
       <span class="rev-stars">${'★'.repeat(r.rating)}</span>
@@ -373,7 +504,7 @@ ${input.reviews.items
   .join('\n')}
     </div>
   </section>`
-    : ''
+  }
 
   const contactBits = [
     config.phone ? `<a href="tel:${esc(config.phone)}">${esc(config.phone)}</a>` : '',
@@ -412,6 +543,79 @@ ${showAssistant ? `<button class="mb-fab" id="mb-fab">Ask a question</button>` :
 </script>`
     : ''
 
+  const aboutBlock = config.intro.trim()
+    ? `<section id="about"><h2>About</h2><p class="intro">${esc(config.intro.trim())}</p></section>`
+    : ''
+  const contactBlock = contactBits.length
+    ? `<section class="contact" id="contact"><h2>Contact</h2><p>${contactBits.join(' · ')}</p></section>`
+    : ''
+
+  // Which sub-pages exist for this page (content present + block visible +
+  // a style that has sub-pages at all).
+  const subAvailable = (s: SubPage): boolean => {
+    if (style === 'simple') return false
+    if (!blockOrder.includes(s as BlockId)) return false
+    if (s === 'services') return services.length > 0
+    if (s === 'faq') return faq.length > 0
+    return Boolean(input.reviews && input.reviews.count > 0)
+  }
+  const navPages = SUB_PAGES.filter(subAvailable)
+  const navBlock = style === 'storefront' && navPages.length
+    ? `<nav class="pages">
+      <a href="${homeHref}"${!sub ? ' class="on"' : ''}>Home</a>
+      ${navPages.map((s) => `<a href="${subHref(s)}"${sub === s ? ' class="on"' : ''}>${SUB_TITLES[s]}</a>`).join('\n      ')}
+    </nav>`
+    : ''
+
+  // How each block renders on the HOME page for the chosen style. In
+  // storefront, the big blocks live on their pages and the home page stays
+  // a landing; grow previews them in place.
+  const homeMode: Record<BlockId, string> = {
+    about: aboutBlock,
+    services:
+      style === 'storefront' && subAvailable('services')
+        ? servicesBlockFor('preview')
+        : servicesBlockFor(style === 'grow' ? 'preview' : 'full'),
+    faq:
+      style === 'storefront' && subAvailable('faq')
+        ? ''
+        : faqBlockFor(style === 'grow' ? 'preview' : 'full'),
+    reviews:
+      style === 'storefront' && subAvailable('reviews')
+        ? ''
+        : reviewsBlockFor(style === 'grow' ? 'preview' : 'full'),
+    hours: hoursBlock,
+    contact: contactBlock,
+  }
+
+  const heroFull = `<div class="hero">
+  <div class="wrap hero-inner">
+    ${config.photoKey && !sub ? `<img class="photo" src="${PHOTO_ORIGIN}/${esc(config.photoKey)}" alt="${esc(businessName)}" />` : ''}
+    <h1>${sub ? esc(SUB_TITLES[sub]) : esc(businessName)}</h1>
+    ${!sub && config.headline ? `<p class="headline">${esc(config.headline)}</p>` : ''}
+    ${sub ? `<p class="headline">${esc(businessName)}</p>` : ''}
+    ${!sub ? `<div class="chips">
+      ${state ? `<span class="chip ${state.open ? 'open' : 'closed'}">${esc(state.label)}</span>` : ''}
+      ${config.serviceAreas.slice(0, 6).map((a) => `<span class="chip area">${esc(a)}</span>`).join('\n      ')}
+    </div>
+    <div class="cta">
+      ${cta}
+    </div>` : ''}
+    ${navBlock}
+  </div>
+</div>`
+
+  const body = sub
+    ? `${heroFull}
+<div class="wrap">
+  ${style !== 'storefront' ? `<p class="crumb"><a href="${homeHref}">← ${esc(businessName)}</a></p>` : ''}
+  ${sub === 'services' ? servicesBlockFor('full') : sub === 'faq' ? faqBlockFor('full') : reviewsBlockFor('full')}
+</div>`
+    : `${heroFull}
+<div class="wrap">
+  ${blockOrder.map((id) => homeMode[id]).filter(Boolean).join('\n  ')}
+</div>`
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -420,37 +624,19 @@ ${showAssistant ? `<button class="mb-fab" id="mb-fab">Ask a question</button>` :
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}" />
 ${directive === 'noindex' ? '<meta name="robots" content="noindex, follow" />' : ''}
-<link rel="canonical" href="${esc(input.canonicalUrl ?? `${PAGE_ORIGIN}/p/${slug}`)}" />
+<link rel="canonical" href="${esc(canonical)}" />
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(description)}" />
-<meta property="og:url" content="${esc(input.canonicalUrl ?? `${PAGE_ORIGIN}/p/${slug}`)}" />
+<meta property="og:url" content="${esc(canonical)}" />
 <meta property="og:type" content="website" />
 ${config.photoKey ? `<meta property="og:image" content="${PHOTO_ORIGIN}/${esc(config.photoKey)}" />` : ''}
+${config.fontPair && config.fontPair !== 'system' ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="stylesheet" href="${FONT_PAIR_DEFS[config.fontPair].href}" />` : ''}
 <script type="application/ld+json">${localBusinessJsonLd(input)}</script>
-<style>${styles(brand, theme)}</style>
+${(!sub || sub === 'faq') && blockOrder.includes('faq') ? faqJsonLd : ''}
+<style>${styles(brand, theme, config)}</style>
 </head>
 <body>
-<div class="hero">
-  <div class="wrap hero-inner">
-    ${config.photoKey ? `<img class="photo" src="${PHOTO_ORIGIN}/${esc(config.photoKey)}" alt="${esc(businessName)}" />` : ''}
-    <h1>${esc(businessName)}</h1>
-    ${config.headline ? `<p class="headline">${esc(config.headline)}</p>` : ''}
-    <div class="chips">
-      ${state ? `<span class="chip ${state.open ? 'open' : 'closed'}">${esc(state.label)}</span>` : ''}
-      ${config.serviceAreas.slice(0, 6).map((a) => `<span class="chip area">${esc(a)}</span>`).join('\n      ')}
-    </div>
-    <div class="cta">
-      ${cta}
-    </div>
-  </div>
-</div>
-<div class="wrap">
-  ${config.intro.trim() ? `<section id="about"><h2>About</h2><p class="intro">${esc(config.intro.trim())}</p></section>` : ''}
-  ${servicesBlock}
-  ${reviewsBlock}
-  ${hoursBlock}
-  ${contactBits.length ? `<section class="contact" id="contact"><h2>Contact</h2><p>${contactBits.join(' · ')}</p></section>` : ''}
-</div>
+${body}
 <footer>
   <div class="wrap"><p>Page by <a href="${PAGE_ORIGIN}">MakerBay</a></p></div>
 </footer>
@@ -469,7 +655,7 @@ export function renderNotFound(): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Page not found</title>
 <meta name="robots" content="noindex" />
-<style>${styles('#c2410c', 'fresh')}</style>
+<style>${styles('#c2410c', 'fresh', { tenantId: '', headline: '', intro: '', serviceAreas: [], phone: '', email: '', showBooking: true, showAssistant: true, published: true })}</style>
 </head>
 <body>
 <div class="hero"><div class="wrap">

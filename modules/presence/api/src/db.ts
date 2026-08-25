@@ -33,6 +33,16 @@ export interface PresenceConfigRow {
   accentColor?: string
   /** Page look: one of the named styles in render.ts THEMES. */
   themeStyle?: 'fresh' | 'warm' | 'bold'
+  /** Layout: simple (one page), grow (previews + sub-pages), storefront (nav + sub-pages). */
+  pageStyle?: PageStyle
+  /** Block order and visibility; hero is always first and not listed. */
+  blocks?: PageBlock[]
+  /** Owner-written FAQ items (Trade). */
+  faq?: FaqItem[]
+  /** Palette overrides laid over the theme tokens (Trade). */
+  palette?: { paper?: string; ink?: string; button?: string }
+  /** Curated font pairing (Genie). */
+  fontPair?: FontPair
   /** Presence Pro: the page on the tenant's own domain. See domain.ts. */
   customDomain?: string
   domainCertArn?: string
@@ -42,6 +52,19 @@ export interface PresenceConfigRow {
   distributionDomain?: string
   updatedAt?: string
 }
+
+export type PageStyle = 'simple' | 'grow' | 'storefront'
+export type BlockId = 'about' | 'services' | 'faq' | 'reviews' | 'hours' | 'contact'
+export interface PageBlock { id: BlockId; visible: boolean }
+export interface FaqItem { q: string; a: string }
+export type FontPair = 'system' | 'classic' | 'modern' | 'editorial' | 'friendly'
+
+export const PAGE_STYLES: PageStyle[] = ['simple', 'grow', 'storefront']
+export const BLOCK_IDS: BlockId[] = ['about', 'services', 'faq', 'reviews', 'hours', 'contact']
+export const FONT_PAIRS: FontPair[] = ['system', 'classic', 'modern', 'editorial', 'friendly']
+
+/** Today's page order - what every workspace has until it rearranges. */
+export const DEFAULT_BLOCKS: PageBlock[] = BLOCK_IDS.map((id) => ({ id, visible: true }))
 
 export const DEFAULT_PRESENCE: Omit<PresenceConfigRow, 'tenantId'> = {
   headline: '',

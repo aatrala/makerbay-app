@@ -63,6 +63,8 @@ export class MakerbayStack extends cdk.Stack {
       indexName: 'bySlug',
       partitionKey: { name: 'slug', type: dynamodb.AttributeType.STRING },
     })
+    // Page-settings snapshots (issue 45): one row per save, newest 20 kept.
+    const presenceVersions = table('PresenceVersions', 'tenantId', 'sk')
     // Extra public addresses that 301 to the primary slug. Redirect, never
     // serve: two URLs carrying the same page would read as duplicate content
     // to Google and hurt the local SEO the page exists for.
@@ -509,6 +511,7 @@ export class MakerbayStack extends cdk.Stack {
     const presenceFn = fn('PresenceApiFn', 'modules/presence/api/src/handler.ts', {
       ...tableEnv,
       TABLE_PRESENCECONFIG: presenceConfig.tableName,
+      TABLE_PRESENCEVERSIONS: presenceVersions.tableName,
       TABLE_BOOKINGSERVICES: bookingServices.tableName,
       TABLE_BOOKINGCONFIG: bookingConfig.tableName,
       TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
@@ -879,6 +882,7 @@ export class MakerbayStack extends cdk.Stack {
       targets: [new eventsTargets.LambdaFunction(quotesFn)],
     })
     presenceConfig.grantReadWriteData(presenceFn)
+    presenceVersions.grantReadWriteData(presenceFn)
     visibilityConfig.grantReadWriteData(visibilityFn)
     for (const t of [tenants, users, entitlements, grants]) t.grantReadData(visibilityFn)
     contactEvents.grantReadWriteData(visibilityFn)
@@ -1351,7 +1355,11 @@ function handler(event) {
   var request = event.request
   var parts = request.uri.split('/').filter(function (p) { return p.length > 0 })
   request.uri = '/v1/public/presence'
-  request.querystring = parts.length > 1 ? { slug: { value: parts[1] } } : {}
+  var qs = {}
+  if (parts.length > 1) qs.slug = { value: parts[1] }
+  // Sub-pages (grow/storefront styles): /p/{slug}/faq and friends.
+  if (parts.length > 2) qs.sub = { value: parts[2] }
+  request.querystring = qs
   return request
 }
 `),
@@ -1367,8 +1375,12 @@ function handler(event) {
       code: cloudfront.FunctionCode.fromInline(`
 function handler(event) {
   var request = event.request
+  var parts = request.uri.split('/').filter(function (p) { return p.length > 0 })
   request.uri = '/v1/public/presence'
-  request.querystring = { domain: { value: event.request.headers.host.value } }
+  var qs = { domain: { value: event.request.headers.host.value } }
+  // Sub-pages on a custom domain: yourbusiness.com/faq etc.
+  if (parts.length > 0) qs.sub = { value: parts[0] }
+  request.querystring = qs
   return request
 }
 `),

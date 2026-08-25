@@ -23,7 +23,8 @@ import {
   type PresenceConfigRow,
 } from './db'
 import { deleteDomain, getDomain, putDomain } from './domain'
-import { indexDirective, isComplete, renderNotFound, renderPage } from './render'
+import { listVersions, readPage, restoreVersion, writePage } from './page'
+import { SUB_PAGES, indexDirective, isComplete, renderNotFound, renderPage, type SubPage } from './render'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -61,6 +62,14 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
 
     if (method === 'GET' && path === '/v1/presence/config') return await readConfig(tenantId)
     if (method === 'PUT' && path === '/v1/presence/config') return await writeConfig(tenantId, event)
+    if (method === 'GET' && path === '/v1/presence/page') return await readPage(tenantId)
+    if (method === 'PUT' && path === '/v1/presence/page') {
+      return await writePage(tenantId, body(event), actorOf(event))
+    }
+    if (method === 'GET' && path === '/v1/presence/versions') return await listVersions(tenantId)
+    if (method === 'POST' && path === '/v1/presence/versions/restore') {
+      return await restoreVersion(tenantId, body(event), actorOf(event))
+    }
     if (method === 'POST' && path === '/v1/presence/photo') return await photoUpload(tenantId, event)
     if (method === 'POST' && path === '/v1/presence/photo/confirm') return await photoConfirm(tenantId, event)
 
@@ -87,6 +96,12 @@ async function resolveTenantId(ctx: CallerContext): Promise<string> {
 async function publicRoute(method: string, event: Event): Promise<APIGatewayProxyResultV2> {
   if (method !== 'GET') return json(404, { error: 'not_found' })
 
+  // Sub-page segment (grow/storefront styles): /p/{slug}/faq, or /faq on a
+  // custom domain. Anything unrecognised is a plain 404.
+  const rawSub = String(event.queryStringParameters?.sub ?? '').trim().toLowerCase()
+  const sub = SUB_PAGES.includes(rawSub as SubPage) ? (rawSub as SubPage) : undefined
+  if (rawSub && !sub) return html(404, renderNotFound())
+
   // A custom-domain distribution identifies the tenant by host, not slug.
   const domain = String(event.queryStringParameters?.domain ?? '').trim().toLowerCase()
   if (domain) {
@@ -96,7 +111,10 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
     }
     const tenant = await getTenant(config.tenantId)
     if (!tenant) return html(404, renderNotFound())
-    return await renderFor(tenant, config, `https://${domain}/`)
+    if (sub && (config.pageStyle ?? 'simple') === 'simple') {
+      return redirect(`https://${domain}/`)
+    }
+    return await renderFor(tenant, config, `https://${domain}/`, sub)
   }
 
   const slug = String(event.queryStringParameters?.slug ?? '').trim()
@@ -128,17 +146,30 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
   // Google is a liability the owner cannot easily undo (spec §7).
   if (!config.published) return html(404, renderNotFound())
 
+  // On the simple style, sub-page URLs go home rather than 404 - a link
+  // shared while the page was on Grow keeps working after a downgrade.
+  if (sub && (config.pageStyle ?? 'simple') === 'simple') {
+    return redirect(`https://makerbay.app/p/${tenant.slug}`)
+  }
+
   // An active custom domain is the canonical home; the free page points at it.
   const canonical = config.domainStatus === 'active' && config.customDomain
     ? `https://${config.customDomain}/`
     : undefined
-  return await renderFor(tenant, config, canonical)
+  return await renderFor(tenant, config, canonical, sub)
 }
+
+const redirect = (location: string): APIGatewayProxyResultV2 => ({
+  statusCode: 301,
+  headers: { location, 'cache-control': 'public, max-age=300' },
+  body: '',
+})
 
 async function renderFor(
   tenant: { tenantId: string; name: string; slug: string },
   config: PresenceConfigRow,
   canonicalUrl?: string,
+  sub?: SubPage,
 ): Promise<APIGatewayProxyResultV2> {
   const [services, hours, assistant, assistantEnt, bookingEnt, reviewsEnt, currency] = await Promise.all([
     activeServices(tenant.tenantId),
@@ -171,6 +202,7 @@ async function renderFor(
     currency,
     canonicalUrl,
     now: new Date(),
+    sub,
   })
   return html(200, page)
 }
@@ -225,6 +257,11 @@ async function readConfig(tenantId: string): Promise<APIGatewayProxyResultV2> {
       ownSite: Boolean(config.websiteUrl?.trim()),
     },
   })
+}
+
+const actorOf = (event: Event): { userId?: string; email?: string } => {
+  const ctx = event.requestContext.authorizer.lambda
+  return { userId: ctx.userId, email: ctx.email }
 }
 
 const body = (event: Event): Record<string, unknown> => {

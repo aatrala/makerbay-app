@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Route } from 'react-router-dom'
 import SharePage from './SharePage'
+import StylePage from './StylePage'
 import QrBlock from './Qr'
 import {
   Notice,
@@ -622,11 +623,13 @@ export const presenceDashboard: DashboardModule = {
   label: 'Your page',
   nav: [
     { to: '/page', label: 'Edit page' },
+    { to: '/page/style', label: 'Style' },
     { to: '/page/share', label: 'Share' },
   ],
   routes: ({ me }) => (
     <>
       <Route path="/page" element={<PagePage />} />
+      <Route path="/page/style" element={<StylePage />} />
       <Route path="/page/share" element={<SharePage me={me} />} />
     </>
   ),

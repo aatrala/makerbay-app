@@ -142,11 +142,28 @@ any accent a business chooses stays readable.
 "Book a time" button inside the card is white-on-red. (Hard-refresh if
 your browser cached the old stylesheet.)
 
-### 45 — Page structure: help/FAQ sub-pages, products, draggable components 💬
-Design discussion open. Three variants delivered (A one-page / B hub &
-sub-pages / C hybrid, recommended) - see the mockups sent 2026-08-25 and
-the discussion message. Premium packaging, versioning and FAQ content
-model proposed. **Waiting on your variant pick + answers before spec.**
+### 45 — Page styles, blocks, FAQ, sub-pages, theming ✅ (v1)
+Approved ladder shipped (docs/spec-page-styles.md): three styles (Simple
+free / Grow + Storefront on Trade), drag-to-reorder + show/hide blocks,
+owner-written FAQ with FAQPage structured data, real sub-pages
+(/p/slug/faq and yourdomain.com/faq - both verified live on the demo),
+palette on Trade, five curated font pairs on Genie, version history
+(newest 20, restore never loses anything). New "Style" tab under Your
+page. Not in v1 (parked): per-service pages, gallery block, Genie-written
+page copy.
+**Test:** Your page → Style → pick Grow, add an FAQ → open your page →
+"See all →" → /faq sub-page.
+
+### 48b — Admin console professional UI + feature consult 💬
+Consult delivered 2026-08-25 (see discussion message): 8 polish items
+(incl. two real defects: unstyled STAFF badge, window.prompt dialogs) and
+7 ranked features led by a home dashboard, tenant health flags, Stripe
+deep links, onboarding funnel. **Waiting on your picks.**
+
+### 49 — Customer service / feedback / tickets 💬
+Three variants delivered 2026-08-25 (in-app tickets / assistant-first
+support / email-only). Recommendation: in-app tickets + assistant front
+end as phase 2. **Waiting on your pick.**
 
 ### 48 — Admin OTP without a connected authenticator app ✅
 Nothing needs connecting beforehand - the first sign-in IS the setup:

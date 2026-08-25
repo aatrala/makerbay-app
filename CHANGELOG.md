@@ -11,6 +11,25 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.16.0 - 2026-08-25
+
+> **Your page, your way** — three page styles, drag-to-arrange blocks, an FAQ in your own words, colours and fonts, real sub-pages on your own domain, and version history that never loses a thing.
+
+- Added `presence` Page styles: Simple (one page, free), and on Trade -
+  Grow (blocks preview and expand into real sub-pages as content grows)
+  and Storefront (a small site with Home / Services / FAQ / Reviews
+  navigation). Sub-pages are real URLs on makerbay.app and on your custom
+  domain, each with its own Google listing data.
+- Added `presence` Blocks: drag to reorder and show/hide every section of
+  your page (reordering with Trade). An owner-written FAQ (Trade) renders
+  as an accordion and its own /faq page with FAQ structured data.
+- Added `presence` Colours (Trade): background, text and button colours
+  laid over your theme - buttons pick readable text automatically. Fonts
+  (Genie): five curated pairings, loaded only when chosen.
+- Added `presence` Version history (Trade): every save is kept (newest
+  20) and restoring is one click - the restore itself becomes the newest
+  version, so nothing is ever lost.
+
 ## 2.15.0 - 2026-08-25
 
 > **The support console grows its second layer** — suppression lookups, a read-only conversation viewer, the staff audit log on screen, and scripted privacy export/delete.
