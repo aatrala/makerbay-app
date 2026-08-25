@@ -66,6 +66,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'PUT' && path === '/v1/presence/page') {
       return await writePage(tenantId, body(event), actorOf(event))
     }
+    if (method === 'POST' && path === '/v1/presence/preview') return await previewDraft(tenantId, body(event))
     if (method === 'GET' && path === '/v1/presence/versions') return await listVersions(tenantId)
     if (method === 'POST' && path === '/v1/presence/versions/restore') {
       return await restoreVersion(tenantId, body(event), actorOf(event))
@@ -157,6 +158,40 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
     ? `https://${config.customDomain}/`
     : undefined
   return await renderFor(tenant, config, canonical, sub)
+}
+
+/**
+ * Unsaved-changes preview (issue 51 follow-up): render the page as it WOULD
+ * look with the posted draft laid over the saved config. Nothing is stored;
+ * the renderer escapes everything, so a draft can't smuggle markup.
+ */
+async function previewDraft(tenantId: string, b: Record<string, unknown>): Promise<APIGatewayProxyResultV2> {
+  const tenant = await getTenant(tenantId)
+  if (!tenant) return json(404, { error: 'no_tenant' })
+  const saved = await getPresenceConfig(tenantId)
+
+  const draft: PresenceConfigRow = {
+    ...saved,
+    headline: b.headline === undefined ? saved.headline : String(b.headline).slice(0, 120),
+    intro: b.intro === undefined ? saved.intro : String(b.intro).slice(0, 2000),
+    serviceAreas: Array.isArray(b.serviceAreas)
+      ? (b.serviceAreas as unknown[]).map(String).map((x) => x.trim()).filter(Boolean).slice(0, 20)
+      : saved.serviceAreas,
+    phone: b.phone === undefined ? saved.phone : String(b.phone).slice(0, 30),
+    email: b.email === undefined ? saved.email : String(b.email).slice(0, 200),
+    accentColor: b.accentColor !== undefined && /^#[0-9a-fA-F]{6}$/.test(String(b.accentColor))
+      ? String(b.accentColor)
+      : saved.accentColor,
+    themeStyle: (['fresh', 'warm', 'bold'] as const).find((t) => t === b.themeStyle) ?? saved.themeStyle,
+    showBooking: b.showBooking === undefined ? saved.showBooking : b.showBooking === true,
+    showAssistant: b.showAssistant === undefined ? saved.showAssistant : b.showAssistant === true,
+    showQr: b.showQr === undefined ? saved.showQr : b.showQr === true,
+    published: true,
+  }
+  const draftName = b.businessName !== undefined && String(b.businessName).trim().length >= 2
+    ? String(b.businessName).trim().slice(0, 80)
+    : tenant.name
+  return await renderFor({ ...tenant, name: draftName }, draft, undefined)
 }
 
 const redirect = (location: string): APIGatewayProxyResultV2 => ({

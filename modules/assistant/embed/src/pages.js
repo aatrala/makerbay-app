@@ -278,7 +278,7 @@
       var business = res.data.business || ''
       document.title = 'Quote ' + (q.label || '#' + q.number) + ' — ' + business
       app.className = ''
-      var foot = '</div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
+      var foot = (res.data.footer ? '<p class="doc-footer">' + esc(res.data.footer) + '</p>' : '') + '</div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
 
       var lines = q.lines.map(function (l) {
         return '<tr><td>' + esc(l.description) +
@@ -324,8 +324,11 @@
           '<p class="form-err" id="f-err"></p>'
       }
 
+      var qLogo = res.data.logoUrl
+        ? '<img class="doc-logo" src="' + esc(res.data.logoUrl) + '" alt="" />'
+        : ''
       app.innerHTML =
-        '<header><div class="name">' + esc(business) + '</div></header>' +
+        '<header>' + qLogo + '<div class="name">' + esc(business) + '</div></header>' +
         '<div class="page-body">' +
         '<h2 class="q-title">Quote ' + esc(q.label || '#' + q.number) + (q.customerName ? ' for ' + esc(q.customerName) : '') + '</h2>' +
         '<table class="q-lines"><tbody>' + lines + '</tbody>' +
@@ -520,8 +523,11 @@
           ? '<div class="i-band"><h2>' + esc(inv.label) + '</h2><p>' + esc(business) + '</p></div>'
           : '<h2>' + esc(inv.label) + '</h2>'
 
+        var iLogo = res.data.logoUrl
+          ? '<img class="doc-logo" src="' + esc(res.data.logoUrl) + '" alt="" />'
+          : ''
         app.innerHTML =
-          '<header><div class="name">' + esc(business) + '</div></header>' +
+          '<header>' + iLogo + '<div class="name">' + esc(business) + '</div></header>' +
           '<div class="page-body"><div class="inv">' +
           heading +
           '<div class="i-meta">' +
@@ -545,6 +551,7 @@
             : '') +
           (inv.paymentInstructions && !inv.paidAt ? '<div class="i-pay">' + esc(inv.paymentInstructions) + '</div>' : '') +
           '<p class="i-print"><button class="ghost" id="print">Print or save as PDF</button></p>' +
+          (res.data.footer ? '<p class="doc-footer">' + esc(res.data.footer) + '</p>' : '') +
           '</div></div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
 
         if (params.get('paid') === 'pending' && !inv.paidAt) {

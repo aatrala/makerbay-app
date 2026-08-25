@@ -68,6 +68,10 @@ export interface QuotesConfigRow {
   nextNumber: number
   /** Optional tag in front of every document number: SP → SP-Q-001. */
   docPrefix?: string
+  /** Identity line under every document: ABN, licence number, whatever compliance asks for. */
+  docFooter?: string
+  /** Business photo as the document logo (defaults on when a photo exists). */
+  showLogoOnDocs?: boolean
 }
 
 export const DEFAULT_QUOTES_CONFIG: Omit<QuotesConfigRow, 'tenantId'> = {

@@ -137,9 +137,128 @@ export function HelpCentrePage({ me }: { me: Me }) {
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
       {saved && <Notice tone="ok" onClose={() => setSaved(false)}>Saved.</Notice>}
       {!config ? <div className="card"><Skeleton rows={5} /></div> : (
-        <HelpCentre config={config} me={me} set={set} toggle={toggle} save={save} busy={busy} />
+        <>
+          <HelpCentre config={config} me={me} set={set} toggle={toggle} save={save} busy={busy} />
+          <ArticlesCard helpEnabled={config.helpEnabled === true} slug={me.tenant?.slug ?? ''} />
+        </>
       )}
     </>
+  )
+}
+
+interface ArticleSource {
+  sourceId: string
+  name: string
+  status: string
+  published?: boolean
+  helpMeta?: { title: string; description: string; category: string }
+}
+
+/**
+ * The articles themselves, right where the owner looks for them (issue 64
+ * day 1). The old flow hid publishing on the Knowledge page, so a centre
+ * full of ready sources sat empty and nothing here said why.
+ */
+function ArticlesCard({ helpEnabled, slug }: { helpEnabled: boolean; slug: string }) {
+  const [sources, setSources] = useState<ArticleSource[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    try { setSources((await api('GET', '/v1/assistant/sources')).sources ?? []) }
+    catch (e) { setError(explain(e)); setSources([]) }
+  }
+  useEffect(() => { void load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!sources) return <div className="card"><Skeleton rows={4} /></div>
+
+  const published = sources.filter((s) => s.published && s.status === 'ready')
+  const ready = sources.filter((s) => !s.published && s.status === 'ready')
+
+  const setPublished = async (id: string, published: boolean) => {
+    setBusy(true); setError('')
+    try {
+      await api('POST', `/v1/assistant/sources/${id}/publish`, { published })
+      await load()
+    } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+  }
+
+  const setAll = async (list: ArticleSource[], published: boolean) => {
+    setBusy(true); setError('')
+    const verb = published ? 'Publishing' : 'Unpublishing'
+    try {
+      for (let i = 0; i < list.length; i++) {
+        setProgress(`${verb} ${i + 1} of ${list.length}…`)
+        await api('POST', `/v1/assistant/sources/${list[i].sourceId}/publish`, { published })
+      }
+      await load()
+    } catch (e) { setError(explain(e)) } finally { setBusy(false); setProgress('') }
+  }
+
+  return (
+    <div className="card">
+      <h2>Articles</h2>
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {helpEnabled && published.length === 0 && ready.length > 0 && (
+        <Notice tone="warn">
+          <strong>Your help centre is live but empty</strong> — none of your {ready.length} ready
+          sources are published. Publishing writes each one a customer-facing title and category.
+        </Notice>
+      )}
+
+      {published.length > 0 && (
+        <>
+          <div className="row baseline">
+            <p className="meta grow">Live in your help centre ({published.length}):</p>
+            {published.length > 1 && (
+              <button className="ghost" disabled={busy} onClick={() => void setAll(published, false)}>
+                {progress || 'Unpublish all'}
+              </button>
+            )}
+          </div>
+          {published.map((s) => (
+            <div key={s.sourceId} className="row" style={{ borderTop: '1px solid var(--line)', padding: '8px 0' }}>
+              <span className="grow">
+                <strong>{s.helpMeta?.title ?? s.name}</strong>
+                <span className="meta"> · {s.helpMeta?.category ?? 'General'}</span>
+              </span>
+              <button className="ghost" disabled={busy} onClick={() => void setPublished(s.sourceId, false)}>Unpublish</button>
+            </div>
+          ))}
+        </>
+      )}
+
+      {ready.length > 0 && (
+        <>
+          <div className="row mt baseline">
+            <p className="meta grow">Ready to publish ({ready.length}):</p>
+            {ready.length > 1 && (
+              <button className="ghost" disabled={busy} onClick={() => void setAll(ready, true)}>
+                {progress || 'Publish all'}
+              </button>
+            )}
+          </div>
+          {ready.map((s) => (
+            <div key={s.sourceId} className="row" style={{ borderTop: '1px solid var(--line)', padding: '8px 0' }}>
+              <span className="grow trunc">{s.name}</span>
+              <button disabled={busy} onClick={() => void setPublished(s.sourceId, true)}>Publish</button>
+            </div>
+          ))}
+        </>
+      )}
+
+      {published.length === 0 && ready.length === 0 && (
+        <p className="meta">
+          Nothing to publish yet — add documents under Knowledge and they will appear here once
+          processed.
+        </p>
+      )}
+      <p className="meta mt">
+        Fine-tune an article's title, description or category from{' '}
+        <Link to="/assistant/knowledge">Knowledge</Link> → Article.
+      </p>
+    </div>
   )
 }
 

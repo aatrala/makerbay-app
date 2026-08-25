@@ -93,20 +93,44 @@ const STATUS_CHIP: Record<string, string> = {
 
 function QuotesList() {
   const [quotes, setQuotes] = useState<Quote[] | null>(null)
+  const [all, setAll] = useState<Quote[]>([])
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
-    try { setQuotes((await api('GET', `/v1/quotes${status ? `?status=${status}` : ''}`)).quotes) }
+    try {
+      const r = await api('GET', `/v1/quotes${status ? `?status=${status}` : ''}`)
+      setQuotes(r.quotes)
+      if (!status) setAll(r.quotes ?? [])
+      else void api('GET', '/v1/quotes').then((x) => setAll(x.quotes ?? [])).catch(() => {})
+    }
     catch (e) { setError(explain(e)); setQuotes([]) }
   }, [status])
   useEffect(() => { void load() }, [load])
+
+  // The pipeline in one line: how much is waiting on an answer, how much
+  // is won but not yet invoiced (issue 61).
+  const strip = (['sent', 'accepted'] as const).map((st) => {
+    const rows = all.filter((q) => q.status === st)
+    return { st, n: rows.length, cents: rows.reduce((sum, q) => sum + q.totalCents, 0), currency: rows[0]?.currency }
+  }).filter((x) => x.n > 0)
 
   return (
     <>
       <h1>Quotes</h1>
       <p>Price a job, send a link, get an answer. No PDFs, no accounting software.</p>
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      {strip.length > 0 && (
+        <div className="statrow" style={{ marginBottom: 10 }}>
+          {strip.map((x) => (
+            <div className="stat" key={x.st}>
+              <b>{cash(x.cents, x.currency)}</b>
+              <span>{x.st === 'sent' ? `awaiting answer (${x.n})` : `accepted, to invoice (${x.n})`}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="tabs">
         {['', 'draft', 'sent', 'accepted', 'declined'].map((s) => (
@@ -827,6 +851,16 @@ function PriceList({ me }: { me?: Me }) {
                 </p>
               </div>
             </div>
+            <label htmlFor="q-footer">Identity line on every document</label>
+            <input id="q-footer" maxLength={200} value={config.docFooter ?? ''}
+              placeholder="ABN 12 345 678 901 · Plumbing licence PL12345"
+              onChange={(e) => setConfig({ ...config, docFooter: e.target.value })} />
+            <p className="meta">ABN, licence number - whatever compliance asks for. Shown at the foot of quotes and invoices.</p>
+            <label className="pick">
+              <input type="checkbox" checked={config.showLogoOnDocs !== false}
+                onChange={(e) => setConfig({ ...config, showLogoOnDocs: e.target.checked })} />
+              <span>Show your page photo as the logo on quotes and invoices</span>
+            </label>
             <label htmlFor="terms">Terms shown on every quote</label>
             <textarea id="terms" rows={2} value={config.terms}
               onChange={(e) => setConfig({ ...config, terms: e.target.value })} />

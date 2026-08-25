@@ -483,6 +483,8 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_QUOTES: quotes.tableName,
       TABLE_QUOTESCONFIG: quotesConfig.tableName,
       TABLE_INVOICES: invoices.tableName,
+      // The business photo doubles as the document logo (issue 61b).
+      TABLE_PRESENCECONFIG: presenceConfig.tableName,
     })
     const reviewsFn = fn('ReviewsApiFn', 'modules/reviews/api/src/handler.ts', {
       ...moduleEnv,
@@ -834,6 +836,8 @@ export class MakerbayStack extends cdk.Stack {
     requestsDigestFn.addToRolePolicy(sesSendPolicy)
     for (const t of [bookingServices, bookings, bookingConfig]) t.grantReadWriteData(bookingFn)
     for (const t of [priceItems, quotes, quotesConfig, invoices]) t.grantReadWriteData(quotesFn)
+    // The business photo doubles as the document logo (issue 61b).
+    presenceConfig.grantReadData(quotesFn)
 
     // Reviews: its own tables, Contacts, and the Get found config (read) for
     // the Google link and the fallback ask.

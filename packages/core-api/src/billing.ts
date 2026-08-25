@@ -292,8 +292,12 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
   // for now - it is new, and nobody should prepay a year of it.
   let lineItems: Array<{ price: string; quantity?: number }>
   if (wantGenie) {
+    // Base price only, so checkout reads "Subscribe to MakerBay Genie" with
+    // no "and 1 more" (issue 56 follow-up). geniePrices still ensures the
+    // metered price exists; the webhook attaches it to the subscription the
+    // moment it is created, so usage metering is never missed.
     const genie = await geniePrices(stripe)
-    lineItems = [{ price: genie.base.id, quantity: 1 }, { price: genie.metered.id }]
+    lineItems = [{ price: genie.base.id, quantity: 1 }]
   } else if (interval === 'year') {
     lineItems = [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
   } else {

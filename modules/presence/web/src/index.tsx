@@ -61,7 +61,35 @@ function PagePage({ me }: { me: Me }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [previewNonce, setPreviewNonce] = useState(0)
+  const [draftHtml, setDraftHtml] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Live draft preview (issue 51 follow-up): as the form changes, render the
+  // WOULD-BE page server-side, debounced so typing stays smooth.
+  const draftTimer = useRef<number | undefined>(undefined)
+  const dirtyRef = useRef(false)
+  useEffect(() => {
+    if (!config || !dirtyRef.current) return
+    window.clearTimeout(draftTimer.current)
+    draftTimer.current = window.setTimeout(() => {
+      void fetch(`${(window as unknown as { __MB_API?: string }).__MB_API ?? 'https://api.makerbay.app'}/v1/presence/preview`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${localStorage.getItem('mb.idToken') ?? ''}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...config,
+          serviceAreas: areas.split(',').map((x) => x.trim()).filter(Boolean),
+          businessName: bizName,
+        }),
+      })
+        .then((r) => (r.ok ? r.text() : null))
+        .then((html) => setDraftHtml(html))
+        .catch(() => setDraftHtml(null))
+    }, 700)
+    return () => window.clearTimeout(draftTimer.current)
+  }, [config, areas, bizName])
 
   const load = useCallback(async () => {
     try {
@@ -100,6 +128,8 @@ function PagePage({ me }: { me: Me }) {
       setIndexing(r.indexing)
       setChecklist(r.checklist ?? [])
       setPreviewNonce((n) => n + 1)
+      dirtyRef.current = false
+      setDraftHtml(null)
       setNote('Saved - the preview shows it now. Visitors see it within about 5 minutes.')
     })
   }
@@ -119,11 +149,15 @@ function PagePage({ me }: { me: Me }) {
       await load()
     })
 
-  const set = (k: keyof PresenceConfig) => (e: { target: { value: string } }) =>
+  const set = (k: keyof PresenceConfig) => (e: { target: { value: string } }) => {
+    dirtyRef.current = true
     setConfig((c) => (c ? { ...c, [k]: e.target.value } : c))
+  }
 
-  const toggle = (k: keyof PresenceConfig) => (e: { target: { checked: boolean } }) =>
+  const toggle = (k: keyof PresenceConfig) => (e: { target: { checked: boolean } }) => {
+    dirtyRef.current = true
     setConfig((c) => (c ? { ...c, [k]: e.target.checked } : c))
+  }
 
   return (
     <>
@@ -231,7 +265,7 @@ function PagePage({ me }: { me: Me }) {
             <form onSubmit={save}>
               <label htmlFor="p-bizname">Business name</label>
               <input id="p-bizname" value={bizName} maxLength={80}
-                onChange={(e) => setBizName(e.target.value)} />
+                onChange={(e) => { dirtyRef.current = true; setBizName(e.target.value) }} />
               <p className="meta">The big title at the top of your page — and your workspace's name everywhere.</p>
 
               <label htmlFor="p-headline">Headline</label>
@@ -248,7 +282,7 @@ function PagePage({ me }: { me: Me }) {
               </p>
 
               <label htmlFor="p-areas">Areas you serve</label>
-              <input id="p-areas" value={areas} onChange={(e) => setAreas(e.target.value)}
+              <input id="p-areas" value={areas} onChange={(e) => { dirtyRef.current = true; setAreas(e.target.value) }}
                 placeholder="Kalapatti, Saravanampatti, Peelamedu" />
 
               <div className="row">
@@ -324,7 +358,7 @@ function PagePage({ me }: { me: Me }) {
       {!config && !error && <div className="card"><Skeleton rows={6} /></div>}
       </div>
       <div className="pg-side">
-        <PreviewPane pageUrl={pageUrl} refreshKey={previewNonce} />
+        <PreviewPane pageUrl={pageUrl} refreshKey={previewNonce} draftHtml={draftHtml} />
       </div>
       </div>
     </>

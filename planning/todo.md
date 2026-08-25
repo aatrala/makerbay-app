@@ -214,6 +214,42 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+### 64 — Help centre empty / no authoring ✅ (day 1) / 💬 (native articles)
+Diagnosis: your 19 sources were ALL ready but publishing lived only on
+the Knowledge page, so the centre stayed empty. Shipped 2026-08-25: the
+Help centre tab now has an Articles card - published list (with
+generated title + category), "Ready to publish" list with one-click
+Publish / Publish-all (and Unpublish / Unpublish-all), and a plain
+callout when the centre is live but nothing is published.
+**Test:** Assistant → Help centre → Articles card → Publish all →
+open your help centre (index refreshes within ~1 minute).
+**Proposal awaiting your agreement:** write articles natively in the
+Help centre tab (a text editor creating a text source - it trains the
+assistant automatically via the existing ingestion), edit them later,
+and a "help article" badge on Knowledge. No new tier caps.
+
+### 65 — Help centre presentation + bulk + counts 🔶 (quick wins ✅ / rest 💬)
+Quick wins shipped 2026-08-25: Unpublish + Unpublish-all next to
+Publish-all; the centre index now refreshes in ~1 min after a publish
+(was up to 5 - that was the "took a while"). **The 40+ vs 18:** the
+crawl stopped at the source cap - limits.sources is 20 per workspace,
+your GreenLight docs crawl stored 19 pages (18 published + llms.txt)
+and silently dropped the rest. Fix options in the proposal below.
+Remaining (proposal): real article formatting (headings/paragraphs
+instead of raw text), images, orderable categories/TOC, cap raise +
+visible cap meter.
+
+### 66 — Help centre themes 💬 (proposal awaiting your pick)
+Proposal for theme/style variations for the help centre and which land
+in paid tiers - see the current chat message for the options.
+
+### 67 — Help "Ask a question" opens a separate page ✅
+Shipped 2026-08-25: help centre pages now load the chat widget (your
+brand colour), and every "Ask a question" button opens it in place. The
+links keep their hrefs so crawlers and no-JS readers still work.
+**Test:** open a help article → Ask a question → chat opens as an
+overlay on the same page.
+
 ### 60 — Page edit improvements ✅ (fixes) / 💬 (merge proposal)
 Shipped 2026-08-25: scan-to-book QR toggle on the page (off by default;
 server-rendered, points at booking when it exists - verified live on the
@@ -221,10 +257,11 @@ demo); editor now uses the full desktop width (the 980px shell cap made
 it read like two phones); business name editable in the Words card (it
 is the page's big title - the "Aatral Arasu" confusion); checklist leads
 with a progress bar + the single next step, full list behind a
-disclosure. Merge proposal (consult): ONE "Page" tab with a sticky
-section rail - Content / Appearance / Publish - checklist as a one-line
-strip, nav becomes Page | Share; form-save only in Content, everything
-else instant-save. **Waiting on your go for the merge.**
+disclosure. Merge approved and shipped (see 60b). Follow-up shipped
+2026-08-25: the preview now renders UNSAVED edits as you type (debounced
+draft preview, labelled "unsaved changes", back to live on save).
+**Test:** Page → type in the headline → preview updates in under a
+second without saving.
 
 ### 53B — Genie briefing cards ✅
 Shipped 2026-08-25: diary and unpaid-invoice answers carry compact cards
@@ -233,11 +270,13 @@ with real ids; Done / Cancel / Chase buttons propose deterministically
 card button → accurate proposal → decline.
 
 ### 61 — Quote notifications placeholder ✅ / invoice design 💬
-Placeholder + explainer shipped. Consult delivered on invoice
-configurability (use the brand accent on documents + real-config
-preview + optional ABN/licence footer line; skip template editors) and 8
-ranked dashboard improvements led by unpaid-invoice aging. **Waiting on
-your picks.**
+Placeholder + explainer shipped. Approved batch shipped 2026-08-25:
+ABN/licence footer line on public quotes + invoices (Quotes → Settings,
+200 chars), your page photo as the document logo (toggleable), and the
+pipeline value strip on the quotes list (awaiting answer / accepted to
+invoice, in dollars).
+**Test:** Quotes → Settings → set a footer line → open a public quote
+link: footer under the totals, logo in the header.
 
 ### 62 — Duplicate phone question in request settings ✅
 The old "ask for a phone number" checkbox duplicated the new Form fields
@@ -250,8 +289,9 @@ Style links redirect). Quotes/invoices: overdue aging chips, invoice
 tabs + outstanding total, Create-invoice in the accepted-quote header,
 empty-state links, and documents in the owner's colours (public bold
 band + a ThemePreview showing YOUR name, accent and top price lines).
-Deferred to next batch: ABN/licence footer line, quotes pipeline value
-strip, logo on documents.
+The deferred trio (ABN/licence footer, pipeline value strip, document
+logo) shipped 2026-08-25 - see 61. Genie checkout is now a single line
+(the usage line attaches automatically after subscribe).
 
 ### 63 — Stripe Connect onboarding ⛔ ONE last founder step
 Accounts Write is through (thank you). Stripe now asks for the one-time

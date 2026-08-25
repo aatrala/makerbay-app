@@ -20,6 +20,7 @@ import {
   INVOICE_THEMES,
   getInvoice,
   invoiceFromQuote,
+  documentLogo,
   invoiceLabel,
   quoteLabel,
   listInvoices,
@@ -233,6 +234,8 @@ async function publicRoute(
       : null
     return json(200, {
       business: resolved.name,
+      footer: config.docFooter || undefined,
+      logoUrl: await documentLogo(resolved.tenantId, config),
       quote: { ...publicView(quote, status, config.taxLabel, config.docPrefix), deposit },
     })
   }
@@ -685,6 +688,10 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
       Math.max(Number(b.depositPercent ?? (existing as { depositPercent?: number }).depositPercent ?? 0) || 0, 0),
       100,
     ),
+    docFooter: String(b.docFooter ?? existing.docFooter ?? '').slice(0, 200),
+    showLogoOnDocs: b.showLogoOnDocs === undefined
+      ? existing.showLogoOnDocs
+      : b.showLogoOnDocs === true,
     // The document tag: short, uppercase, letters and digits only. SP turns
     // Q-001 into SP-Q-001 on every new label; existing numbers are untouched.
     docPrefix: (() => {

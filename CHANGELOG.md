@@ -11,6 +11,31 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.22.0 - 2026-08-25
+
+> **Papers with your name on them, a preview that types along, and a help centre that fills itself** — identity lines and logos on documents, unsaved edits rendered live, and one-click publishing for everything your centre was hiding.
+
+- Added `quotes` An identity line on every document (ABN, licence -
+  whatever compliance asks for) and your page photo as the logo on
+  quotes and invoices, both under quote settings. The quotes list opens
+  with the pipeline in money: what is awaiting an answer, what is
+  accepted and waiting to be invoiced.
+- Changed `presence` The preview now renders your UNSAVED edits as you
+  type (debounced, marked "unsaved changes"), switching back to the
+  live page on save.
+- Fixed `assistant` The help centre tab now shows your articles - and
+  when the centre is enabled but empty it says exactly why, listing
+  every ready-but-unpublished source with one-click Publish and
+  Publish-all. No more hunting through Knowledge to find the tick.
+  Unpublish and Unpublish-all too - both directions, in bulk.
+- Fixed `assistant` "Ask a question" on help centre pages now opens the
+  chat widget right there instead of bouncing the reader to a separate
+  page. The help centre index also refreshes within about a minute of a
+  publish instead of five.
+- Changed `platform` Subscribing to Genie is now a single line at
+  checkout; the usage line attaches to the subscription automatically
+  the moment it is created.
+
 ## 2.21.0 - 2026-08-25
 
 > **One Page screen, and invoices that watch your cash** — content, appearance and publishing in a single place beside the live preview; unpaid invoices tell you how overdue they are, in your own colours.

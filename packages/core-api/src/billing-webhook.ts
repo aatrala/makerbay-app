@@ -42,7 +42,34 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           i.price?.lookup_key?.startsWith(GENIE_PRODUCT_KEY),
         ) ?? false
         const plan = entitled ? (isGenie ? PLANS.genie : PLANS.pro) : PLANS.free
-        const item = sub.items?.data.find((i) => i.price?.recurring?.usage_type === 'metered')
+        let item = sub.items?.data.find((i) => i.price?.recurring?.usage_type === 'metered')
+
+        // Genie checkout carries only the base line so the checkout page
+        // reads as one product; the metered assistant-messages item is
+        // attached here, on the subscription's first event. Idempotent:
+        // once the item exists this never runs again.
+        if (entitled && isGenie && !item) {
+          try {
+            const stripe = await stripeClient()
+            const prices = await stripe.prices.list({
+              lookup_keys: [`${GENIE_PRODUCT_KEY}-messages`],
+              limit: 2,
+            })
+            const meteredPrice = prices.data[0]
+            if (meteredPrice) {
+              const created = await stripe.subscriptionItems.create({
+                subscription: sub.id,
+                price: meteredPrice.id,
+              })
+              item = created as unknown as typeof item
+              console.log('genie metered item attached', { tenantId, sub: sub.id })
+            }
+          } catch (err) {
+            // Metering degrades gracefully: the allowance still gates usage
+            // in-app; only overage billing would be missed. Log loudly.
+            console.error('genie metered item attach failed', { tenantId, err: String(err) })
+          }
+        }
         // Annual subscriptions carry no metered item: the assistant pauses at
         // the included allowance instead of billing overage (no catch-up
         // surprise at renewal).

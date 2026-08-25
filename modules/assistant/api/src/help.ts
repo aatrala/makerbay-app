@@ -158,6 +158,24 @@ ${opts.body}
 <footer>
   <div class="wrap"><p>Help centre powered by <a href="https://makerbay.app">MakerBay</a></p></div>
 </footer>
+${
+  // The assistant answers right here instead of bouncing the reader to a
+  // separate chat page (issue 67). The links keep their hrefs so a crawler
+  // or no-JavaScript reader still lands somewhere useful.
+  opts.slug
+    ? `<script src="https://widget.makerbay.app/widget.js" data-slug="${esc(opts.slug)}" data-color="${esc(opts.brand)}" defer></script>
+<script>
+document.addEventListener('click', function (e) {
+  var a = e.target && e.target.closest ? e.target.closest('a') : null
+  if (!a || (a.href || '').indexOf('chat.makerbay.app') === -1) return
+  var b = document.querySelector('button[aria-label="Open chat"], button[aria-label="Close chat"]')
+  if (!b) return
+  e.preventDefault()
+  if (b.getAttribute('aria-label') === 'Open chat') b.click()
+})
+</script>`
+    : ''
+}
 </body>
 </html>
 `
@@ -290,6 +308,9 @@ ${search}
 ${list}
 ${askBlock(slug, config.name)}`,
     }),
+    // The index is where a fresh publish shows up; cache it lightly so the
+    // owner sees their change in about a minute, not five (issue 65).
+    60,
   )
 }
 

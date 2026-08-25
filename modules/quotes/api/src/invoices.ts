@@ -212,6 +212,24 @@ export async function patchInvoice(
   return json(200, { invoice: updated })
 }
 
+/** The business photo from Your page, worn as the document logo. */
+export async function documentLogo(
+  tenantId: string,
+  config: { showLogoOnDocs?: boolean },
+): Promise<string | undefined> {
+  if (config.showLogoOnDocs === false) return undefined
+  try {
+    const r = await ddb.send(new GetCommand({
+      TableName: process.env.TABLE_PRESENCECONFIG!,
+      Key: { tenantId },
+    }))
+    const key = r.Item?.photoKey
+    return key ? `https://chat.makerbay.app/${String(key)}` : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Document labels: an optional per-tenant tag, the document kind, and a
  * number padded to three digits - SP-INV-001 reads like a real business,
@@ -235,8 +253,11 @@ export async function publicInvoiceView(
   const invoice = await findInvoiceByToken(tenantId, token)
   if (!invoice || invoice.status === 'draft') return json(404, { error: 'not_found' })
   const config = await getQuotesConfig(tenantId)
+  const logoUrl = await documentLogo(tenantId, config)
   return json(200, {
     business: businessName,
+    footer: config.docFooter || undefined,
+    logoUrl,
     theme: (config as { invoiceTheme?: string }).invoiceTheme ?? 'classic',
     // A pay button appears only when it would actually work.
     payable: payoutsEnabled && invoice.status === 'sent',

@@ -137,6 +137,8 @@ header .book-cta {
   text-decoration: none; white-space: nowrap;
 }
 header .book-cta:hover { background: rgba(255,255,255,.26); }
+header .doc-logo { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; margin-right: 10px; }
+.doc-footer { color: #78716c; font-size: 12.5px; margin-top: 18px; border-top: 1px solid #e7e5e4; padding-top: 10px; }
 .msg.bot a { color: var(--brand); font-weight: 600; text-decoration: underline; word-break: break-all; }
 
 /* Identity lockup + quick actions + instant cards */
