@@ -239,9 +239,21 @@ Remaining (proposal): real article formatting (headings/paragraphs
 instead of raw text), images, orderable categories/TOC, cap raise +
 visible cap meter.
 
-### 66 — Help centre themes 💬 (proposal awaiting your pick)
-Proposal for theme/style variations for the help centre and which land
-in paid tiers - see the current chat message for the options.
+### 66 — Help centre themes ✅ (v2 shipped after two-agent consult)
+Approved 2026-08-25 and built the same day (docs/spec-help-themes.md).
+Five themes on one renderer - Clean (free), Bold / Editorial / Ledger /
+Signwriter (Trade), picked in the Help centre tab; Genie adds any
+Google font, second accent, your logo, no MakerBay badge. Every tier
+also gained: Popular strip (pin 4 on Trade), category counts and
+reordering (Trade), related articles, "Was this helpful?", read time,
+phone/email escalation block, Article + breadcrumb JSON-LD, and
+model-formatted article bodies at publish ("Improve formatting"
+upgrades existing articles without touching hand-edited titles).
+Caps: 20 free / 60 Trade / 150 Genie with a visible "N of M sources"
+meter and a crawl-truncation warning (the 40-vs-18 fix, issue 65).
+**Test:** Assistant → Help centre → pick a theme → open your centre;
+Articles → Improve formatting → open any article: headings, steps,
+tips, related links, Was-this-helpful.
 
 ### 67 — Help "Ask a question" opens a separate page ✅
 Shipped 2026-08-25: help centre pages now load the chat widget (your

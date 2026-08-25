@@ -178,6 +178,8 @@ export const enableModule = (id: string) => api('POST', `/v1/core/modules/${id}/
 const MESSAGES: Record<string, string> = {
   limit_exceeded: "You've used every message included in this plan for the month. Upgrade under Billing to keep going.",
   source_limit_exceeded: 'This plan has room for a limited number of knowledge sources. Remove one, or upgrade under Billing.',
+  source_limit_reached: 'This plan has room for a limited number of knowledge sources. Remove one, or upgrade under Billing.',
+  upgrade_required: 'This is a paid feature — upgrade under Billing to use it.',
   module_not_enabled: 'This module is not switched on for your workspace.',
   forbidden: "You don't have permission to do that. Ask the workspace owner.",
   unauthorized: 'Your session expired. Sign in again.',

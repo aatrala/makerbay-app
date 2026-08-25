@@ -30,6 +30,11 @@ export interface SourceRow {
   warning?: string
   /** Published sources appear in the public help centre. Off by default. */
   published?: boolean
+  /** S3 key of the model-formatted article body (markdown-lite), generated at publish. */
+  helpBodyKey?: string
+  /** "Was this helpful" votes from help centre readers. */
+  helpfulYes?: number
+  helpfulNo?: number
   /** Generated at publish time: customer-facing title/description/category. */
   helpMeta?: { title: string; description: string; category: string }
   createdAt: string
@@ -68,6 +73,16 @@ export interface AssistantConfigRow {
   helpEnabled?: boolean
   helpTitle?: string
   helpIntro?: string
+  /** Theme for the public help centre. Non-clean themes need a paid workspace. */
+  helpTheme?: 'clean' | 'bold' | 'editorial' | 'ledger' | 'signwriter'
+  /** Owner-pinned "Popular" articles (sourceIds, max 4). Trade and up. */
+  helpPinned?: string[]
+  /** Category display order override. Trade and up. */
+  helpCategoryOrder?: string[]
+  /** Genie branding: heading font (Google Fonts family), second accent, logo. */
+  helpFontHead?: string
+  helpAccent2?: string
+  helpShowLogo?: boolean
 }
 
 export const DEFAULT_CONFIG: Omit<AssistantConfigRow, 'tenantId'> = {

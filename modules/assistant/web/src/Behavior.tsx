@@ -11,7 +11,15 @@ interface Config {
   helpEnabled?: boolean
   helpTitle?: string
   helpIntro?: string
+  helpTheme?: string
+  helpPinned?: string[]
+  helpCategoryOrder?: string[]
+  helpFontHead?: string
+  helpAccent2?: string
+  helpShowLogo?: boolean
 }
+
+type HelpTier = 'free' | 'trade' | 'genie'
 
 export default function Behavior({ me }: { me: Me }) {
   const [config, setConfig] = useState<Config | null>(null)
@@ -95,13 +103,19 @@ export default function Behavior({ me }: { me: Me }) {
  */
 export function HelpCentrePage({ me }: { me: Me }) {
   const [config, setConfig] = useState<Config | null>(null)
+  const [tier, setTier] = useState<HelpTier>('free')
+  const [cap, setCap] = useState<{ cap: number; used: number } | null>(null)
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     void api('GET', '/v1/assistant/config')
-      .then((r) => setConfig(r.config))
+      .then((r) => {
+        setConfig(r.config)
+        if (r.helpTier) setTier(r.helpTier as HelpTier)
+        if (typeof r.sourceCap === 'number') setCap({ cap: r.sourceCap, used: r.sourceCount ?? 0 })
+      })
       .catch((e) => setError(explain(e)))
   }, [])
 
@@ -127,6 +141,18 @@ export function HelpCentrePage({ me }: { me: Me }) {
       setBusy(false)
     }
   }
+  // Instant-save for the appearance/structure controls: themes and pins are
+  // picked, not typed, so a Save button would just be a second click.
+  const patch = async (partial: Partial<Config>) => {
+    if (!config) return
+    setError('')
+    try {
+      const r = await api('PUT', '/v1/assistant/config', { ...config, ...partial })
+      setConfig(r.config)
+    } catch (err) {
+      setError(explain(err))
+    }
+  }
 
   return (
     <>
@@ -139,10 +165,145 @@ export function HelpCentrePage({ me }: { me: Me }) {
       {!config ? <div className="card"><Skeleton rows={5} /></div> : (
         <>
           <HelpCentre config={config} me={me} set={set} toggle={toggle} save={save} busy={busy} />
-          <ArticlesCard helpEnabled={config.helpEnabled === true} slug={me.tenant?.slug ?? ''} />
+          <ThemeCard config={config} tier={tier} patch={patch} slug={me.tenant?.slug ?? ''} />
+          <ArticlesCard
+            helpEnabled={config.helpEnabled === true}
+            slug={me.tenant?.slug ?? ''}
+            tier={tier}
+            capInfo={cap}
+            pinned={config.helpPinned ?? []}
+            onTogglePin={(id) => {
+              const cur = config.helpPinned ?? []
+              const next = cur.includes(id) ? cur.filter((p) => p !== id) : [...cur, id].slice(0, 4)
+              void patch({ helpPinned: next })
+            }}
+          />
+          <CategoryOrderCard config={config} tier={tier} patch={patch} />
         </>
       )}
     </>
+  )
+}
+
+const THEME_CHOICES: { key: string; name: string; blurb: string }[] = [
+  { key: 'clean', name: 'Clean', blurb: 'The free look - tidy cards, your colour on the trim.' },
+  { key: 'bold', name: 'Bold', blurb: 'Your colour full-bleed across the top, chunky cards.' },
+  { key: 'editorial', name: 'Editorial', blurb: 'Serif headlines and ruled lists - the professional-services look.' },
+  { key: 'ledger', name: 'Ledger', blurb: 'White, ruled rows, monospace dates - reads like a spec sheet.' },
+  { key: 'signwriter', name: 'Signwriter', blurb: 'Slab-serif colour bands and numbered lists - the local-firm look.' },
+]
+
+function ThemeCard({ config, tier, patch, slug }: {
+  config: Config
+  tier: HelpTier
+  patch: (p: Partial<Config>) => Promise<void>
+  slug: string
+}) {
+  const current = config.helpTheme ?? 'clean'
+  return (
+    <div className="card">
+      <h2>Theme</h2>
+      <p className="meta">
+        How your help centre looks at <code>help.makerbay.app/{slug}</code>.
+        {tier === 'free' && ' Themes beyond Clean come with Trade.'}
+      </p>
+      <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+        {THEME_CHOICES.map((t) => {
+          const locked = t.key !== 'clean' && tier === 'free'
+          const on = current === t.key
+          return (
+            <button
+              key={t.key}
+              type="button"
+              className={on ? '' : 'ghost'}
+              disabled={locked}
+              title={t.blurb}
+              onClick={() => void patch({ helpTheme: t.key })}
+            >
+              {t.name}{locked ? ' 🔒' : ''}
+            </button>
+          )
+        })}
+      </div>
+      <p className="meta mt">{THEME_CHOICES.find((t) => t.key === current)?.blurb}</p>
+
+      {tier === 'genie' ? (
+        <>
+          <h3 className="mt">Branding (Genie)</h3>
+          <label className="pick">
+            <input type="checkbox" checked={config.helpShowLogo !== false}
+              onChange={(e) => void patch({ helpShowLogo: e.target.checked })} />
+            <span>Show your page photo as the logo in the header</span>
+          </label>
+          <div className="row mt" style={{ gap: 14, flexWrap: 'wrap' }}>
+            <div>
+              <label htmlFor="h-font">Heading font (any Google font)</label>
+              <input id="h-font" defaultValue={config.helpFontHead ?? ''} placeholder="e.g. Bricolage Grotesque"
+                onBlur={(e) => void patch({ helpFontHead: e.target.value.trim() })} />
+            </div>
+            <div>
+              <label htmlFor="h-acc2">Second accent</label>
+              <div className="row">
+                <input id="h-acc2" type="color" className="swatch" value={config.helpAccent2 ?? config.brandColor}
+                  onChange={(e) => void patch({ helpAccent2: e.target.value })} />
+                <code>{config.helpAccent2 ?? '—'}</code>
+              </div>
+            </div>
+          </div>
+          <p className="meta">On Genie the "powered by MakerBay" line is gone automatically.</p>
+        </>
+      ) : (
+        <p className="meta">
+          Genie adds full branding: any font, a second accent, your logo, and no MakerBay line.
+        </p>
+      )}
+    </div>
+  )
+}
+
+const ALL_CATEGORIES = [
+  'Getting started',
+  'Services & pricing',
+  'Bookings & appointments',
+  'Policies & guarantees',
+  'Troubleshooting',
+  'General',
+]
+
+function CategoryOrderCard({ config, tier, patch }: {
+  config: Config
+  tier: HelpTier
+  patch: (p: Partial<Config>) => Promise<void>
+}) {
+  const custom = (config.helpCategoryOrder ?? []).filter((c) => ALL_CATEGORIES.includes(c))
+  const order = [...custom, ...ALL_CATEGORIES.filter((c) => !custom.includes(c))]
+  const move = (i: number, dir: -1 | 1) => {
+    const next = [...order]
+    const j = i + dir
+    if (j < 0 || j >= next.length) return
+    ;[next[i], next[j]] = [next[j], next[i]]
+    void patch({ helpCategoryOrder: next })
+  }
+  if (tier === 'free') {
+    return (
+      <div className="card">
+        <h2>Category order</h2>
+        <p className="meta">Reorder how categories appear on your help centre - comes with Trade.</p>
+      </div>
+    )
+  }
+  return (
+    <div className="card">
+      <h2>Category order</h2>
+      <p className="meta">Top to bottom on your help centre index. Empty categories never show.</p>
+      {order.map((c, i) => (
+        <div key={c} className="row" style={{ borderTop: '1px solid var(--line)', padding: '6px 0' }}>
+          <span className="grow">{c}</span>
+          <button className="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${c} up`}>↑</button>
+          <button className="ghost" disabled={i === order.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${c} down`}>↓</button>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -151,6 +312,7 @@ interface ArticleSource {
   name: string
   status: string
   published?: boolean
+  helpBodyKey?: string
   helpMeta?: { title: string; description: string; category: string }
 }
 
@@ -159,7 +321,14 @@ interface ArticleSource {
  * day 1). The old flow hid publishing on the Knowledge page, so a centre
  * full of ready sources sat empty and nothing here said why.
  */
-function ArticlesCard({ helpEnabled, slug }: { helpEnabled: boolean; slug: string }) {
+function ArticlesCard({ helpEnabled, slug, tier, capInfo, pinned, onTogglePin }: {
+  helpEnabled: boolean
+  slug: string
+  tier: HelpTier
+  capInfo: { cap: number; used: number } | null
+  pinned: string[]
+  onTogglePin: (sourceId: string) => void
+}) {
   const [sources, setSources] = useState<ArticleSource[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
@@ -198,8 +367,20 @@ function ArticlesCard({ helpEnabled, slug }: { helpEnabled: boolean; slug: strin
 
   return (
     <div className="card">
-      <h2>Articles</h2>
+      <div className="row baseline">
+        <h2 className="grow">Articles</h2>
+        {capInfo && (
+          <span className="meta">{capInfo.used} of {capInfo.cap} sources used</span>
+        )}
+      </div>
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      {capInfo && capInfo.used >= capInfo.cap && (
+        <Notice tone="warn">
+          <strong>Source limit reached.</strong> New uploads and website crawls stop here - a crawl
+          that hit this cap silently dropped its remaining pages. Trade raises the cap to 60, Genie
+          to 150 (Billing), or remove sources you no longer need.
+        </Notice>
+      )}
       {helpEnabled && published.length === 0 && ready.length > 0 && (
         <Notice tone="warn">
           <strong>Your help centre is live but empty</strong> — none of your {ready.length} ready
@@ -211,6 +392,16 @@ function ArticlesCard({ helpEnabled, slug }: { helpEnabled: boolean; slug: strin
         <>
           <div className="row baseline">
             <p className="meta grow">Live in your help centre ({published.length}):</p>
+            {published.some((s) => !s.helpBodyKey) && (
+              <button
+                className="ghost"
+                disabled={busy}
+                title="Rewrites each article body with real headings, steps and tips. Titles and categories are untouched."
+                onClick={() => void setAll(published.filter((s) => !s.helpBodyKey), true)}
+              >
+                {progress || `Improve formatting (${published.filter((s) => !s.helpBodyKey).length})`}
+              </button>
+            )}
             {published.length > 1 && (
               <button className="ghost" disabled={busy} onClick={() => void setAll(published, false)}>
                 {progress || 'Unpublish all'}
@@ -222,7 +413,18 @@ function ArticlesCard({ helpEnabled, slug }: { helpEnabled: boolean; slug: strin
               <span className="grow">
                 <strong>{s.helpMeta?.title ?? s.name}</strong>
                 <span className="meta"> · {s.helpMeta?.category ?? 'General'}</span>
+                {pinned.includes(s.sourceId) && <span className="meta"> · ★ pinned</span>}
               </span>
+              {tier !== 'free' && (
+                <button
+                  className="ghost"
+                  disabled={busy || (!pinned.includes(s.sourceId) && pinned.length >= 4)}
+                  title="Pinned articles lead the Popular strip on your help centre (up to 4)"
+                  onClick={() => onTogglePin(s.sourceId)}
+                >
+                  {pinned.includes(s.sourceId) ? 'Unpin' : 'Pin'}
+                </button>
+              )}
               <button className="ghost" disabled={busy} onClick={() => void setPublished(s.sourceId, false)}>Unpublish</button>
             </div>
           ))}

@@ -261,6 +261,49 @@ export const HELP_CATEGORIES = [
  * and a raw excerpt is not a description; one cheap model call fixes both
  * and gives the index real structure to group by.
  */
+/**
+ * A readable article body, generated once at publish time. Extraction
+ * flattens documents into run-on text; one cheap model call restores the
+ * structure a reader needs (headings, steps, lists) as markdown-lite the
+ * help renderer understands. Best-effort: publishing never fails on it.
+ */
+export async function generateHelpBody(
+  businessName: string,
+  sourceName: string,
+  text: string,
+): Promise<string | undefined> {
+  try {
+    const r = await runtimeClient.send(
+      new ConverseCommand({
+        modelId: MODEL_ID(),
+        system: [{
+          text: [
+            `You format help-centre articles for ${businessName}, a local service business.`,
+            'Rewrite the document as a clean, readable article using ONLY this markdown subset:',
+            '"## " section headings (use "## 1. Step name" numbering when the content is a sequence of steps),',
+            '"- " bullet lists, "**bold**", and lines starting "Tip:", "Note:" or "Warning:" for asides.',
+            'Keep every fact; never invent one. Remove navigation crumbs, cookie notices and site chrome.',
+            'Do not add a title heading - the page renders the title separately.',
+            'Reply with ONLY the article body.',
+          ].join('\n'),
+        }],
+        messages: [{
+          role: 'user',
+          content: [{ text: `Document name: ${sourceName}\n\nDocument content:\n${text.slice(0, 12000)}` }],
+        }],
+        inferenceConfig: { maxTokens: 2500, temperature: 0.2 },
+      }),
+    )
+    const body = (r.output?.message?.content?.map((c) => c.text ?? '').join('') ?? '').trim()
+    // A body shorter than a sentence means the model refused or the source
+    // was junk - better to fall back to the raw text than publish a stub.
+    return body.length > 80 ? body.slice(0, 40000) : undefined
+  } catch (err) {
+    console.warn('help body generation failed', { sourceName, err: String(err) })
+    return undefined
+  }
+}
+
 export async function generateHelpMeta(
   businessName: string,
   sourceName: string,

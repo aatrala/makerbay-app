@@ -12,6 +12,8 @@ import {
   getTenantBySlug,
   getUser,
   hashApiKey,
+  isPaidWorkspace,
+  listGrants,
   ulid,
   type CallerContext,
 } from '@makerbay/core'
@@ -37,18 +39,22 @@ import {
   HELP_CATEGORIES,
   buildCitations,
   generateAnswer,
+  generateHelpBody,
   generateHelpMeta,
   getIngestionStatus,
   retrieveChunks,
   startIngestion,
 } from './rag'
 import {
+  HELP_THEMES,
   renderArticle,
   renderIndex,
   renderNotFound,
   renderRobots,
   renderSitemap,
   sourceIdFromSlug,
+  type HelpRenderOpts,
+  type HelpTheme,
 } from './help'
 import { discoverPages, scrapePage } from './scrape'
 
@@ -105,8 +111,19 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     const deleteMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)$/)
     if (method === 'DELETE' && deleteMatch) return await removeSource(tenantId, deleteMatch[1])
 
-    if (method === 'GET' && path === '/v1/assistant/config')
-      return json(200, { config: await getConfig(tenantId) })
+    if (method === 'GET' && path === '/v1/assistant/config') {
+      const [config, tier, rows] = await Promise.all([
+        getConfig(tenantId),
+        helpTier(tenantId),
+        listSources(tenantId),
+      ])
+      return json(200, {
+        config,
+        helpTier: tier,
+        sourceCap: sourceCapFor(tier, entitlement.limits),
+        sourceCount: rows.length,
+      })
+    }
     if (method === 'PUT' && path === '/v1/assistant/config') return await updateConfig(tenantId, event)
 
     const publishMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)\/publish$/)
@@ -161,6 +178,44 @@ async function resolvePublicTenant(
 }
 
 /**
+ * The help centre's tier ladder (spec-help-themes.md): a live genie grant is
+ * genie, any paid workspace is trade, everyone else free. Themes, pins and
+ * branding gate on it; the public page silently falls back rather than 402s.
+ */
+async function helpTier(tenantId: string): Promise<HelpRenderOpts['tier']> {
+  const now = new Date().toISOString()
+  const genieGrants = await listGrants(tenantId, 'genie')
+  if (genieGrants.some((g) => g.status === 'active' && (!g.expiresAt || g.expiresAt > now))) return 'genie'
+  return (await isPaidWorkspace(tenantId)) ? 'trade' : 'free'
+}
+
+const SOURCE_CAP: Record<HelpRenderOpts['tier'], number> = { free: 20, trade: 60, genie: 150 }
+
+const sourceCapFor = (tier: HelpRenderOpts['tier'], limits: Record<string, number>): number =>
+  Math.max(limits.sources ?? 20, SOURCE_CAP[tier])
+
+/** Contact + branding context the renderer needs beyond the assistant config. */
+async function helpRenderOpts(
+  tenantId: string,
+  config: { helpShowLogo?: boolean; helpAccent2?: string },
+): Promise<HelpRenderOpts> {
+  const [tier, presence] = await Promise.all([
+    helpTier(tenantId),
+    ddbRaw.send(
+      new GetCommand({ TableName: process.env.TABLE_PRESENCECONFIG!, Key: { tenantId } }),
+    ).catch(() => undefined),
+  ])
+  const phone = String(presence?.Item?.phone ?? '').trim() || undefined
+  const email = String(presence?.Item?.email ?? '').trim() || undefined
+  const photoKey = presence?.Item?.photoKey
+  const logoUrl =
+    tier === 'genie' && config.helpShowLogo !== false && photoKey
+      ? `https://chat.makerbay.app/${String(photoKey)}`
+      : undefined
+  return { tier, phone, email, logoUrl, accent2: config.helpAccent2 }
+}
+
+/**
  * Public help centre, served at help.makerbay.app/{slug}. CloudFront rewrites
  * the friendly path into this route, so `slug` and `article` arrive as query
  * parameters. Errors render as HTML pages, never JSON: a crawler that gets a
@@ -202,13 +257,27 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
   if (wantsRobots) return renderRobots(slug)
   if (wantsSitemap) return renderSitemap(slug, published)
 
+  const opts = await helpRenderOpts(tenant.tenantId, config)
+
   if (article) {
     const sourceId = sourceIdFromSlug(article)
     const source = published.find((s) => s.sourceId === sourceId)
     if (!source) return renderNotFound()
-    const text = await sourceText(source)
-    if (!text) return renderNotFound()
-    return renderArticle(config, slug, source, text)
+    const [text, formatted] = await Promise.all([
+      sourceText(source),
+      source.helpBodyKey ? objectText(source.helpBodyKey) : Promise.resolve(''),
+    ])
+    if (!text && !formatted) return renderNotFound()
+    // Related: same-category siblings keep the session alive and build the
+    // internal link graph search engines want.
+    const related = published
+      .filter(
+        (s) =>
+          s.sourceId !== source.sourceId &&
+          (s.helpMeta?.category ?? 'General') === (source.helpMeta?.category ?? 'General'),
+      )
+      .slice(0, 3)
+    return renderArticle(config, slug, source, text, opts, formatted || undefined, related)
   }
 
   // Index: one short excerpt each, read in parallel and capped so a large
@@ -219,7 +288,7 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
       excerpts[s.sourceId] = (await sourceText(s)).replace(/\s+/g, ' ').slice(0, 200)
     }),
   )
-  return renderIndex(config, slug, published, excerpts)
+  return renderIndex(config, slug, published, excerpts, opts)
 }
 
 /** Extracted text for a source, or '' when it cannot be read. */
@@ -230,6 +299,16 @@ async function sourceText(source: SourceRow): Promise<string> {
     // Scraped pages are stored with a small provenance header; drop it.
     const stripped = full.replace(/^(Source|Title|Fetched):.*\n/gm, '').trim()
     return stripped.slice(0, 60000)
+  } catch {
+    return ''
+  }
+}
+
+/** Any bucket object as text, or '' - used for the formatted article body. */
+async function objectText(key: string): Promise<string> {
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET(), Key: key }))
+    return ((await obj.Body?.transformToString()) ?? '').trim()
   } catch {
     return ''
   }
@@ -286,6 +365,18 @@ async function publicRoute(
   // acts on in their inbox.
   if (method === 'POST' && path === '/v1/public/assistant/feedback')
     return await feedback(resolved.tenantId, event)
+
+  // "Was this helpful" votes from help centre articles. Anonymous counters,
+  // capped by the same stage throttling as every public route.
+  if (method === 'POST' && path === '/v1/public/assistant/helpful') {
+    const sourceId = String(body.sourceId ?? '')
+    if (!/^[0-9A-Z]{26}$/.test(sourceId)) return json(400, { error: 'bad_source' })
+    const source = await getSource(resolved.tenantId, sourceId)
+    if (!source || !source.published) return json(404, { error: 'not_found' })
+    const field = body.helpful === true ? 'helpfulYes' : 'helpfulNo'
+    await putSource({ ...source, [field]: (source[field as 'helpfulYes' | 'helpfulNo'] ?? 0) + 1 })
+    return json(200, { ok: true })
+  }
 
   return json(404, { error: 'not_found' })
 }
@@ -396,7 +487,11 @@ async function createSource(
   if (!name) return json(400, { error: 'name_required' })
 
   const existing = await listSources(tenantId)
-  if (existing.length >= (limits.sources ?? 20)) return json(429, { error: 'source_limit_reached' })
+  // The cap follows the help tier (20/60/150) and an explicit grant limit
+  // still wins if it is bigger. A crawl that hits it stops here with a
+  // visible error instead of silently dropping pages (issue 65).
+  const cap = sourceCapFor(await helpTier(tenantId), limits)
+  if (existing.length >= cap) return json(429, { error: 'source_limit_reached', cap, used: existing.length })
 
   const sourceId = ulid()
   const key = objectKey(tenantId, sourceId, name)
@@ -524,7 +619,10 @@ async function getSources(tenantId: string): Promise<APIGatewayProxyResultV2> {
       await updateSourceStatus(tenantId, row.sourceId, 'failed')
     }
   }
-  return json(200, { sources: rows })
+  // The cap made visible: "19 of 20" in the UI, and the crawl-truncation
+  // banner the silent-drop bug (issue 65) needed.
+  const [tier, ent] = await Promise.all([helpTier(tenantId), getEffectiveEntitlement(tenantId, 'assistant')])
+  return json(200, { sources: rows, cap: sourceCapFor(tier, ent.limits), used: rows.length })
 }
 
 async function removeSource(tenantId: string, sourceId: string): Promise<APIGatewayProxyResultV2> {
@@ -533,7 +631,13 @@ async function removeSource(tenantId: string, sourceId: string): Promise<APIGate
   await s3.send(
     new DeleteObjectsCommand({
       Bucket: BUCKET(),
-      Delete: { Objects: [{ Key: source.s3Key }, { Key: `${source.s3Key}.metadata.json` }] },
+      Delete: {
+        Objects: [
+          { Key: source.s3Key },
+          { Key: `${source.s3Key}.metadata.json` },
+          { Key: `${source.s3Key}.help.md` },
+        ],
+      },
     }),
   )
   await deleteSource(tenantId, sourceId)
@@ -545,6 +649,36 @@ async function removeSource(tenantId: string, sourceId: string): Promise<APIGate
 
 async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const body = JSON.parse(event.body ?? '{}')
+  const tier = await helpTier(tenantId)
+
+  // Themes, pins, category order and branding are the paid half of the help
+  // centre (spec-help-themes.md). Setting one below its tier is an honest
+  // 402, but fields a downgrade left behind are kept - the public renderer
+  // falls back on its own.
+  const prev = await getConfig(tenantId)
+  const theme = HELP_THEMES.includes(body.helpTheme as HelpTheme) ? (body.helpTheme as HelpTheme) : 'clean'
+  if (theme !== 'clean' && theme !== (prev?.helpTheme ?? 'clean') && tier === 'free')
+    return json(402, { error: 'upgrade_required', feature: 'help_theme' })
+  const pinned = Array.isArray(body.helpPinned)
+    ? body.helpPinned.filter((p: unknown) => /^[0-9A-Z]{26}$/.test(String(p))).slice(0, 4)
+    : prev?.helpPinned ?? []
+  const catOrder = Array.isArray(body.helpCategoryOrder)
+    ? body.helpCategoryOrder
+        .filter((c: unknown) => (HELP_CATEGORIES as readonly string[]).includes(String(c)))
+        .slice(0, HELP_CATEGORIES.length)
+    : prev?.helpCategoryOrder ?? []
+  const pinsChanged = JSON.stringify(pinned) !== JSON.stringify(prev?.helpPinned ?? [])
+  const orderChanged = JSON.stringify(catOrder) !== JSON.stringify(prev?.helpCategoryOrder ?? [])
+  if ((pinsChanged || orderChanged) && tier === 'free')
+    return json(402, { error: 'upgrade_required', feature: 'help_structure' })
+  const fontHead = String(body.helpFontHead ?? prev?.helpFontHead ?? '').trim().slice(0, 40)
+  const accent2 = /^#[0-9a-fA-F]{6}$/.test(String(body.helpAccent2)) ? String(body.helpAccent2) : prev?.helpAccent2
+  const showLogo = body.helpShowLogo === undefined ? prev?.helpShowLogo : body.helpShowLogo === true
+  const brandingChanged =
+    fontHead !== (prev?.helpFontHead ?? '') || accent2 !== prev?.helpAccent2 || showLogo !== prev?.helpShowLogo
+  if (brandingChanged && tier !== 'genie')
+    return json(402, { error: 'upgrade_required', feature: 'help_branding' })
+
   const config = {
     tenantId,
     name: String(body.name ?? DEFAULT_CONFIG.name).slice(0, 60),
@@ -555,6 +689,12 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
     helpEnabled: body.helpEnabled === true,
     helpTitle: String(body.helpTitle ?? '').slice(0, 80),
     helpIntro: String(body.helpIntro ?? '').slice(0, 300),
+    helpTheme: theme,
+    helpPinned: pinned,
+    helpCategoryOrder: catOrder,
+    helpFontHead: fontHead,
+    helpAccent2: accent2,
+    helpShowLogo: showLogo,
   }
   await putConfig(config)
   return json(200, { config })
@@ -594,13 +734,28 @@ async function setPublished(
 
   // First publish (or explicit regenerate): one model call turns a filename
   // into a customer-facing title, a one-line description and a category the
-  // help centre groups by. Best-effort - publishing never fails on it.
-  if (updated.published && (!updated.helpMeta || body.regenerate === true)) {
+  // help centre groups by, and a second turns the flattened extraction into
+  // a readable, structured body. Best-effort - publishing never fails on
+  // either.
+  const wantsMeta = updated.published && (!updated.helpMeta || body.regenerate === true)
+  const wantsBody = updated.published && (!updated.helpBodyKey || body.regenerate === true)
+  if (wantsMeta || wantsBody) {
     const text = await sourceText(source)
     if (text) {
       const tenant = await getTenant(tenantId)
-      const meta = await generateHelpMeta(tenant?.name ?? '', source.name, text)
+      const businessName = tenant?.name ?? ''
+      const [meta, helpBody] = await Promise.all([
+        wantsMeta ? generateHelpMeta(businessName, source.name, text) : Promise.resolve(undefined),
+        wantsBody ? generateHelpBody(businessName, source.name, text) : Promise.resolve(undefined),
+      ])
       if (meta) updated.helpMeta = meta
+      if (helpBody) {
+        const key = `${source.s3Key}.help.md`
+        await s3.send(
+          new PutObjectCommand({ Bucket: BUCKET(), Key: key, Body: helpBody, ContentType: 'text/markdown' }),
+        )
+        updated.helpBodyKey = key
+      }
     }
   }
 

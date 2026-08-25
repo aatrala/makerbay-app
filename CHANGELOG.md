@@ -11,6 +11,32 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.23.0 - 2026-08-25
+
+> **A help centre that dresses for the job** — five themes, articles that
+> read like articles, and the paperwork to prove who wrote them.
+
+- Added `assistant` Help centre themes: Clean (free), and Bold,
+  Editorial, Ledger and Signwriter with Trade - picked in the Help
+  centre tab, all riding your brand colour. Genie goes further: any
+  Google font, a second accent, your logo in the header, and no
+  "powered by MakerBay" line.
+- Added `assistant` Articles are formatted at publish now - real
+  headings, numbered steps, tip callouts - instead of a wall of
+  extracted text. One "Improve formatting" click upgrades everything
+  you had already published; hand-edited titles are never touched.
+- Added `assistant` Every help centre gains a "Popular" strip (pin up
+  to four articles on Trade), article counts on categories, related
+  articles and "Was this helpful?" at each article's end, read time,
+  and a "Still stuck?" block carrying your phone and email from your
+  page. Article pages emit proper Article + breadcrumb structured
+  data for search engines.
+- Changed `assistant` Source caps now follow your tier - 20 free, 60
+  Trade, 150 Genie - and the cap is finally visible: "19 of 20
+  sources used" in the Help centre tab, with a plain warning when a
+  website crawl stops at the limit instead of the old silent drop.
+- Added `assistant` Trade can reorder help centre categories.
+
 ## 2.22.0 - 2026-08-25
 
 > **Papers with your name on them, a preview that types along, and a help centre that fills itself** — identity lines and logos on documents, unsaved edits rendered live, and one-click publishing for everything your centre was hiding.
