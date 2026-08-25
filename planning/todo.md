@@ -214,6 +214,16 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+### 55 — Billing page never returns from Stripe ✅
+Root cause was in the browser, not the flow: checkout and portal both
+return live Stripe URLs in about a second (your new key scopes are
+working - verified live). But pressing Back from Stripe restored the
+page from the back/forward cache frozen at "Opening Stripe…" with the
+buttons disabled. Fixed: a bfcache restore now resets the button and
+refreshes the billing summary.
+**Test:** Billing → any Stripe button → press Back on the Stripe page →
+the billing page is usable and refreshed.
+
 ### 54 — Admin sidebar + account dropdown ✅
 Shipped 2026-08-25: the staff console's bottom block is now the same
 account dropdown pattern as the customer app - avatar button opening
