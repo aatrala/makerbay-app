@@ -154,16 +154,56 @@ page copy.
 **Test:** Your page → Style → pick Grow, add an FAQ → open your page →
 "See all →" → /faq sub-page.
 
-### 48b — Admin console professional UI + feature consult 💬
-Consult delivered 2026-08-25 (see discussion message): 8 polish items
-(incl. two real defects: unstyled STAFF badge, window.prompt dialogs) and
-7 ranked features led by a home dashboard, tenant health flags, Stripe
-deep links, onboarding funnel. **Waiting on your picks.**
+### 48b — Admin console overhaul ✅ (all approved items)
+Shipped 2026-08-25: Overview dashboard (signups, paying subs, open
+tickets, near-cap sweep, recent staff activity), health flags on the
+workspace list, one omnibox (email jumps to workspace, / focuses),
+row-click navigation, inline reason panels replacing every browser
+prompt, sticky workspace header with suspend/add-note, onboarding
+checklist, Stripe deep links, usage bars vs limits, audit filters +
+readable detail, staff accent colour + styled badge.
+**Test:** admin.makerbay.app → Overview is the home page; open a
+workspace → header actions expand inline; Audit log → action filter.
 
-### 49 — Customer service / feedback / tickets 💬
-Three variants delivered 2026-08-25 (in-app tickets / assistant-first
-support / email-only). Recommendation: in-app tickets + assistant front
-end as phase 2. **Waiting on your pick.**
+### 49 — Customer service / feedback / tickets ✅ (V1+V2)
+Shipped 2026-08-25: Support & feedback under the account menu — the
+MakerBay assistant answers first (V2), tickets with full threads below
+(V1: problem/question/idea, free capped at 3 open, paid = priority).
+Staff answer from the console Tickets queue; replies land in the
+customer dashboard and inbox. Verified live: ticket created on the demo
+tenant (priority, listed), staff routes refuse unauthenticated calls.
+**Caveats:** SES is still in sandbox - ticket notification emails to the
+founder need the aatrala@gmail.com identity verified (verification email
+sent 2026-08-25 - click it), and customer-reply emails will only deliver
+to verified addresses until SES production access is granted.
+**Test:** app → account menu → Support & feedback → send a ticket →
+answer it in the console → see the reply appear in the app.
+
+### 50 — Configurable request-form fields + notification gating 💬
+Opinion delivered 2026-08-25 (see discussion message): custom fields on
+Trade; recommend keeping instant lead notifications free OR gating
+instant-vs-daily-digest rather than on/off. **Waiting on your call.**
+
+### 51 — Edit page / Style flow not intuitive 💬
+Consult delivered 2026-08-25: diagnosis (preview buried, Style tab has
+no preview at all, misleading "few minutes" copy - saves ARE instant via
+the cache-busting nonce), three variants (A side-by-side live preview /
+B merged single Page screen / C click-the-page-to-edit), quick wins
+under a day. Recommendation: quick wins now, then Variant A.
+**Waiting on your pick.**
+
+### 52 — Missed-calls notify field unexplained ✅
+Now reads "Email me about missed calls at" with a placeholder and a line
+explaining: the caller gets the SMS, this address is for you. Live.
+
+### 53 — Genie conversation cluttered + quick buttons 💬
+Consult delivered 2026-08-25: diagnosis (raw unformatted text walls,
+squeezed log, four competing zones, toolsUsed never shown), variants
+(A clean chat with markdown ~1 day / B structured briefing cards with
+row-level actions ~3-5 days / C command bar), quick-button verdict:
+Brief me / Diary / Money / Block time above the input, contextual
+actions belong on cards. Recommendation: A now, B next.
+**Waiting on your pick.**
 
 ### 48 — Admin OTP without a connected authenticator app ✅
 Nothing needs connecting beforehand - the first sign-in IS the setup:
