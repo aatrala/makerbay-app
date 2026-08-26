@@ -662,11 +662,54 @@ Also in scope: Resend as an alternative or failover if the SES appeal
 (issue 76) stays blocked, and the exact Cognito mechanism for email
 one-time-code sign-in.
 
-## Issues 95-102 (repo audit + item 93 consults, 2026-08-27)
+## Issues 95-105 (repo audit + item 93/94 consults, 2026-08-27)
 
 Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
 verified against the code, not inferred.
+
+### 103 — Every customer-bound email is sent by MakerBay, not the business ⛔ P0
+`EmailInput` in `packages/core/src/notify.ts` has no `from` field, and
+`FROM()` hardcodes `process.env.EMAIL_FROM ?? 'hello@makerbay.app'`. Every
+Lambda sets `EMAIL_FROM: hello@makerbay.app`. So a homeowner who booked
+Southside Plumbing gets a booking confirmation whose From line reads
+MakerBay, a company they have never heard of, signed by a business they
+have. That is the shape of a phishing email, it is what a phone shows in
+the inbox list, and it breaks the whole point of Presence.
+Reputation is also shared: one tenant's annoyed customer marking spam
+degrades delivery for every other tenant on the domain.
+**Fix:** add `fromName` and `replyTo` to `EmailInput`. Owner-bound stays
+`MakerBay <hello@makerbay.app>`. Customer-bound becomes
+`Southside Plumbing <southside-plumbing@send.makerbay.app>` with the
+owner's address as Reply-To. One verified SES domain identity covers every
+tenant, so SPF and DKIM still pass and no per-tenant DNS is needed.
+
+### 104 — Cognito auth emails are unconfigured: wrong sender, 50/day cap ⛔ P0
+The user pool (`infra/lib/makerbay-stack.ts:386`) has no `email:` property
+and no `userVerification:` block - grep for `UserPoolEmail`, `withSES` or
+`userVerification` across the stack returns zero. Two consequences:
+- Signup verification and password reset codes are sent by Cognito's shared
+  default sender from **no-reply@verificationemail.com**, a domain MakerBay
+  does not own and cannot authenticate. The two most security-sensitive
+  emails in the product are the two least trustworthy-looking.
+- Cognito default sending is capped at **50 emails per day for the whole
+  pool**. A good launch day silently breaks sign-ups.
+This also blocks the anti-phishing promise ("every email from MakerBay comes
+from @makerbay.app") from being true, and therefore blocks the email
+one-time-code sign-in agreed under issue 93.
+**Fix:** `email: cognito.UserPoolEmail.withSES({ fromEmail:
+'hello@makerbay.app', fromName: 'MakerBay', sesRegion: 'us-east-1' })` plus
+a `userVerification` block carrying the approved copy.
+**Note:** SES production access (issue 76) gates the volume, not the sender
+identity - the sender fix is worth doing either way.
+
+### 105 — Customer-bound mail has almost no Reply-To 🔶 P1
+Five of twenty sends set `replyTo`, and only one of those five is
+customer-bound (`modules/quotes/api/src/handler.ts:499`). So a homeowner who
+hits reply on a booking confirmation, an invoice, a review invite or a
+reply-from-the-business writes to `hello@makerbay.app`, which nobody reads.
+**Fix:** Reply-To on every customer-bound send, pointing at
+`config.notifyEmail`. Rides along with 103.
 
 ### 95 — Metered usage can double-count and overbill ⛔ P0
 `packages/core-api/src/usage-aggregator.ts` declares `idempotencyKey` on its
