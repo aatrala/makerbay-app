@@ -6,6 +6,7 @@ interface Source {
   sourceId: string
   name: string
   type: 'file' | 'text' | 'url'
+  native?: boolean
   status: 'awaiting_upload' | 'processing' | 'ready' | 'failed'
   sizeBytes?: number
   charCount?: number
@@ -338,7 +339,7 @@ export default function Knowledge() {
                       {s.sourceUrl && <div className="meta trunc">{s.sourceUrl}</div>}
                       {s.warning && <div className="meta warn-text">{s.warning}</div>}
                     </td>
-                    <td>{s.type === 'url' ? 'web page' : s.type}</td>
+                    <td>{s.native ? 'help article' : s.type === 'url' ? 'web page' : s.type}</td>
                     <td><span className={`chip ${s.status}`}>{s.status.replace('_', ' ')}</span></td>
                     <td className="nowrap">
                       <label className="pick">

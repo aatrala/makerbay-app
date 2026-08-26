@@ -22,6 +22,7 @@ import {
   putPresenceConfig,
   type PresenceConfigRow,
 } from './db'
+import { copyDraft } from './copy'
 import { deleteDomain, getDomain, putDomain } from './domain'
 import { listVersions, readPage, restoreVersion, writePage } from './page'
 import { SUB_PAGES, indexDirective, isComplete, renderNotFound, renderPage, type SubPage } from './render'
@@ -67,6 +68,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
       return await writePage(tenantId, body(event), actorOf(event))
     }
     if (method === 'POST' && path === '/v1/presence/preview') return await previewDraft(tenantId, body(event))
+    if (method === 'POST' && path === '/v1/presence/copy-draft') return await copyDraft(tenantId, body(event))
     if (method === 'GET' && path === '/v1/presence/versions') return await listVersions(tenantId)
     if (method === 'POST' && path === '/v1/presence/versions/restore') {
       return await restoreVersion(tenantId, body(event), actorOf(event))
@@ -286,7 +288,7 @@ async function readConfig(tenantId: string): Promise<APIGatewayProxyResultV2> {
     { key: 'intro', label: 'Write an intro of a few sentences', done: config.intro.trim().length >= 40, to: '/page' },
     { key: 'photo', label: 'Add a photo', done: Boolean(config.photoKey), to: '/page' },
     { key: 'service', label: 'Add at least one priced service', done: priced, to: '/booking/services' },
-    { key: 'hours', label: 'Set your opening hours', done: hasHours, to: '/booking/settings' },
+    { key: 'hours', label: 'Set your opening hours', done: hasHours, to: '/booking/hours' },
     { key: 'booking', label: 'Let customers book from the page', done: bookingEnt.enabled && config.showBooking && services.length > 0, to: '/booking/services' },
     { key: 'reviews', label: 'Show customer reviews on the page', done: Boolean(reviewsEnt.enabled && reviews && reviews.count > 0), to: '/reviews' },
     { key: 'reviewLink', label: 'Add your Google review link (under Get found)', done: Boolean(visibilityCfg?.reviewLink), to: '/visibility' },

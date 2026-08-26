@@ -1,4 +1,4 @@
-import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { ddb } from '@makerbay/core'
 import type { BookingHours } from './slots'
 
@@ -16,11 +16,14 @@ export interface ServiceRow {
   durationMinutes: number
   bufferMinutes: number
   priceCents?: number
+  /** Fixed deposit to secure a booking (spec-booking-deposits.md). 0/absent = off. */
+  depositCents?: number
   active: boolean
   createdAt: string
 }
 
-export type BookingStatus = 'confirmed' | 'cancelled' | 'completed' | 'noshow'
+/** pending_payment is transient: a held slot awaiting its deposit. */
+export type BookingStatus = 'confirmed' | 'cancelled' | 'completed' | 'noshow' | 'pending_payment'
 
 export interface BookingRow {
   tenantId: string
@@ -46,6 +49,12 @@ export interface BookingRow {
   cancelToken: string
   source: 'hosted' | 'widget' | 'dashboard' | 'api'
   notifyError?: string
+  /** Deposit stamped from the service at create time; paid via Stripe. */
+  depositCents?: number
+  depositPaidAt?: string
+  paymentId?: string
+  /** Only on pending_payment rows: the slot is held until this instant. */
+  holdExpiresAt?: string
   createdAt: string
   updatedAt: string
   cancelledAt?: string
@@ -140,9 +149,18 @@ export async function bookingsBetween(
   return (r.Items ?? []) as BookingRow[]
 }
 
-/** Only bookings that still hold their time. Cancelled ones free their slot. */
-export const blocking = (rows: BookingRow[]): BookingRow[] =>
-  rows.filter((b) => b.status === 'confirmed' || b.status === 'completed')
+/**
+ * Only bookings that still hold their time. Cancelled ones free their slot;
+ * a pending deposit holds it until the hold lapses (35 min - always past the
+ * 30-min Stripe checkout expiry, so a payment can never land on a freed slot).
+ */
+export const blocking = (rows: BookingRow[], now = Date.now()): BookingRow[] =>
+  rows.filter(
+    (b) =>
+      b.status === 'confirmed' ||
+      b.status === 'completed' ||
+      (b.status === 'pending_payment' && new Date(b.holdExpiresAt ?? 0).getTime() > now),
+  )
 
 export async function findByCancelToken(
   tenantId: string,
@@ -162,8 +180,39 @@ export async function countBookingsThisMonth(tenantId: string): Promise<number> 
   const to = new Date(Date.now() + 400 * 86_400_000).toISOString()
   const rows = await bookingsBetween(tenantId, from, to)
   // Blocks are the owner's own time, not customers - they never count
-  // against the monthly booking cap.
-  return rows.filter((b) => !b.kind && b.createdAt.startsWith(monthStart)).length
+  // against the monthly booking cap. Unpaid deposit holds don't either;
+  // they count the moment they confirm.
+  return rows.filter(
+    (b) => !b.kind && b.status !== 'pending_payment' && b.createdAt.startsWith(monthStart),
+  ).length
+}
+
+/**
+ * Flip a held slot to confirmed when its deposit lands. Conditional on the
+ * row still being pending_payment: a payment arriving for a lapsed hold (or
+ * arriving twice) must fail loudly rather than resurrect the booking.
+ */
+export async function confirmDepositPaid(
+  tenantId: string,
+  bookingId: string,
+  paymentId: string,
+): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.bookings(),
+      Key: { tenantId, bookingId },
+      UpdateExpression:
+        'SET #st = :confirmed, depositPaidAt = :now, paymentId = :p, updatedAt = :now REMOVE holdExpiresAt',
+      ConditionExpression: '#st = :pending',
+      ExpressionAttributeNames: { '#st': 'status' },
+      ExpressionAttributeValues: {
+        ':confirmed': 'confirmed',
+        ':pending': 'pending_payment',
+        ':p': paymentId,
+        ':now': new Date().toISOString(),
+      },
+    }),
+  )
 }
 
 export async function deleteBooking(tenantId: string, bookingId: string): Promise<void> {

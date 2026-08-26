@@ -48,6 +48,9 @@ export interface QuoteRow {
   publicToken: string
   validUntil: string
   notifyError?: string
+  /** Set when an invoice is created from this quote - one invoice per quote. */
+  invoiceId?: string
+  invoicedAt?: string
   createdAt: string
   updatedAt: string
   sentAt?: string

@@ -1,0 +1,1 @@
+{"action":"evaluate","args":{"code":"(()=>{const m=document.querySelector('main');const t=m.innerText;const i=t.indexOf('Page checklist');return JSON.stringify({checklist:t.slice(Math.max(0,i-300),i+300)});})()"},"session":"makerbay-test"}

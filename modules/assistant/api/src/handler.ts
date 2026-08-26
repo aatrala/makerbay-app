@@ -110,6 +110,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && refreshMatch) return await refresh(tenantId, refreshMatch[1])
     const deleteMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)$/)
     if (method === 'DELETE' && deleteMatch) return await removeSource(tenantId, deleteMatch[1])
+    if (method === 'PUT' && deleteMatch) return await editSource(tenantId, deleteMatch[1], event)
 
     if (method === 'GET' && path === '/v1/assistant/config') {
       const [config, tier, rows] = await Promise.all([
@@ -250,8 +251,10 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
   const accent = String(presence?.Item?.accentColor ?? '')
   if (/^#[0-9a-fA-F]{6}$/.test(accent)) config.brandColor = accent
 
+  // Native articles render from their own text, so they go live the moment
+  // the owner saves - only crawled/uploaded sources wait for processing.
   const published = (await listSources(tenant.tenantId))
-    .filter((s) => s.published && s.status === 'ready')
+    .filter((s) => s.published && (s.status === 'ready' || (s.native && s.status === 'processing')))
     .sort((a, b) => a.name.localeCompare(b.name))
 
   if (wantsRobots) return renderRobots(slug)
@@ -554,6 +557,32 @@ ${page.text}`
       tenantId, sourceId, name, type, s3Key: key,
       status: 'processing', sizeBytes: text.length, createdAt: now, updatedAt: now,
     }
+
+    // Native help articles (issue 71): written by the owner in the Help
+    // centre tab. The owner's title/category are authoritative (no model
+    // meta call), the text IS the article body (the editor speaks the same
+    // markdown-lite the renderer reads), and it trains the assistant like
+    // any other source via the normal ingestion below.
+    if (body.native === true) {
+      row.native = true
+      row.published = body.published === true
+      const m = (body.helpMeta ?? {}) as Record<string, unknown>
+      row.helpMeta = {
+        title: String(m.title ?? '').trim().slice(0, 80) || name,
+        description:
+          String(m.description ?? '').trim().slice(0, 160) ||
+          text.replace(/^#+\s.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 140),
+        category: (HELP_CATEGORIES as readonly string[]).includes(String(m.category))
+          ? String(m.category)
+          : 'General',
+      }
+      const bodyKey = `${key}.help.md`
+      await s3.send(
+        new PutObjectCommand({ Bucket: BUCKET(), Key: bodyKey, Body: text, ContentType: 'text/markdown' }),
+      )
+      row.helpBodyKey = bodyKey
+    }
+
     await putSource(row)
     const jobId = await tryStartIngestion()
     if (jobId) await updateSourceStatus(tenantId, sourceId, 'processing', jobId)
@@ -575,6 +604,60 @@ ${page.text}`
   }
   await putSource(row)
   return json(201, { source: row, uploadUrl })
+}
+
+/**
+ * Edit a native help article in place (issue 71). Only owner-written text
+ * sources are editable - crawled and uploaded documents are refreshed or
+ * replaced, never edited. The rewrite re-enters ingestion so the assistant's
+ * answers catch up within a few minutes; the public article updates at once.
+ */
+async function editSource(
+  tenantId: string,
+  sourceId: string,
+  event: Event,
+): Promise<APIGatewayProxyResultV2> {
+  const source = await getSource(tenantId, sourceId)
+  if (!source) return json(404, { error: 'source_not_found' })
+  if (!source.native || source.type !== 'text')
+    return json(409, { error: 'not_editable', message: 'Only articles written here can be edited. Re-add crawled or uploaded documents instead.' })
+
+  const body = JSON.parse(event.body ?? '{}')
+  const text = String(body.text ?? '').trim()
+  if (!text) return json(400, { error: 'text_required' })
+  if (text.length > 500_000) return json(400, { error: 'text_too_large' })
+
+  const m = (body.helpMeta ?? {}) as Record<string, unknown>
+  const title = String(m.title ?? source.helpMeta?.title ?? source.name).trim().slice(0, 80) || source.name
+  const updated: SourceRow = {
+    ...source,
+    name: title,
+    status: 'processing',
+    sizeBytes: text.length,
+    published: body.published === undefined ? source.published : body.published === true,
+    helpMeta: {
+      title,
+      description:
+        String(m.description ?? '').trim().slice(0, 160) ||
+        source.helpMeta?.description ||
+        text.replace(/^#+\s.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 140),
+      category: (HELP_CATEGORIES as readonly string[]).includes(String(m.category))
+        ? String(m.category)
+        : (source.helpMeta?.category ?? 'General'),
+    },
+    updatedAt: new Date().toISOString(),
+  }
+
+  await s3.send(new PutObjectCommand({ Bucket: BUCKET(), Key: source.s3Key, Body: text, ContentType: 'text/plain' }))
+  await s3.send(
+    new PutObjectCommand({ Bucket: BUCKET(), Key: `${source.s3Key}.help.md`, Body: text, ContentType: 'text/markdown' }),
+  )
+  await writeMetadataSidecar(source.s3Key, tenantId, sourceId, title)
+  updated.helpBodyKey = `${source.s3Key}.help.md`
+  await putSource(updated)
+  const jobId = await tryStartIngestion()
+  if (jobId) await updateSourceStatus(tenantId, sourceId, 'processing', jobId)
+  return json(200, { source: updated })
 }
 
 async function tryStartIngestion(): Promise<string | undefined> {
@@ -926,6 +1009,9 @@ async function preview(tenantId: string, sourceId: string): Promise<APIGatewayPr
         ...meta,
         excerpt: full.slice(0, 4000),
         truncated: full.length > 4000,
+        // Native articles are edited in place, so the editor needs the whole
+        // thing, not a preview.
+        ...(source.native ? { text: full, native: true } : {}),
       })
     } catch {
       return json(200, { ...meta, excerpt: null, truncated: false })

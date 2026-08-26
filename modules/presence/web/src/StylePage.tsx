@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Notice, Skeleton, api, explain, when } from '@makerbay/web-kit'
+import GenieDraftBar from './GenieDraftBar'
 
 /**
  * The Page style screen (issue 45, docs/spec-page-styles.md). Every option
@@ -264,6 +265,13 @@ function FaqEditor({ page, tier, busy, save, chip, locked }: {
                 onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, a: e.target.value } : x))} />
             </div>
           ))}
+          <GenieDraftBar
+            fields={['faq']}
+            label="✨ Draft answers with Genie"
+            onApply={(d) => {
+              if (d.faq?.length) setItems(d.faq)
+            }}
+          />
           <div className="row mt">
             {items.length < 20 && (
               <button className="ghost" disabled={busy}

@@ -592,8 +592,15 @@ async function reviseQuote(tenantId: string, quoteId: string): Promise<APIGatewa
 async function createInvoice(tenantId: string, quoteId: string): Promise<APIGatewayProxyResultV2> {
   const quote = await getQuote(tenantId, quoteId)
   if (!quote) return json(404, { error: 'not_found' })
+  // One invoice per quote: a second click returns the invoice that already
+  // exists instead of quietly minting a duplicate the customer could pay twice.
+  if (quote.invoiceId) {
+    const existing = await getInvoice(tenantId, quote.invoiceId)
+    if (existing) return json(200, { invoice: existing, existing: true })
+  }
   try {
     const invoice = await invoiceFromQuote(tenantId, quote)
+    await putQuote({ ...quote, invoiceId: invoice.invoiceId, invoicedAt: invoice.createdAt, updatedAt: invoice.createdAt })
     return json(201, { invoice })
   } catch (err) {
     if ((err as { code?: string }).code === 'quote_not_accepted') {

@@ -520,6 +520,7 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_INVOICES: invoices.tableName,
       TABLE_QUOTES: quotes.tableName,
       TABLE_QUOTESCONFIG: quotesConfig.tableName,
+      TABLE_BOOKINGS: bookings.tableName,
       STRIPE_SECRET_ARN: stripeSecret.secretArn,
     }, { timeoutSeconds: 25 })
     // Fired by a one-off EventBridge schedule made when the booking is created.
@@ -544,7 +545,23 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_REVIEWS: reviews.tableName,
       TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
       TABLE_QUOTESCONFIG: quotesConfig.tableName,
-    })
+      // Genie-written page copy (spec in docs): one Converse call grounded
+      // in the workspace's own knowledge base.
+      CHAT_MODEL_ID,
+      KB_ID: kb.attrKnowledgeBaseId,
+    }, { timeoutSeconds: 25 })
+    presenceFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['bedrock:Retrieve'], resources: [kb.attrKnowledgeBaseArn] }),
+    )
+    presenceFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5*',
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5*`,
+        ],
+      }),
+    )
     const visibilityFn = fn('VisibilityApiFn', 'modules/visibility/api/src/handler.ts', {
       ...moduleEnv,
       TABLE_VISIBILITYCONFIG: visibilityConfig.tableName,
@@ -906,12 +923,15 @@ export class MakerbayStack extends cdk.Stack {
       },
       targets: [new eventsTargets.LambdaFunction(paymentsFn)],
     })
-    // Money landed - the quotes module makes its documents agree.
+    // Money landed - the quotes module makes its documents agree, and the
+    // booking module confirms deposit-held slots (spec-booking-deposits.md).
     new events.Rule(this, 'PaymentReceivedRule', {
       eventBus: bus,
       eventPattern: { source: ['makerbay.payments'], detailType: ['payment.received'] },
-      targets: [new eventsTargets.LambdaFunction(quotesFn)],
+      targets: [new eventsTargets.LambdaFunction(quotesFn), new eventsTargets.LambdaFunction(bookingFn)],
     })
+    // The payments session endpoint resolves a held booking by its token.
+    bookings.grantReadData(paymentsFn)
     presenceConfig.grantReadWriteData(presenceFn)
     presenceVersions.grantReadWriteData(presenceFn)
     visibilityConfig.grantReadWriteData(visibilityFn)
@@ -937,6 +957,10 @@ export class MakerbayStack extends cdk.Stack {
     for (const t of [bookingServices, bookingConfig, assistantConfig, reviews, visibilityConfig, quotesConfig, tenants, users, entitlements, grants, slugAliases]) {
       t.grantReadData(presenceFn)
     }
+    // Copy drafting meters as Genie messages, so presence reads usage and
+    // emits its own events.
+    usage.grantReadData(presenceFn)
+    bus.grantPutEventsTo(presenceFn)
     for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)
     // Grounding reads: what the workspace already knows about itself.

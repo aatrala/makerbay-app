@@ -214,6 +214,80 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+### 70 — WhatsApp surface for Genie 📋 HELD (revisit at 100+ users + marketing)
+Founder decision 2026-08-26: hold until after 100+ users and marketing.
+The build plan, ready for that day:
+1. Meta Business Manager account + business verification (founder,
+   days-to-weeks lead time - start this first when we go).
+2. WhatsApp Business Account (WABA) + a dedicated phone number,
+   direct on Meta's Cloud API (no BSP middleman, cheapest).
+3. Webhook Lambda (verify token + signature) receiving inbound
+   messages; sender → tenant mapping table.
+4. Genie bridge: inbound text → existing Genie runner; briefing/
+   confirmation cards rendered as WhatsApp interactive buttons;
+   confirm/decline round-trips the existing PendingAction flow.
+5. Business-initiated messages (morning briefing push) need approved
+   message templates - draft + submit for review.
+6. Opt-in flow in the dashboard (Genie tab: "Connect WhatsApp"),
+   per-tenant number registry, taster/plan caps reused as-is.
+7. Costs: Meta conversation pricing passed through or absorbed into
+   Genie plan - decide at build time with real volume data.
+
+### 71 — Native help-article authoring ✅
+Shipped 2026-08-26: "Write an article" in the Help centre tab (title,
+category, optional description, body with ##/steps/Tip: structure),
+published instantly (native articles skip the processing wait on the
+public page), editable any time via the row's Edit button; the text
+trains the assistant through normal ingestion; Knowledge shows the
+type as "help article"; owner-typed titles are never overwritten.
+**Test:** Assistant → Help centre → Write an article → publish → open
+the centre: it is live; Edit → change a line → live again.
+
+### 72 — Quotes dashboard extras ✅ (consult top-4 batch)
+Shipped 2026-08-26 from the ranked consult: (1) one invoice per quote
+- creating an invoice stamps the quote, second click shows the
+existing invoice, and invoiced quotes leave the pipeline's "accepted,
+to invoice" figure (it was over-counting money already billed);
+(2) "Quote this job" on every request (name/email prefilled, request
+linked) + an existing-customer picker on New quote; (3) Duplicate on
+any quote; (4) "expires in Nd" chips on sent quotes, an Expired tab,
+and an "email failed" chip when a send bounced. Next batch queued:
+BAS quarter card + CSV export, deposit-deducting invoices.
+**Test:** Requests → open one → Quote this job; Quotes → accepted
+quote → Create invoice twice (one invoice); list shows expiry chips.
+
+### 73 — Booking deposits ✅ (docs/spec-booking-deposits.md)
+Shipped 2026-08-26 after consult. Per-service fixed deposit (Services
+screen, armed when payments are connected); customer pays via Stripe
+to secure the slot (35-min hold vs 30-min checkout expiry = no
+double-booking window); booking confirms itself when the money lands;
+diary shows "$X paid"; abandoned holds lapse silently; no automatic
+refunds (owner's discretion from Payments). Deposits allowed on free
+tier. **Test (after your Stripe onboarding):** demo tenant → set a
+$50 deposit on a service → book publicly → pay → confirmed + chip.
+
+### 74 — First-run experience ✅ (docs/spec-first-run.md)
+Shipped 2026-08-26 after consult + internal approval: a Home screen
+with six real setup steps (service, hours, knowledge, page, prices,
+review link), progress bar + one Next action, demo-workspace link,
+Hide setup; landing page until done/hidden, then back to normal with
+"Getting started" in the account menu. Onboarding no longer dumps new
+owners on the Knowledge page. Also fixed in passing: the page
+checklist's hours link pointed at a dead route.
+**Test:** open app.makerbay.app → Home shows your six steps.
+
+### 75 — Genie-written page copy ✅ (docs/spec-genie-page-copy.md)
+Shipped 2026-08-26 after consult: "Draft with Genie" in the Page
+editor's Words card (headline + intro) and FAQ editor, with an
+optional instruction line. Drafts come only from your real services,
+hours, reviews and knowledge documents (409 when there are no facts),
+land as UNSAVED changes on the live preview, and publish only when
+you press Save. Each draft costs one Genie message; FAQ drafting is
+Trade+. The old "we never write this for you" copy now tells the
+truth about how Genie writes.
+**Test:** Your page → Words → ✨ Draft with Genie → preview updates →
+edit → Save.
+
 ### 69 — Bookings/Reviews on by default + switch-off ✅
 Shipped 2026-08-25: new workspaces start with Assistant, Booking AND
 Reviews on (server-side at creation); every existing active workspace
@@ -481,9 +555,11 @@ form. The alarm email is the trigger to revisit.
 
 ## On hold (deliberate)
 
-- Marketplace (~1000 customers). Booking deposits. Ops hygiene (root →
-  IAM Identity Center — would also stop the AWS session expiring
-  mid-deploy — alarms, CI, Cost Explorer check).
+- Marketplace (~1000 customers).
+- WhatsApp Genie (see issue 70 - after 100+ users + marketing).
+- Ops hygiene (root → IAM Identity Center — would also stop the AWS
+  session expiring mid-deploy — alarms, CI, PITR check): founder held
+  2026-08-26 until the current testing round and improvements land.
 
 ## Standing facts
 

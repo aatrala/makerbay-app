@@ -37,10 +37,11 @@ const Tables = {
   invoices: () => process.env.TABLE_INVOICES!,
   quotes: () => process.env.TABLE_QUOTES!,
   quotesConfig: () => process.env.TABLE_QUOTESCONFIG!,
+  bookings: () => process.env.TABLE_BOOKINGS!,
 }
 const CHAT = 'https://chat.makerbay.app'
 
-export type PaymentKind = 'invoice' | 'quote_deposit'
+export type PaymentKind = 'invoice' | 'quote_deposit' | 'booking_deposit'
 export interface PaymentRow {
   tenantId: string
   paymentId: string
@@ -252,7 +253,7 @@ async function publicRoute(method: string, path: string, event: Event): Promise<
   const slug = String(b.slug ?? '')
   const kind = String(b.kind ?? '') as PaymentKind
   const token = String(b.token ?? '')
-  if (!slug || !token || !['invoice', 'quote_deposit'].includes(kind)) return json(400, { error: 'bad_request' })
+  if (!slug || !token || !['invoice', 'quote_deposit', 'booking_deposit'].includes(kind)) return json(400, { error: 'bad_request' })
 
   const tenant = await getTenantBySlug(slug)
   if (!tenant) return json(404, { error: 'not_found' })
@@ -262,7 +263,9 @@ async function publicRoute(method: string, path: string, event: Event): Promise<
 
   const target = kind === 'invoice'
     ? await invoiceTarget(tenant.tenantId, token)
-    : await quoteDepositTarget(tenant.tenantId, token)
+    : kind === 'quote_deposit'
+      ? await quoteDepositTarget(tenant.tenantId, token)
+      : await bookingDepositTarget(tenant.tenantId, token)
   if ('error' in target) return json(target.status, { error: target.error, message: target.message })
 
   // One open session per document: an unexpired pending payment is reused
@@ -274,9 +277,14 @@ async function publicRoute(method: string, path: string, event: Event): Promise<
 
   const s = await stripe()
   const paymentId = ulid()
-  const returnUrl = `${CHAT}/${kind === 'invoice' ? 'invoice' : 'quote'}?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`
+  const page = kind === 'invoice' ? 'invoice' : kind === 'quote_deposit' ? 'quote' : 'booking'
+  const returnUrl = `${CHAT}/${page}?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`
   const session = await s.checkout.sessions.create({
     mode: 'payment',
+    // Booking deposits hold a diary slot for 35 minutes; the session must
+    // die first (30 min is Stripe's floor) so a payment can never complete
+    // against a freed slot.
+    ...(kind === 'booking_deposit' ? { expires_at: Math.floor(Date.now() / 1000) + 1800 } : {}),
     line_items: [
       {
         price_data: {
@@ -360,6 +368,41 @@ async function invoiceTarget(tenantId: string, token: string): Promise<Target | 
     description: `Invoice ${docLabel('INV', Number(invoice.number), await tenantDocPrefix(tenantId))}`,
     contactId: invoice.contactId ? String(invoice.contactId) : undefined,
     customerEmail: invoice.customerEmail ? String(invoice.customerEmail) : undefined,
+  }
+}
+
+/**
+ * A held booking awaiting its deposit (spec-booking-deposits.md). The token
+ * is the booking's cancelToken; the amount was stamped onto the row at
+ * create time, so a service edited mid-flight cannot reprice the hold.
+ */
+async function bookingDepositTarget(tenantId: string, token: string): Promise<Target | TargetError> {
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: Tables.bookings(),
+      FilterExpression: 'cancelToken = :tok',
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId, ':tok': token },
+      Limit: 500,
+    }),
+  )
+  const booking = (r.Items ?? [])[0]
+  if (!booking) return { error: 'not_found', message: 'Booking not found.', status: 404 }
+  if (booking.depositPaidAt)
+    return { error: 'already_paid', message: 'This deposit has already been paid.', status: 409 }
+  if (booking.status !== 'pending_payment')
+    return { error: 'not_payable', message: 'This booking does not need a deposit.', status: 409 }
+  if (new Date(String(booking.holdExpiresAt ?? 0)).getTime() < Date.now())
+    return { error: 'hold_expired', message: 'That time was released - pick a slot again.', status: 409 }
+  const cfg = await ddb.send(new GetCommand({ TableName: Tables.quotesConfig(), Key: { tenantId } }))
+  const day = new Date(String(booking.startsAt)).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
+  return {
+    refId: String(booking.bookingId),
+    amountCents: Number(booking.depositCents),
+    currency: String(cfg.Item?.currency ?? 'AUD'),
+    description: `Deposit - ${booking.serviceName}, ${day}`,
+    contactId: booking.contactId ? String(booking.contactId) : undefined,
+    customerEmail: booking.email ? String(booking.email) : undefined,
   }
 }
 

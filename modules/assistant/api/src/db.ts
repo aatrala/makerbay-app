@@ -28,6 +28,8 @@ export interface SourceRow {
   fetchedAt?: string
   charCount?: number
   warning?: string
+  /** Written by the owner in the Help centre tab (issue 71) - editable there. */
+  native?: boolean
   /** Published sources appear in the public help centre. Off by default. */
   published?: boolean
   /** S3 key of the model-formatted article body (markdown-lite), generated at publish. */

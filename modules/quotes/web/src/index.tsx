@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link, Route, useNavigate, useParams } from 'react-router-dom'
+import { Link, Route, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Empty,
   Notice,
@@ -45,6 +45,8 @@ interface Quote {
   notes?: string
   terms?: string
   notifyError?: string
+  /** Set once an invoice exists for this quote - one invoice per quote. */
+  invoiceId?: string
   createdAt: string
 }
 
@@ -85,6 +87,21 @@ const aging = (i: Pick<Invoice, 'status' | 'dueAt'>) => {
 const cash = (cents: number, currency = 'AUD') =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(cents / 100)
 
+/** The server expires lazily on read; lists apply the same rule client-side. */
+const quoteStatus = (q: Pick<Quote, 'status' | 'validUntil'>): Quote['status'] =>
+  q.status === 'sent' && new Date(q.validUntil).getTime() < Date.now() ? 'expired' : q.status
+
+/** "expires in 2d": chase the customer before the price lapses (issue 72). */
+const quoteAging = (q: Pick<Quote, 'status' | 'validUntil'>) => {
+  if (quoteStatus(q) !== 'sent') return null
+  const days = Math.ceil((new Date(q.validUntil).getTime() - Date.now()) / 86_400_000)
+  if (days <= 3) return <span className="chip warn">expires in {days}d</span>
+  return null
+}
+
+const emailFailedChip = (row: { notifyError?: string }) =>
+  row.notifyError ? <span className="chip failed" title={row.notifyError}>email failed</span> : null
+
 const STATUS_CHIP: Record<string, string> = {
   draft: 'awaiting_upload', sent: 'processing', accepted: 'ready',
   declined: 'failed', expired: 'failed', superseded: 'failed',
@@ -99,9 +116,13 @@ function QuotesList() {
 
   const load = useCallback(async () => {
     try {
-      const r = await api('GET', `/v1/quotes${status ? `?status=${status}` : ''}`)
-      setQuotes(r.quotes)
-      if (!status) setAll(r.quotes ?? [])
+      // "expired" is derived, not stored, so the server filter can never
+      // match it - that tab filters the full list client-side instead.
+      const serverStatus = status && status !== 'expired' ? status : ''
+      const r = await api('GET', `/v1/quotes${serverStatus ? `?status=${serverStatus}` : ''}`)
+      const rows: Quote[] = r.quotes ?? []
+      setQuotes(status === 'expired' ? rows.filter((q) => quoteStatus(q) === 'expired') : rows)
+      if (!serverStatus) setAll(rows)
       else void api('GET', '/v1/quotes').then((x) => setAll(x.quotes ?? [])).catch(() => {})
     }
     catch (e) { setError(explain(e)); setQuotes([]) }
@@ -109,9 +130,10 @@ function QuotesList() {
   useEffect(() => { void load() }, [load])
 
   // The pipeline in one line: how much is waiting on an answer, how much
-  // is won but not yet invoiced (issue 61).
+  // is won but not yet invoiced (issue 61). Invoiced quotes leave the
+  // second number - otherwise it counts money already billed (issue 72).
   const strip = (['sent', 'accepted'] as const).map((st) => {
-    const rows = all.filter((q) => q.status === st)
+    const rows = all.filter((q) => quoteStatus(q) === st && !(st === 'accepted' && q.invoiceId))
     return { st, n: rows.length, cents: rows.reduce((sum, q) => sum + q.totalCents, 0), currency: rows[0]?.currency }
   }).filter((x) => x.n > 0)
 
@@ -133,7 +155,7 @@ function QuotesList() {
       )}
 
       <div className="tabs">
-        {['', 'draft', 'sent', 'accepted', 'declined'].map((s) => (
+        {['', 'draft', 'sent', 'accepted', 'declined', 'expired'].map((s) => (
           <button key={s} className={status === s ? 'on' : ''} onClick={() => setStatus(s)}>
             {s === '' ? 'All' : s}
           </button>
@@ -162,7 +184,10 @@ function QuotesList() {
                     <td><Link to={`/quotes/${q.quoteId}`}>{q.label ?? `#${q.number}`}</Link></td>
                     <td>{q.customerName || q.customerEmail || <span className="meta">no name</span>}</td>
                     <td className="num">{cash(q.totalCents, q.currency)}</td>
-                    <td><span className={`chip ${STATUS_CHIP[q.status]}`}>{q.status}</span></td>
+                    <td>
+                      <span className={`chip ${STATUS_CHIP[quoteStatus(q)]}`}>{quoteStatus(q)}</span>
+                      {' '}{quoteAging(q)}{' '}{emailFailedChip(q)}
+                    </td>
                     <td className="nowrap">{when(q.createdAt)}</td>
                   </tr>
                 ))}
@@ -177,19 +202,38 @@ function QuotesList() {
 
 function NewQuote() {
   const navigate = useNavigate()
+  const location = useLocation()
+  // Duplicated quotes arrive via router state; "Quote this job" arrives via
+  // query params from the request page (issue 72).
+  const dup = (location.state ?? {}) as { lines?: Line[]; notes?: string }
+  const params = new URLSearchParams(location.search)
+  const requestId = params.get('requestId') ?? undefined
   const [items, setItems] = useState<PriceItem[]>([])
-  const [lines, setLines] = useState<Array<{ description: string; unit: string; quantity: string; unitDollars: string }>>([
-    { description: '', unit: 'item', quantity: '1', unitDollars: '' },
-  ])
-  const [customerName, setCustomerName] = useState('')
-  const [customerEmail, setCustomerEmail] = useState('')
-  const [notes, setNotes] = useState('')
+  const [contacts, setContacts] = useState<Array<{ contactId: string; name?: string; email?: string }>>([])
+  const [contactId, setContactId] = useState('')
+  const [lines, setLines] = useState<Array<{ description: string; unit: string; quantity: string; unitDollars: string }>>(
+    dup.lines?.length
+      ? dup.lines.map((l) => ({
+          description: l.description, unit: l.unit, quantity: String(l.quantity), unitDollars: (l.unitCents / 100).toFixed(2),
+        }))
+      : [{ description: '', unit: 'item', quantity: '1', unitDollars: '' }],
+  )
+  const [customerName, setCustomerName] = useState(params.get('name') ?? '')
+  const [customerEmail, setCustomerEmail] = useState(params.get('email') ?? '')
+  const [notes, setNotes] = useState(dup.notes ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     void api('GET', '/v1/quotes/items').then((r) => setItems(r.items ?? [])).catch(() => setItems([]))
+    void api('GET', '/v1/contacts').then((r) => setContacts(r.contacts ?? [])).catch(() => setContacts([]))
   }, [])
+
+  const pickContact = (id: string) => {
+    setContactId(id)
+    const c = contacts.find((x) => x.contactId === id)
+    if (c) { setCustomerName(c.name ?? ''); setCustomerEmail(c.email ?? '') }
+  }
 
   const setLine = (i: number, patch: Partial<(typeof lines)[number]>) =>
     setLines((ls) => ls.map((l, n) => (n === i ? { ...l, ...patch } : l)))
@@ -210,7 +254,8 @@ function NewQuote() {
     void (async () => {
       try {
         const r = await api('POST', '/v1/quotes', {
-          customerName, customerEmail, notes,
+          customerName, customerEmail, notes, requestId,
+          contactId: contactId || undefined,
           lines: lines
             .filter((l) => l.description.trim())
             .map((l) => ({
@@ -234,7 +279,20 @@ function NewQuote() {
       <form onSubmit={submit}>
         <div className="card">
           <h2>Customer</h2>
-          <div className="row">
+          {contacts.length > 0 && (
+            <>
+              <label htmlFor="q-contact">Existing customer</label>
+              <select id="q-contact" value={contactId} onChange={(e) => pickContact(e.target.value)}>
+                <option value="">Start fresh…</option>
+                {contacts.map((c) => (
+                  <option key={c.contactId} value={c.contactId}>
+                    {c.name || c.email || c.contactId}{c.name && c.email ? ` (${c.email})` : ''}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          <div className="row mt">
             <div className="grow">
               <label htmlFor="q-name">Name</label>
               <input id="q-name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
@@ -348,7 +406,9 @@ function QuoteDetail() {
       <p className="meta"><Link to="/quotes">← All quotes</Link></p>
       <div className="row baseline">
         <h1 className="grow">Quote {quote.label ?? `#${quote.number}`}</h1>
-        {quote.status === 'accepted' && (
+        {quote.invoiceId ? (
+          <Link className="btn" to={`/quotes/invoices/${quote.invoiceId}`}>View invoice</Link>
+        ) : quote.status === 'accepted' && (
           <button disabled={busy} onClick={() => void (async () => {
             setBusy(true); setError('')
             try {
@@ -436,7 +496,9 @@ function QuoteDetail() {
         <div className="card">
           <h2>Next steps</h2>
           <div className="row">
-            {quote.status === 'accepted' && (
+            {quote.invoiceId ? (
+              <Link className="btn" to={`/quotes/invoices/${quote.invoiceId}`}>View invoice</Link>
+            ) : quote.status === 'accepted' && (
               <button disabled={busy} onClick={() => void (async () => {
                 setBusy(true); setError('')
                 try {
@@ -447,6 +509,13 @@ function QuoteDetail() {
                 Create invoice
               </button>
             )}
+            <button className="ghost" disabled={busy}
+              title="Starts a fresh draft with these lines for a different customer"
+              onClick={() => navigate('/quotes/new', {
+                state: { lines: quote.lines, notes: quote.notes },
+              })}>
+              Duplicate
+            </button>
             <button className="ghost" disabled={busy} onClick={() => void (async () => {
               setBusy(true); setError('')
               try {

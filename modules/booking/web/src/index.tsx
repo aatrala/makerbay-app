@@ -17,6 +17,7 @@ interface Service {
   durationMinutes: number
   bufferMinutes: number
   priceCents?: number
+  depositCents?: number
   active: boolean
 }
 
@@ -28,12 +29,14 @@ interface Booking {
   serviceName: string
   startsAt: string
   endsAt: string
-  status: 'confirmed' | 'cancelled' | 'completed' | 'noshow'
+  status: 'confirmed' | 'cancelled' | 'completed' | 'noshow' | 'pending_payment'
   name?: string
   email?: string
   phone?: string
   note?: string
   notifyError?: string
+  depositCents?: number
+  depositPaidAt?: string
 }
 
 const WEEKDAYS = [
@@ -94,11 +97,14 @@ function Diary() {
     })()
   }
 
+  // pending_payment rows are sub-35-minute transients (a held slot whose
+  // deposit is being paid) - showing them would only invite confusion.
   const upcoming = (bookings ?? []).filter(
     (b) => b.status === 'confirmed' && new Date(b.startsAt).getTime() > Date.now(),
   )
   const past = (bookings ?? []).filter(
-    (b) => b.kind !== 'block' && (b.status !== 'confirmed' || new Date(b.startsAt).getTime() <= Date.now()),
+    (b) => b.kind !== 'block' && b.status !== 'pending_payment' &&
+      (b.status !== 'confirmed' || new Date(b.startsAt).getTime() <= Date.now()),
   )
 
   const table = (rows: Booking[], showActions: boolean) => (
@@ -133,6 +139,11 @@ function Diary() {
                 <span className={`chip ${b.status === 'confirmed' ? 'ready' : b.status === 'cancelled' ? 'failed' : 'awaiting_upload'}`}>
                   {b.status}
                 </span>
+                {b.depositPaidAt && b.depositCents != null && (
+                  <>{' '}<span className="chip ready" title={`Deposit paid ${new Date(b.depositPaidAt).toLocaleDateString('en-GB')}`}>
+                    ${(b.depositCents / 100).toFixed(0)} paid
+                  </span></>
+                )}
               </td>
               {showActions && (
                 <td className="nowrap">
@@ -213,7 +224,8 @@ function Diary() {
 
 function Services({ me }: { me: Me }) {
   const [services, setServices] = useState<Service[] | null>(null)
-  const [form, setForm] = useState({ name: '', durationMinutes: '60', bufferMinutes: '0', priceCents: '' })
+  const [form, setForm] = useState({ name: '', durationMinutes: '60', bufferMinutes: '0', priceCents: '', depositDollars: '' })
+  const [payoutsEnabled, setPayoutsEnabled] = useState(false)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -223,7 +235,12 @@ function Services({ me }: { me: Me }) {
     try { setServices((await api('GET', '/v1/booking/services')).services) }
     catch (e) { setError(explain(e)); setServices([]) }
   }, [])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    void api('GET', '/v1/booking/config')
+      .then((r) => setPayoutsEnabled(r.payoutsEnabled === true))
+      .catch(() => {})
+  }, [load])
 
   const run = async (fn: () => Promise<void>) => {
     setError(''); setNote(''); setBusy(true)
@@ -238,8 +255,9 @@ function Services({ me }: { me: Me }) {
         durationMinutes: Number(form.durationMinutes),
         bufferMinutes: Number(form.bufferMinutes),
         priceCents: form.priceCents ? Math.round(Number(form.priceCents) * 100) : undefined,
+        depositCents: form.depositDollars ? Math.round(Number(form.depositDollars) * 100) : undefined,
       })
-      setForm({ name: '', durationMinutes: '60', bufferMinutes: '0', priceCents: '' })
+      setForm({ name: '', durationMinutes: '60', bufferMinutes: '0', priceCents: '', depositDollars: '' })
       setNote('Added.')
     })
   }
@@ -293,8 +311,20 @@ function Services({ me }: { me: Me }) {
               <input id="s-price" type="number" min={0} step="0.01" value={form.priceCents}
                 onChange={(e) => setForm({ ...form, priceCents: e.target.value })} className="narrow" placeholder="45.00" />
             </div>
+            <div>
+              <label htmlFor="s-dep">Deposit</label>
+              <input id="s-dep" type="number" min={0} step="0.01" value={form.depositDollars}
+                onChange={(e) => setForm({ ...form, depositDollars: e.target.value })}
+                className="narrow" placeholder="50.00" disabled={!payoutsEnabled}
+                title={payoutsEnabled ? 'Paid up front to secure the booking' : 'Set up payments first'} />
+            </div>
           </div>
-          <p className="meta">Buffer is the gap held after each appointment — travel, clean-down, notes.</p>
+          <p className="meta">
+            Buffer is the gap held after each appointment — travel, clean-down, notes.
+            {payoutsEnabled
+              ? ' A deposit is paid up front to secure the slot (held up to 35 minutes while a customer pays); it kills no-shows.'
+              : <> Deposits need payments — <Link to="/payments">set up Get paid first</Link>.</>}
+          </p>
           <div className="mt"><button disabled={busy || !form.name}>Add service</button></div>
         </form>
       </div>
@@ -306,13 +336,14 @@ function Services({ me }: { me: Me }) {
         ) : (
           <div className="scroll-x">
             <table>
-              <thead><tr><th>Service</th><th>Length</th><th>Price</th><th>Bookable</th><th /></tr></thead>
+              <thead><tr><th>Service</th><th>Length</th><th>Price</th><th>Deposit</th><th>Bookable</th><th /></tr></thead>
               <tbody>
                 {services.map((s) => (
                   <tr key={s.serviceId}>
                     <td>{s.name}</td>
                     <td className="nowrap">{s.durationMinutes} min{s.bufferMinutes ? ` +${s.bufferMinutes}` : ''}</td>
                     <td>{s.priceCents != null ? `$${(s.priceCents / 100).toFixed(2)}` : <span className="meta">—</span>}</td>
+                    <td>{s.depositCents ? `$${(s.depositCents / 100).toFixed(2)}` : <span className="meta">—</span>}</td>
                     <td>
                       <button className={s.active ? 'ghost' : 'ghost'} disabled={busy} onClick={() => toggle(s)}>
                         <span className={`chip ${s.active ? 'ready' : 'awaiting_upload'}`}>{s.active ? 'yes' : 'paused'}</span>

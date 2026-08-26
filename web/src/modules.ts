@@ -1,5 +1,5 @@
 import type { DashboardModule, Me } from '@makerbay/web-kit'
-import { assistantDashboard, assistantFirstRun } from '@makerbay/assistant-web'
+import { assistantDashboard } from '@makerbay/assistant-web'
 import { contactsDashboard } from '@makerbay/contacts-web'
 import { requestsDashboard } from '@makerbay/requests-web'
 import { bookingDashboard } from '@makerbay/booking-web'
@@ -39,13 +39,16 @@ const CORE = new Set(['contacts'])
 export const enabledModules = (me: Me): DashboardModule[] =>
   ALL.filter((m) => CORE.has(m.id) || me.entitlements?.modules[m.id]?.enabled)
 
-/** Where to send someone after they land, preferring their first module. */
-export const landingPath = (me: Me, firstRun: boolean): string => {
+/**
+ * Where to send someone after they land, preferring their first module.
+ * First-run routing moved to /home (issue 74), so this is only ever the
+ * settled-workspace landing now.
+ */
+export const landingPath = (me: Me, _firstRun: boolean): string => {
   const modules = enabledModules(me)
   // Core modules are always present, so they must never win the landing slot
   // over the module the customer actually signed up for.
   const first = modules.find((m) => !CORE.has(m.id)) ?? modules[0]
   if (!first) return '/usage'
-  if (firstRun && first.id === 'assistant') return assistantFirstRun
   return first.nav[0].to
 }

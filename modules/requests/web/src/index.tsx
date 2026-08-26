@@ -171,7 +171,16 @@ function RequestDetail() {
   return (
     <>
       <p className="meta"><Link to="/requests">← All requests</Link></p>
-      <h1>{request.subject}</h1>
+      <div className="row baseline">
+        <h1 className="grow">{request.subject}</h1>
+        <Link
+          className="btn"
+          title="Start a quote with this customer's details filled in"
+          to={`/quotes/new?requestId=${encodeURIComponent(requestId)}&name=${encodeURIComponent(request.name ?? '')}&email=${encodeURIComponent(request.email ?? '')}`}
+        >
+          Quote this job
+        </Link>
+      </div>
       <p>
         From {request.name || 'someone'} · {when(request.createdAt)} ·{' '}
         <Link to={`/contacts/${request.contactId}`}>see their history</Link>

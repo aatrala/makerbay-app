@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Route } from 'react-router-dom'
+import { Link, Route } from 'react-router-dom'
 import {
   Empty,
   Notice,
@@ -93,7 +93,8 @@ function ReviewsList() {
         {!reviews ? <Skeleton rows={4} /> : responded.length === 0 ? (
           <Empty title="No reviews yet">
             Mark a booking completed, or ask a contact directly from their page —
-            the invite goes out by email with a one-minute form.
+            the invite goes out by email with a one-minute form. Still setting up?{' '}
+            <Link to="/home">Finish the basics first</Link>.
           </Empty>
         ) : (
           responded.map((r) => (

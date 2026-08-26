@@ -82,6 +82,10 @@
   // ── Booking ────────────────────────────────────────────────────────────
 
   function bookingPage() {
+    // Returning from a deposit payment: the URL carries the booking token.
+    // The browser is not a source of truth - read the row's real state.
+    if (token) return depositReturn(0)
+
     get(API + '/v1/public/booking/services?slug=' + encodeURIComponent(slug))
       .then(function (res) {
         if (res.status !== 200) return fail('Online booking is not available for this business.')
@@ -106,7 +110,8 @@
               return '<button class="choice" data-id="' + esc(s.serviceId) + '">' +
                 '<span class="c-name">' + esc(s.name) + '</span>' +
                 (s.description ? '<span class="c-desc">' + esc(s.description) + '</span>' : '') +
-                '<span class="c-meta">' + (s.priceCents != null ? money(s.priceCents) + ' · ' : '') + s.durationMinutes + ' min</span>' +
+                '<span class="c-meta">' + (s.priceCents != null ? money(s.priceCents) + ' · ' : '') + s.durationMinutes + ' min' +
+                (s.depositCents ? ' · ' + money(s.depositCents) + ' deposit' : '') + '</span>' +
                 '</button>'
             }).join('') +
             '</div>' + foot
@@ -167,6 +172,8 @@
         }
 
         function stepDetails() {
+          var svc = info.services.filter(function (s) { return s.serviceId === state.serviceId })[0] || {}
+          var dep = svc.depositCents || 0
           app.innerHTML = head('Nearly done — how do we reach you?') +
             '<form id="bform" class="pform">' +
             '<label>Your name</label><input id="f-name" autocomplete="name" />' +
@@ -174,7 +181,10 @@
             '<label>Phone</label><input id="f-phone" type="tel" autocomplete="tel" />' +
             '<label>Anything we should know? (optional)</label><textarea id="f-note" rows="2"></textarea>' +
             '<p class="hint">Email or phone — whichever suits. The confirmation goes there.</p>' +
-            '<button class="primary" type="submit">Confirm booking</button>' +
+            '<button class="primary" type="submit">' +
+            (dep ? 'Confirm and pay the ' + money(dep) + ' deposit' : 'Confirm booking') +
+            '</button>' +
+            (dep ? '<p class="hint">Secure card payment via Stripe, straight to ' + esc(info.business || 'the business') + '. Refundable at their discretion.</p>' : '') +
             '<p class="form-err" id="f-err"></p>' +
             '</form><p class="back"><a href="#" id="back">Back</a></p>' + foot
           app.querySelector('#back').addEventListener('click', function (e) { e.preventDefault(); stepSlot() })
@@ -199,6 +209,7 @@
             btn.disabled = true
             btn.textContent = 'Booking…'
             post(API + '/v1/public/booking', payload).then(function (res) {
+              if (res.status === 201 && res.data.depositRequired) return payDeposit(res.data, btn)
               if (res.status === 201) return stepDone(res.data)
               btn.disabled = false
               btn.textContent = 'Confirm booking'
@@ -225,9 +236,75 @@
             '</div>' + foot
         }
 
+        // The slot is held; Stripe takes it from here (spec-booking-deposits.md).
+        function payDeposit(data, btn) {
+          btn.textContent = 'Opening secure payment…'
+          post(API + '/v1/public/payments/session', {
+            slug: slug, kind: 'booking_deposit', token: data.token,
+          }).then(function (res) {
+            if (res.status === 200 && res.data.url) { location.href = res.data.url; return }
+            btn.disabled = false
+            btn.textContent = 'Try the payment again'
+            var err = document.getElementById('f-err')
+            if (err) err.textContent = (res.data && res.data.message) || 'The payment page could not be opened. Your slot is held for a few more minutes — try again.'
+            btn.onclick = function (e) { e.preventDefault(); btn.disabled = true; payDeposit(data, btn) }
+          })
+        }
+
         stepService()
       })
       .catch(function () { fail('Online booking is not available right now.') })
+  }
+
+  /**
+   * Back from Stripe with a booking token. paid=pending means Stripe said
+   * success — the webhook usually lands within seconds, so poll briefly.
+   * Without it the customer backed out: the hold is still live for a bit.
+   */
+  function depositReturn(attempt) {
+    var url = API + '/v1/public/booking/' + encodeURIComponent(token) + '?slug=' + encodeURIComponent(slug)
+    get(url).then(function (res) {
+      if (res.status !== 200) return fail('This booking could not be found.')
+      var b = res.data.booking || {}
+      document.title = 'Booking — ' + (res.data.business || '')
+      app.className = ''
+      var foot = '</div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
+      var headHtml = '<header><div class="name">' + esc(res.data.business || '') + '</div></header><div class="page-body">'
+
+      if (b.status === 'confirmed') {
+        app.innerHTML = headHtml +
+          '<div class="done"><div class="tick">&#10003;</div><h2>Booked</h2>' +
+          '<p>' + esc(b.serviceName || '') + '<br />' + esc(b.date || '') + ' at ' + esc(b.time || '') + '</p>' +
+          (b.depositCents ? '<p class="hint">Deposit received: ' + money(b.depositCents) + '. A confirmation email is on its way.</p>' : '') +
+          '</div>' + foot
+        return
+      }
+      if (b.status === 'pending_payment' && params.get('paid') === 'pending' && attempt < 4) {
+        app.innerHTML = headHtml + '<p class="lead">Payment received — confirming your booking…</p>' + foot
+        setTimeout(function () { depositReturn(attempt + 1) }, 3000)
+        return
+      }
+      if (b.status === 'pending_payment') {
+        app.innerHTML = headHtml +
+          '<p class="lead">Your ' + esc(b.serviceName || 'booking') + ' slot is held for a few more minutes.</p>' +
+          '<p>Pay the ' + (b.depositCents ? money(b.depositCents) + ' ' : '') + 'deposit to secure ' + esc(b.date || '') + ' at ' + esc(b.time || '') + '.</p>' +
+          '<button class="primary" id="payagain">Pay the deposit</button>' + foot
+        document.getElementById('payagain').addEventListener('click', function () {
+          this.disabled = true
+          this.textContent = 'Opening secure payment…'
+          var self = this
+          post(API + '/v1/public/payments/session', { slug: slug, kind: 'booking_deposit', token: token })
+            .then(function (r2) {
+              if (r2.status === 200 && r2.data.url) { location.href = r2.data.url; return }
+              self.disabled = false
+              self.textContent = 'Pay the deposit'
+              fail((r2.data && r2.data.message) || 'The payment could not be started. The time may have been released — book again.')
+            })
+        })
+        return
+      }
+      fail('This booking is ' + esc(b.status || 'no longer available') + '.')
+    })
   }
 
   // ── Cancel ─────────────────────────────────────────────────────────────

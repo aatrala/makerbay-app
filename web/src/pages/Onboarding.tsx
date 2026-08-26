@@ -33,8 +33,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           <h2>Name your workspace</h2>
           <p>
             Usually your business name. Your AI assistant, booking diary and review
-            requests all start switched on — the next step is showing the assistant
-            your website so it can start answering.
+            requests all start switched on — six small steps after this make them yours.
           </p>
           <form onSubmit={submit}>
             <label htmlFor="biz">Business name</label>

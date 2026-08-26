@@ -106,6 +106,9 @@ export default function Shell({ me, modules, stripeMode }: {
 
         <div className="side-body">
           <nav>
+            {localStorage.getItem(`mb.setupDone.${me.tenant?.tenantId}`) !== '1' && (
+              <NavLink to="/home" className="modlink">Home</NavLink>
+            )}
             <div className="navlabel">Work</div>
             {work.map(moduleLink)}
             <div className="navlabel">Grow</div>
@@ -120,6 +123,7 @@ export default function Shell({ me, modules, stripeMode }: {
           <div className="account" ref={acctRef}>
             {acctOpen && (
               <div className="acct-pop">
+                <NavLink to="/home">Getting started</NavLink>
                 <NavLink to="/workspace">Settings</NavLink>
                 <NavLink to="/activity">Activity</NavLink>
                 <NavLink to="/usage">Usage</NavLink>

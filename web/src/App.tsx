@@ -10,6 +10,7 @@ import UsagePage from './pages/UsagePage'
 import WorkspacePage from './pages/WorkspacePage'
 import ActivityPage from './pages/ActivityPage'
 import Support from './pages/Support'
+import Home, { isSetupDismissed } from './pages/Home'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -37,11 +38,11 @@ export default function App() {
 
   if (!me?.tenant) return <Onboarding onDone={() => { setLoading(true); void reload() }} />
 
-  // A workspace created moments ago has nothing set up, so the module decides
-  // where its owner should start. Onboarding.tsx sets this flag.
-  const firstRun = sessionStorage.getItem('mb.justOnboarded') === '1'
-  if (firstRun) sessionStorage.removeItem('mb.justOnboarded')
-  const landing = landingPath(me, firstRun)
+  // Until the six setup steps are done (or the owner hides them), Home is
+  // the front door - it shows the shape of the whole product (issue 74).
+  sessionStorage.removeItem('mb.justOnboarded')
+  const setupDone = isSetupDismissed(me.tenant.tenantId)
+  const landing = setupDone ? landingPath(me, false) : '/home'
 
   const modules = enabledModules(me)
 
@@ -49,6 +50,7 @@ export default function App() {
     <Routes>
       <Route element={<Shell me={me} modules={modules} stripeMode={stripeMode} />}>
         <Route path="/" element={<Navigate to={landing} replace />} />
+        <Route path="/home" element={<Home me={me} />} />
         {modules.map((m) => m.routes({ me }))}
         <Route path="/usage" element={<UsagePage me={me} />} />
         <Route path="/billing" element={<Billing />} />

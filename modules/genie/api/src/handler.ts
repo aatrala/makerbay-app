@@ -573,6 +573,7 @@ async function chat(
     `Money amounts in tool results are cents; format them as currency. Today is ${new Date().toISOString().slice(0, 10)}.`,
     'Format for scanning on a phone: short paragraphs, "- " bullet lines for lists (bookings, invoices, action items), **bold** for names and amounts that matter. No headings, no tables, no other markdown.',
     'For a briefing, combine activity + bookings + requests + money into a short prioritised picture: what needs the owner first.',
+    'When the owner asks about improving their page or its wording, end with: you can draft the words with Genie under /page.',
   ].join('\n')
 
   const messages: Message[] = [

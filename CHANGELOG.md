@@ -11,6 +11,40 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.24.0 - 2026-08-26
+
+> **Deposits, a front door, and a ghostwriter** - bookings that cost a
+> no-show their $50, a first hour that explains itself, help articles
+> you write in place, and Genie drafting your page's words from facts.
+
+- Added `booking` Deposits: give any service a fixed deposit (Services
+  screen, needs payments connected) and customers pay it via Stripe to
+  secure the slot - the time is held for 35 minutes while they pay, the
+  booking confirms itself when the money lands, and the diary shows a
+  "$X paid" chip. No-shows now cost the no-show, not you. Refunds stay
+  at your discretion from the Payments screen.
+- Added `platform` A Home screen: six real setup steps (service, hours,
+  knowledge, page, prices, review link) with progress and one Next
+  action - the landing page until you finish or hide it, and always
+  under the account menu as "Getting started".
+- Added `assistant` Write help articles right in the Help centre tab -
+  title, category, and the article itself (headings, steps, tips
+  supported). Published instantly, editable any time, and the assistant
+  learns every article automatically. Knowledge marks them "help
+  article".
+- Added `presence` Genie drafts your page's words: headline and intro
+  from the Words card, FAQ answers from the FAQ editor - built only
+  from your real services, reviews and documents, shown on the live
+  preview as unsaved changes, and never published until you save. Each
+  draft uses one Genie message.
+- Changed `quotes` The pipeline now tells the truth: creating an
+  invoice stamps the quote (a second click shows the invoice instead
+  of minting a duplicate) and invoiced quotes leave the "accepted, to
+  invoice" number. Requests gained "Quote this job" (customer details
+  prefilled), quotes gained Duplicate and an existing-customer picker,
+  and sent quotes show "expires in Nd" chips, an Expired tab and an
+  "email failed" flag.
+
 ## 2.23.3 - 2026-08-26
 
 - Fixed `payments` Connect with Stripe works - the platform-side Stripe

@@ -4,6 +4,7 @@ import SharePage from './SharePage'
 import { StyleSections } from './StylePage'
 import PreviewPane from './PreviewPane'
 import QrBlock from './Qr'
+import GenieDraftBar from './GenieDraftBar'
 import {
   Notice,
   Skeleton,
@@ -277,9 +278,21 @@ function PagePage({ me }: { me: Me }) {
               <textarea id="p-intro" rows={4} value={config.intro} onChange={set('intro')}
                 placeholder="Twenty years of residential electrical work. Licensed, insured, and honest about what a job costs before it starts." />
               <p className="meta">
-                A few sentences in your own words. We never write this for you — a customer can tell,
-                and so can a search engine.
+                A few sentences in your own words — or let Genie draft them from your real
+                services, reviews and documents. It only uses facts you have given it, and
+                nothing goes live until you save.
               </p>
+              <GenieDraftBar
+                fields={['headline', 'intro']}
+                onApply={(d) => {
+                  dirtyRef.current = true
+                  setConfig((c) => (c ? {
+                    ...c,
+                    ...(d.headline ? { headline: d.headline } : {}),
+                    ...(d.intro ? { intro: d.intro } : {}),
+                  } : c))
+                }}
+              />
 
               <label htmlFor="p-areas">Areas you serve</label>
               <input id="p-areas" value={areas} onChange={(e) => { dirtyRef.current = true; setAreas(e.target.value) }}

@@ -312,8 +312,17 @@ interface ArticleSource {
   name: string
   status: string
   published?: boolean
+  native?: boolean
   helpBodyKey?: string
   helpMeta?: { title: string; description: string; category: string }
+}
+
+interface ArticleDraft {
+  sourceId?: string
+  title: string
+  category: string
+  description: string
+  text: string
 }
 
 /**
@@ -333,6 +342,7 @@ function ArticlesCard({ helpEnabled, slug, tier, capInfo, pinned, onTogglePin }:
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
+  const [draft, setDraft] = useState<ArticleDraft | null>(null)
 
   const load = async () => {
     try { setSources((await api('GET', '/v1/assistant/sources')).sources ?? []) }
@@ -365,6 +375,42 @@ function ArticlesCard({ helpEnabled, slug, tier, capInfo, pinned, onTogglePin }:
     } catch (e) { setError(explain(e)) } finally { setBusy(false); setProgress('') }
   }
 
+  // Native articles (issue 71): written and edited right here; the same text
+  // trains the assistant automatically through normal ingestion.
+  const startEdit = async (s: ArticleSource) => {
+    setBusy(true); setError('')
+    try {
+      const p = await api('GET', `/v1/assistant/sources/${s.sourceId}/preview`)
+      setDraft({
+        sourceId: s.sourceId,
+        title: s.helpMeta?.title ?? s.name,
+        category: s.helpMeta?.category ?? 'General',
+        description: s.helpMeta?.description ?? '',
+        text: p.text ?? p.excerpt ?? '',
+      })
+    } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+  }
+
+  const saveDraft = async () => {
+    if (!draft || !draft.title.trim() || !draft.text.trim()) {
+      setError('An article needs a title and some words.')
+      return
+    }
+    setBusy(true); setError('')
+    const helpMeta = { title: draft.title.trim(), description: draft.description.trim(), category: draft.category }
+    try {
+      if (draft.sourceId) {
+        await api('PUT', `/v1/assistant/sources/${draft.sourceId}`, { text: draft.text, helpMeta })
+      } else {
+        await api('POST', '/v1/assistant/sources', {
+          type: 'text', native: true, name: draft.title.trim(), text: draft.text, helpMeta, published: true,
+        })
+      }
+      setDraft(null)
+      await load()
+    } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+  }
+
   return (
     <div className="card">
       <div className="row baseline">
@@ -372,8 +418,50 @@ function ArticlesCard({ helpEnabled, slug, tier, capInfo, pinned, onTogglePin }:
         {capInfo && (
           <span className="meta">{capInfo.used} of {capInfo.cap} sources used</span>
         )}
+        {!draft && (
+          <button disabled={busy} onClick={() => setDraft({ title: '', category: 'General', description: '', text: '' })}>
+            Write an article
+          </button>
+        )}
       </div>
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+
+      {draft && (
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, marginBottom: 12 }}>
+          <label htmlFor="a-title">Title</label>
+          <input id="a-title" value={draft.title} maxLength={80}
+            onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+            placeholder="Do you cover emergency call-outs?" />
+          <div className="row mt" style={{ gap: 14, flexWrap: 'wrap' }}>
+            <div>
+              <label htmlFor="a-cat">Category</label>
+              <select id="a-cat" value={draft.category}
+                onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
+                {ALL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="grow">
+              <label htmlFor="a-desc">One-line description (optional)</label>
+              <input id="a-desc" value={draft.description} maxLength={160}
+                onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+            </div>
+          </div>
+          <label htmlFor="a-body" className="mt">Article</label>
+          <textarea id="a-body" rows={12} value={draft.text}
+            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            placeholder={'Plain writing works. For structure:\n## A heading\n## 1. A numbered step\n- a list item\n**bold**\nTip: an aside worth highlighting'} />
+          <p className="meta">
+            Published straight to your help centre, and your assistant learns it automatically
+            (answers catch up within a few minutes).
+          </p>
+          <div className="row mt">
+            <button disabled={busy} onClick={() => void saveDraft()}>
+              {busy ? 'Saving…' : draft.sourceId ? 'Save changes' : 'Publish article'}
+            </button>
+            <button className="ghost" disabled={busy} onClick={() => setDraft(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {capInfo && capInfo.used >= capInfo.cap && (
         <Notice tone="warn">
           <strong>Source limit reached.</strong> New uploads and website crawls stop here - a crawl
@@ -413,8 +501,12 @@ function ArticlesCard({ helpEnabled, slug, tier, capInfo, pinned, onTogglePin }:
               <span className="grow">
                 <strong>{s.helpMeta?.title ?? s.name}</strong>
                 <span className="meta"> · {s.helpMeta?.category ?? 'General'}</span>
+                {s.native && <span className="meta"> · written here</span>}
                 {pinned.includes(s.sourceId) && <span className="meta"> · ★ pinned</span>}
               </span>
+              {s.native && (
+                <button className="ghost" disabled={busy} onClick={() => void startEdit(s)}>Edit</button>
+              )}
               {tier !== 'free' && (
                 <button
                   className="ghost"

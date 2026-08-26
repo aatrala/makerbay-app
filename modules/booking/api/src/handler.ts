@@ -27,6 +27,7 @@ import {
   DEFAULT_BOOKING_CONFIG,
   blocking,
   bookingsBetween,
+  confirmDepositPaid,
   countBookingsThisMonth,
   deleteBooking,
   deleteService,
@@ -54,9 +55,32 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
 
 const CHAT = 'https://chat.makerbay.app'
 const APP = 'https://app.makerbay.app'
+// pending_payment deliberately absent: the owner PATCH can never set it.
 const STATUSES: BookingStatus[] = ['confirmed', 'cancelled', 'completed', 'noshow']
 
-export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
+interface PaymentReceivedEvent {
+  'detail-type': string
+  detail: {
+    tenantId: string
+    paymentId: string
+    kind: string
+    refId: string
+    amountCents: number
+    currency: string
+  }
+}
+
+export const handler = async (
+  event: Event | PaymentReceivedEvent,
+): Promise<APIGatewayProxyResultV2 | void> => {
+  // A deposit landed (verified webhook → payments module → bus). The money
+  // is fact; this branch makes the diary agree with it.
+  if ('detail-type' in event) {
+    if (event['detail-type'] === 'payment.received' && event.detail.kind === 'booking_deposit')
+      await onDepositPaid(event.detail)
+    return
+  }
+
   const method = event.requestContext.http.method
   const path = event.rawPath
 
@@ -71,7 +95,10 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (!entitlement.enabled) return json(403, { error: 'module_not_enabled' })
 
     if (method === 'GET' && path === '/v1/booking/config') {
-      return json(200, { config: await getBookingConfig(tenantId) })
+      // payoutsEnabled rides along so the Services screen knows whether the
+      // deposit field is armed, without a cross-module fetch.
+      const [config, tenant] = await Promise.all([getBookingConfig(tenantId), getTenant(tenantId)])
+      return json(200, { config, payoutsEnabled: tenant?.payoutsEnabled === true })
     }
     if (method === 'PUT' && path === '/v1/booking/config') return await updateConfig(tenantId, event)
 
@@ -156,6 +183,9 @@ async function publicRoute(
 
   if (method === 'GET' && path === '/v1/public/booking/services') {
     const services = (await listServices(resolved.tenantId)).filter((s) => s.active)
+    // Never advertise a deposit that cannot be charged.
+    const tenant = await getTenant(resolved.tenantId)
+    const canCharge = tenant?.payoutsEnabled === true
     return json(200, {
       business: resolved.name,
       intro: config.intro,
@@ -163,6 +193,7 @@ async function publicRoute(
       services: services.map((s) => ({
         serviceId: s.serviceId, name: s.name, description: s.description,
         durationMinutes: s.durationMinutes, priceCents: s.priceCents,
+        depositCents: canCharge && s.depositCents && s.depositCents >= 100 ? s.depositCents : undefined,
       })),
       dates: openDates(config, new Date()),
     })
@@ -226,6 +257,8 @@ const publicView = (b: BookingRow, timezone: string) => ({
     timeZone: timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   }).format(new Date(b.startsAt)),
   name: b.name,
+  depositCents: b.depositCents,
+  depositPaidAt: b.depositPaidAt,
 })
 
 async function createBooking(
@@ -303,35 +336,87 @@ async function createBooking(
   }
 
   const view = publicView(row, config.timezone)
+
+  // Deposits (spec-booking-deposits.md): when the service asks for one and
+  // payments actually work, the row is written as a held slot and the
+  // customer pays before anyone hears "you're booked". Money being switched
+  // off degrades to a normal instant booking - a deposit is an enhancement,
+  // never a gate.
+  const tenant = await getTenant(tenantId)
+  const depositCents =
+    service.depositCents && service.depositCents >= 100 && tenant?.payoutsEnabled === true
+      ? service.depositCents
+      : 0
+  if (depositCents > 0) {
+    row.status = 'pending_payment'
+    row.depositCents = depositCents
+    // 35-minute hold vs the 30-minute checkout session expiry: a completed
+    // payment can never land on a freed slot. Do not shrink the gap.
+    row.holdExpiresAt = new Date(Date.now() + 35 * 60_000).toISOString()
+    await putBooking(row)
+    return json(201, {
+      bookingId,
+      depositRequired: true,
+      depositCents,
+      token: cancelToken,
+      booking: publicView(row, config.timezone),
+    })
+  }
+
+  const emailed = await confirmSideEffects(tenantId, businessName, row, config.timezone, config.notifyEmail)
+  return json(201, { bookingId, booking: view, emailed })
+}
+
+/**
+ * Everything that happens when a booking becomes real: customer email,
+ * contact trail, owner notify, usage, rescue attribution, reminder. The
+ * instant path runs it inline; the deposit path runs it only when the
+ * money lands - a customer must never read "you're booked" while unpaid.
+ */
+async function confirmSideEffects(
+  tenantId: string,
+  businessName: string,
+  row: BookingRow,
+  timezone: string,
+  notifyEmail: string,
+): Promise<boolean> {
+  const view = publicView(row, timezone)
+  const depositLine = row.depositPaidAt && row.depositCents
+    ? `Deposit received: $${(row.depositCents / 100).toFixed(2)}. `
+    : ''
   const customerMail = await sendEmail({
-    to: contact.email ?? '',
-    subject: `Your ${service.name} booking with ${businessName}`,
+    to: row.email ?? '',
+    subject: `Your ${row.serviceName} booking with ${businessName}`,
     text: [
-      `${name || 'Hello'},`,
+      `${row.name || 'Hello'},`,
       '',
-      `Your ${service.name} is booked for ${view.date} at ${view.time}.`,
+      `${depositLine}Your ${row.serviceName} is booked for ${view.date} at ${view.time}.`,
       '',
-      `Need to cancel? ${CHAT}/booking/cancel?slug=${encodeURIComponent(await slugOf(tenantId))}&token=${cancelToken}`,
+      `Need to cancel? ${CHAT}/booking/cancel?slug=${encodeURIComponent(await slugOf(tenantId))}&token=${row.cancelToken}`,
+      ...(depositLine ? ['', `The deposit is refundable at ${businessName}'s discretion.`] : []),
       '',
       businessName,
     ].join('\n'),
   })
-  if (!customerMail.sent) row.notifyError = customerMail.error
+  if (!customerMail.sent) {
+    row.notifyError = customerMail.error
+    await putBooking(row)
+  }
 
-  await putBooking(row)
-  await appendContactEvent(tenantId, contact.contactId, {
+  await appendContactEvent(tenantId, row.contactId, {
     moduleId: 'booking',
-    title: `Booked ${service.name} for ${view.date} at ${view.time}`,
+    title: `Booked ${row.serviceName} for ${view.date} at ${view.time}`,
     href: `/booking/diary`,
   })
 
   await sendEmail({
-    to: config.notifyEmail || '',
-    replyTo: contact.email,
-    subject: `New booking: ${service.name}, ${view.date} ${view.time}`,
+    to: notifyEmail || '',
+    replyTo: row.email,
+    subject: `New booking: ${row.serviceName}, ${view.date} ${view.time}`,
     text: [
-      `${name || contact.email || contact.phone} booked ${service.name}.`,
+      `${row.name || row.email || row.phone} booked ${row.serviceName}.`,
       `${view.date} at ${view.time}`,
+      row.depositPaidAt && row.depositCents ? `Deposit paid: $${(row.depositCents / 100).toFixed(2)}` : '',
       row.note ? `\nNote: ${row.note}` : '',
       '',
       `Diary: ${APP}/booking/diary`,
@@ -339,9 +424,36 @@ async function createBooking(
   })
 
   await emitUsage({ tenantId, moduleId: 'booking', metric: 'booking.created', quantity: 1 })
-  await attributeRescue(tenantId, contact.contactId)
-  await scheduleReminder(tenantId, bookingId, row.startsAt)
-  return json(201, { bookingId, booking: view, emailed: customerMail.sent })
+  await attributeRescue(tenantId, row.contactId)
+  await scheduleReminder(tenantId, row.bookingId, row.startsAt)
+  return customerMail.sent
+}
+
+/** The deposit landed: flip the held slot and fire the confirm effects. */
+async function onDepositPaid(detail: PaymentReceivedEvent['detail']): Promise<void> {
+  const { tenantId, refId: bookingId, paymentId } = detail
+  const row = await getBooking(tenantId, bookingId)
+  if (!row) {
+    console.error('deposit paid for unknown booking', { tenantId, bookingId, paymentId })
+    return
+  }
+  try {
+    await confirmDepositPaid(tenantId, bookingId, paymentId)
+  } catch (err) {
+    // Paid but not pending: lapsed hold or duplicate delivery. Loud log; the
+    // owner refunds a lapsed one from the Payments screen.
+    console.error('deposit paid but booking not pending', { tenantId, bookingId, paymentId, status: row.status, err: String(err) })
+    const config = await getBookingConfig(tenantId)
+    await sendEmail({
+      to: config.notifyEmail || '',
+      subject: 'A deposit arrived for a booking that lapsed',
+      text: `A $${(detail.amountCents / 100).toFixed(2)} deposit was paid for a ${row.serviceName} booking whose hold had expired. Refund it from ${APP}/payments if the time no longer works.`,
+    })
+    return
+  }
+  const updated = { ...row, status: 'confirmed' as BookingStatus, depositPaidAt: new Date().toISOString(), paymentId }
+  const [config, tenant] = await Promise.all([getBookingConfig(tenantId), getTenant(tenantId)])
+  await confirmSideEffects(tenantId, tenant?.name ?? '', updated, config.timezone, config.notifyEmail)
 }
 
 async function slugOf(tenantId: string): Promise<string> {
@@ -470,11 +582,20 @@ async function createService(tenantId: string, event: Event): Promise<APIGateway
     durationMinutes: clamp(Number(b.durationMinutes ?? 60), 5, 480),
     bufferMinutes: clamp(Number(b.bufferMinutes ?? 0), 0, 240),
     priceCents: b.priceCents === undefined ? undefined : Math.max(0, Math.round(Number(b.priceCents))),
+    depositCents: depositClamp(b.depositCents),
     active: b.active !== false,
     createdAt: new Date().toISOString(),
   }
   await putService(row)
   return json(201, { service: row })
+}
+
+/** 0 switches deposits off; anything else sits in Stripe's chargeable range. */
+const depositClamp = (v: unknown): number | undefined => {
+  if (v === undefined) return undefined
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n) || n <= 0) return undefined
+  return Math.min(Math.max(n, 100), 500_000)
 }
 
 const clamp = (n: number, lo: number, hi: number) =>
@@ -492,6 +613,7 @@ async function patchService(tenantId: string, serviceId: string, event: Event): 
     ...(b.durationMinutes !== undefined ? { durationMinutes: clamp(Number(b.durationMinutes), 5, 480) } : {}),
     ...(b.bufferMinutes !== undefined ? { bufferMinutes: clamp(Number(b.bufferMinutes), 0, 240) } : {}),
     ...(b.priceCents !== undefined ? { priceCents: Math.max(0, Math.round(Number(b.priceCents))) } : {}),
+    ...(b.depositCents !== undefined ? { depositCents: depositClamp(b.depositCents) } : {}),
     ...(b.active !== undefined ? { active: b.active === true } : {}),
   }
   await putService(row)
