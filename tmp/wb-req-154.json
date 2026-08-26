@@ -1,0 +1,1 @@
+{"action":"evaluate","args":{"code":"(()=>{return JSON.stringify({text:document.body.innerText.slice(0,1500)});})()"},"session":"makerbay-test"}

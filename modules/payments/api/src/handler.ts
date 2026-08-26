@@ -101,6 +101,15 @@ export const handler = async (
         message: 'Payments setup is temporarily unavailable - our Stripe configuration is missing a permission and we are on it. Nothing is wrong with your account.',
       })
     }
+    // Same honesty for the Connect platform-profile gate: until Stripe's
+    // loss-liability acknowledgment is completed, account creation is
+    // refused with a message naming their settings page.
+    if (String((err as Error).message ?? '').includes('platform-profile')) {
+      return json(503, {
+        error: 'stripe_platform_profile',
+        message: 'Payments setup is temporarily unavailable - our Stripe platform registration is still being finalised. Nothing is wrong with your account.',
+      })
+    }
     return json(500, { error: 'internal_error' })
   }
 }

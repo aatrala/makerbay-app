@@ -326,15 +326,23 @@ The deferred trio (ABN/licence footer, pipeline value strip, document
 logo) shipped 2026-08-25 - see 61. Genie checkout is now a single line
 (the usage line attaches automatically after subscribe).
 
-### 63 — Stripe Connect onboarding ⛔ awaiting Stripe's review
-Progress to date: Accounts Write scope enabled (verified working), the
-one-time **Connect platform profile** questionnaire submitted by you
-2026-08-25. The last blocker is on Stripe's side: account creation
-returns "review the responsibilities of managing losses" until their
-review of the profile completes (retested live - still pending). Ping
-me when Stripe's approval email lands; I then retest onboarding and
-run the already-approved full Connect + live payment e2e. Meanwhile
-the Get Paid page shows an honest message instead of a mystery 500.
+### 63 — Stripe Connect onboarding 🔶 UNBLOCKED - finish the hosted form
+2026-08-26: account creation WORKS. (The first retest still hit the
+loss-liability gate; minutes later Stripe accepted - your profile
+acknowledgment had just propagated.) Verified live on the demo
+workspace: Express account created (connected: true), onboarding
+links generate on demand, and the payments API now answers each
+Stripe gate honestly (permissions 503 / platform-profile 503) instead
+of a mystery 500. Genie checkout session also creates cleanly.
+**Your two finishing steps:**
+1. App → Get Paid → Connect with Stripe → complete Stripe's hosted
+   form (business type, representative details, bank account, ToS) -
+   payouts flip on when Stripe verifies.
+2. Then send yourself a small invoice and pay it with a real card -
+   the money lands in the connected account's bank. Also eyeball
+   Billing → Genie upgrade: checkout should read ONE line,
+   "MakerBay Genie".
+Ping me after either step and I verify the webhook trail end to end.
 
 ### 56 — Genie checkout shows "Genie and 1 more" (Trade) ✅
 Cause: the Genie subscription reused the Trade product's usage-metered

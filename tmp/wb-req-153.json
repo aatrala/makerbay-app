@@ -1,0 +1,1 @@
+{"action":"evaluate","args":{"code":"(()=>{const b=[...document.querySelectorAll('button, a')].find(x=>x.innerText.includes('Drain clearing'));b.click();return 'clicked';})()"},"session":"makerbay-test"}

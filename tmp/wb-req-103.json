@@ -1,0 +1,1 @@
+{"action":"evaluate","args":{"code":"(()=>{const b=document.querySelector('.acct-btn');return JSON.stringify({account:b?b.innerText:null, path:location.pathname});})()"},"session":"makerbay-test"}

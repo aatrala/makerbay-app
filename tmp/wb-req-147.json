@@ -1,0 +1,1 @@
+{"action":"evaluate","args":{"code":"(()=>{const a=[...document.querySelectorAll('main a')].find(x=>x.innerText.trim()==='Hours');a.click();return 'ok';})()"},"session":"makerbay-test"}

@@ -1,0 +1,1 @@
+{"action":"evaluate","args":{"code":"(()=>{const links=[...document.querySelectorAll('aside a')].map(a=>({t:a.innerText.trim(),h:a.getAttribute('href')}));return JSON.stringify(links);})()"},"session":"makerbay-test"}

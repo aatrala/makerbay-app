@@ -1,0 +1,1 @@
+{"action":"evaluate","args":{"code":"(()=>{const m=document.querySelector('main');const i=m.innerText.indexOf('Sources');return JSON.stringify({text:m.innerText.slice(i,i+600)});})()"},"session":"makerbay-test"}

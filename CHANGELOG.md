@@ -11,6 +11,13 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.23.3 - 2026-08-26
+
+- Fixed `payments` Connect with Stripe works - the platform-side Stripe
+  registration is complete and connecting your account now opens
+  Stripe's onboarding form. While any platform-side gate is pending the
+  page says so honestly instead of erroring.
+
 ## 2.23.2 - 2026-08-25
 
 - Changed `platform` Booking and Reviews start switched ON for every
