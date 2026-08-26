@@ -152,6 +152,9 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
   const body = JSON.parse(event.body ?? '{}')
   const name = String(body.name ?? '').trim()
   if (!name) return json(400, { error: 'name_required' })
+  // Optional and free-form (issue 83): seeds trade-flavoured defaults later
+  // and tells us which trades actually sign up.
+  const trade = String(body.trade ?? '').trim().slice(0, 40) || undefined
 
   const now = new Date().toISOString()
   const tenant = {
@@ -160,6 +163,7 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
     slug: await pickSlug(name),
     plan: 'free',
     status: 'active' as const,
+    trade,
     createdAt: now,
   }
   await createTenant(tenant, {

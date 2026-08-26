@@ -202,6 +202,10 @@ export default function Billing() {
             </button>
           </div>
           <p className="meta mt">
+            <strong>Founding offer:</strong> the first 100 workspaces pay $19/month — applied
+            automatically at checkout, and yours for as long as you stay.
+          </p>
+          <p className="meta mt">
             Monthly includes pay-as-you-go beyond the message allowance at{' '}
             {money(pro.overageCentsPerMessage)} each. Annual pauses politely at the allowance
             instead — no surprise catch-up bills.

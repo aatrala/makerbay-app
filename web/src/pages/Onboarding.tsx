@@ -1,8 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { createTenant, explain, logout } from '@makerbay/web-kit'
 
+const TRADES = [
+  'Plumbing', 'Electrical', 'Cleaning', 'Landscaping & gardening', 'Building & carpentry',
+  'Handyman', 'Painting', 'HVAC & refrigeration', 'Salon & beauty', 'Tutoring & coaching',
+  'Pet services', 'Other',
+]
+
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('')
+  const [trade, setTrade] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -14,7 +21,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       // The server switches on every starter module (assistant, booking,
       // reviews) with the workspace - anything unwanted is one click off
       // under Workspace → Modules.
-      await createTenant(name)
+      await createTenant(name, trade || undefined)
       // A brand-new workspace has nothing to answer from, so send the owner
       // to Knowledge rather than an empty Playground. App.tsx reads this.
       sessionStorage.setItem('mb.justOnboarded', '1')
@@ -38,7 +45,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           <form onSubmit={submit}>
             <label htmlFor="biz">Business name</label>
             <input id="biz" value={name} onChange={(e) => setName(e.target.value)} required autoFocus
-              placeholder="Acme Studio" />
+              placeholder="Acme Plumbing" />
+            <label htmlFor="trade">What do you do? <span className="meta">(optional)</span></label>
+            <select id="trade" value={trade} onChange={(e) => setTrade(e.target.value)}>
+              <option value="">Pick a trade…</option>
+              {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
             {error && <div className="error">{error}</div>}
             <div className="mt">
               <button disabled={busy}>{busy ? 'Setting up…' : 'Create workspace'}</button>

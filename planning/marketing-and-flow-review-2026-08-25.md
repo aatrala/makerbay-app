@@ -239,9 +239,10 @@ Improvements:
    *show the scrape happening* and then "your assistant already knows your
    prices — ask it something", pushing into Playground with a suggested
    question. Today it lands on a form.
-3. **Presence readiness meter** from minute one: "Your page is 40% ready — add
-   hours, one photo, one priced service" ties onboarding to the page-goes-live
-   checklist that already exists in Presence.
+3. ~~Presence readiness meter~~ — **already shipped**: Your page has a "3 of 7 done —
+   next: Write an intro → Do it" checklist (verified live). Instead: surface that
+   checklist's progress on the *first* screen after onboarding so new owners meet
+   it immediately.
 
 ### 4.3 Shell & navigation (Shell.tsx)
 
@@ -295,10 +296,14 @@ Ordered by expected impact on the "found, answered, booked" promise.
 | 9 | **No packages / recurring appointments / subscriptions** | Salons, cleaners, maintenance contracts — recurring revenue businesses can't model themselves | Not present |
 | 10 | **No two-way SMS/WhatsApp channel** | Research's strongest adjacent signal; customers live on WhatsApp in target markets (IN/LatAm) | Messaging-as-channels was the plan; deferred |
 | 11 | **No multi-staff calendars / round-robin** | Caps you at solo operators; fine *for now* but excludes 5-person salons | Deliberate scope |
-| 12 | **No competitor-import onboarding** | "Import your contacts/reviews from X" is a proven wedge and your export pledge makes the promise symmetric | Export ✅, import not visible |
+| 12 | ~~No competitor-import onboarding~~ — **correction: CSV import exists** on Contacts ("import a list from anywhere… matched rather than duplicated"). Verified live. The remaining wedge is per-competitor importers (Jobber/ServiceM8 export formats), not import itself | Import ✅ Export ✅ |
 | 13 | **No social proof / comparison / vertical pages on the site** | The SERP for "jobber alternative" is all affiliates; an honest entrant can rank | Marketing gap, not product |
 | 14 | **Genie pricing-table contradiction** | "In Trade" vs $99 tier confuses the exact page where confusion kills | Content bug, fix this week |
-| 15 | **Login/app tagline still says "modular business tools for SMBs"** | The app contradicts the site's positioning at the door | Content bug |
+| 15 | **Login/app tagline still says "modular business tools for SMBs"** | The app contradicts the site's positioning at the door | Content bug — confirmed live 2026-08-25 |
+| 16 | **Outbound email not switched on (SES sandbox)** | Verified live: booking confirmation, quote send and review invite ALL fail for a new account ("Email is not switched on for this account yet"). Per-action degradation is honest, but nothing tells the owner at signup, and Hours' notification-email field defaults empty. Until SES production access lands, every new customer's first booking "fails" | ⛔ Platform-level, biggest live gap |
+| 17 | **New workspaces land on Genie (empty), not Knowledge** | Onboarding copy says "the next step is showing the assistant your website", but landingPath picks the first registered module — Genie. First impression is an empty chat with no data | Code-confirmed + reproduced live |
+| 18 | **Genie answered wrong about tomorrow's booking** | Asked "what's booked tomorrow?" with a confirmed booking tomorrow 10:30 — Genie answered "Nothing booked tomorrow (27 Aug)". A business-trust feature that misreads the diary is worse than no feature | Reproduced live; check date/tz logic |
+| 19 | **Mobile/tablet polish** | At ~510px: the Menu toggle label is dark-on-dark (renders as an empty box), tables overflow horizontally, bottom nav didn't trigger (unverified at true 375px — check on a real phone) | CSS bugs, screenshot on file |
 
 ---
 
@@ -312,11 +317,63 @@ Ordered by expected impact on the "found, answered, booked" promise.
 6. Add one honest /compare page vs. Jobber pricing mechanics.
 7. Onboarding: trade picker dropdown + first-run Playground suggestion.
 
-## 7. Queued: hands-on browser test
+## 7. Interactive test results (2026-08-25/26, live on app.makerbay.app)
 
-Interactive signup + click-through of app.makerbay.app via the browser bridge
-was attempted but the approvals expired this session. When you're at the
-machine, say the word (and approve the browser commands, or paste a test
-account) and I'll run the full flow: signup → workspace creation → knowledge
-import → assistant playground → booking → quote → invoice → review → page
-publish → billing screens, with screenshots, at desktop and phone widths.
+Ran the full flow in a real browser with a fresh test account
+(`aatrala+mbtest1@gmail.com`, workspace "Harbour Test Plumbing").
+Screenshots in `tmp/shots/`.
+
+**Signup → workspace: ~1 minute, smooth.** Email → password → 6-digit code →
+business name → in. No card, no sales call — the promise is kept.
+
+**Verified working end-to-end:**
+- Knowledge: pasted a price list → ingested and "ready" in seconds
+- Playground: answered "how much to clear a blocked drain" correctly *with
+  citation* ("Based on Price list"); answered "do you install solar hot water"
+  with the honest unknown ("I don't have that information yet…")
+- Bookings: service (90 min + 30 buffer) + hours (Mon–Fri 9–5 defaults) →
+  public booking page showed real slots spaced by duration+buffer (09:00,
+  10:30, 12:00…), weekend correctly closed → customer booked Thu 10:30 →
+  owner diary shows it with Done/Cancel
+- Quotes: created Q-001 ($180) → customer link opened a clean accept/decline
+  page → customer accepted → owner saw "accepted" → **Create invoice** made
+  INV-001 from the quote. The whole loop, no PDFs
+- Contacts: the booking auto-created "Test Customer"; the timeline shows
+  booking + quote sent + quote accepted in one record. The vision's core
+  claim ("one record, one history") is real
+- Your page: checklist (3→4 of 7 with "Do it" actions), style presets, SEO
+  holdback until finished, and the live page at
+  makerbay.app/p/harbour-test-plumbing rendered name, headline, **live
+  open/closed chip**, areas, book/ask CTAs, priced services — minutes after
+  setup
+- Share tab: page/chat/booking links + per-channel instructions (WhatsApp
+  Business, LinkedIn, Telegram, Facebook) with working share-intent URLs
+- Get found: 8-step GBP checklist with genuine anti-suspension guidance,
+  pre-filled from page data
+- Reviews: stats + ask flow + the no-gating pledge on the screen itself
+- Missed calls: honest pilot state ("no number assigned yet — US first"),
+  greeting + notification config ready
+- Usage: live metering (2/200 messages, per-metric ledger)
+- Activity: plain-sentence trail (booked / quote sent / quote accepted)
+- Billing: Free status, Trade $29/$290 and Genie $99 upgrade cards with the
+  "annual pauses at the cap" honesty note
+- Support: embedded assistant for quick answers + ticket form + ticket list
+
+**Bugs found live (added to the gap table as #16–19):**
+1. **New workspace lands on Genie** (empty chat), not Assistant→Knowledge as
+   the onboarding copy promises — first impression is a screen with no data
+2. **Outbound email is off for the whole account** — booking confirmation,
+   quote send and review invite all failed; the product says so honestly
+   per-action, but a new owner hits this within their first 10 minutes and
+   nothing warns them at signup
+3. **Genie misread the diary**: with a confirmed booking tomorrow 10:30, it
+   answered "Nothing booked tomorrow"
+4. **~510px width**: Menu toggle label invisible (dark-on-dark), diary table
+   scrolls horizontally, bottom nav not triggered (check true 375px on a
+   device)
+
+**Minor:** customer quote page showed my note "Valid for 14 days" next to the
+system's "Valid for 30 days / until 25 September" — owner notes can contradict
+system terms. Services form placeholders ("Standard cut", $45.00) are
+salon-flavoured on a plumbing workspace — more fuel for the trade-picker
+recommendation.

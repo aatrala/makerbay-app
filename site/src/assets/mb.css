@@ -64,12 +64,62 @@ header nav a:hover { color: var(--ink); text-decoration: none; }
 .hero .btn.ghost:hover { background: #3a2b22; }
 .hero small { display: block; margin-top: 18px; color: #a8a29e; font-size: 14px; }
 
-/* Hero layout: copy beside a small product sketch, stacking on mobile. */
+/* Hero layout: copy beside the living demo, stacking (never hiding) on mobile. */
 .hero-flex { display: flex; gap: 48px; align-items: center; }
-.hero-copy { flex: 1 1 60%; min-width: 0; }
-.hero-art { flex: 0 1 300px; }
-.hero-art svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 18px 40px rgba(0,0,0,.35)); }
-@media (max-width: 860px) { .hero-art { display: none; } }
+.hero-copy { flex: 1 1 58%; min-width: 0; }
+.offer-pill {
+  display: inline-block; margin-bottom: 16px; padding: 6px 14px; border-radius: 999px;
+  background: #431407; color: #fdba74; font-size: 13.5px; font-weight: 600;
+  border: 1px solid #7c2d12;
+}
+
+/* ── The living demo (issue 84): a real conversation, staged in HTML so it
+   paints instantly, replayed on scroll-in, swapped for the live product on
+   tap. JS off = this final state, which is a perfectly good hero. ─────── */
+.hero-demo { flex: 0 1 340px; min-width: 0; }
+.phone {
+  background: #292524; border: 1px solid #57433a; border-radius: 20px;
+  padding: 10px 10px 12px; filter: drop-shadow(0 18px 40px rgba(0,0,0,.35));
+}
+.phone-url {
+  font-size: 12px; color: #a8a29e; background: #1c1917; border-radius: 8px;
+  padding: 6px 12px; margin-bottom: 10px; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.phone-body {
+  aspect-ratio: 3 / 3.6; display: flex; flex-direction: column; gap: 9px;
+  overflow: hidden; position: relative;
+}
+.phone-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 10px; background: #fff; }
+.hb { max-width: 88%; border-radius: 12px; padding: 9px 13px; font-size: 13.5px; line-height: 1.45; }
+.hb.msg-c { background: #3a2b22; color: #d6d3d1; align-self: flex-start; }
+.hb.msg-a { background: var(--accent); color: #fff; align-self: flex-end; }
+.hb .src { display: block; margin-top: 5px; font-size: 11px; color: #fed7aa; }
+.hb.slot-card { background: #fff; color: #1c1917; align-self: flex-end; width: 88%; }
+.hb.slot-card strong { display: block; font-size: 13px; margin-bottom: 6px; }
+.hb .slots { display: flex; gap: 8px; }
+.hb .slots em {
+  font-style: normal; font-size: 12.5px; font-weight: 600; color: var(--accent);
+  border: 1px solid #fdba74; border-radius: 8px; padding: 4px 10px;
+}
+.hb .slots em:first-child { background: var(--accent); color: #fff; border-color: var(--accent); }
+.phone-live {
+  display: block; width: 100%; margin-top: 10px; padding: 9px 12px; cursor: pointer;
+  background: transparent; color: #fed7aa; border: 1px dashed #57433a; border-radius: 9px;
+  font: inherit; font-size: 13px;
+}
+.phone-live:hover { background: #3a2b22; }
+.phone.playing .hb { opacity: 0; transform: translateY(8px); }
+.phone .hb.shown { opacity: 1; transform: none; transition: opacity 140ms ease, transform 140ms ease; }
+.typing-dots { align-self: flex-end; color: #fed7aa; font-size: 18px; letter-spacing: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .phone.playing .hb { opacity: 1; transform: none; }
+}
+@media (max-width: 860px) {
+  .hero-flex { flex-direction: column; align-items: stretch; }
+  .hero .cta .btn { flex: 1 1 auto; text-align: center; }
+  .hero-demo { flex: none; max-width: 340px; margin: 34px auto 0; width: 100%; }
+}
 
 /* The customer journey: five linked steps, each owned by a module. */
 .journey { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
@@ -214,6 +264,8 @@ header nav .signin { font-weight: 600; }
 .pricing-table td { padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .pricing-table tr:last-child td { border-bottom: none; }
 .pricing-table .meta { font-size: 14px; color: var(--muted); margin-top: 2px; }
+.price .meta { font-size: 13.5px; color: var(--muted); }
+.price .meta.founding { color: var(--accent); font-weight: 600; margin-top: 8px; }
 .pricing-table .tag { margin-bottom: 0; }
 .scroll-x { overflow-x: auto; max-width: 100%; }
 .linkcard .meta { font-size: 14px; color: var(--muted); margin-top: 8px; }
@@ -272,7 +324,11 @@ header nav .signin { font-weight: 600; }
 }
 @media (max-width: 640px) {
   body { font-size: 16px; }
-  header nav a:not(.btn) { display: none; }
+  /* Keep Pricing and Sign in reachable on the device this audience actually
+     uses - hiding all nav behind nothing was a dead end (issue 90 consult). */
+  header nav a:not(.btn):not(.signin):not([href="/pricing"]) { display: none; }
+  header nav { gap: 14px; }
+  header nav a { font-size: 14px; }
   section { padding: 54px 0; }
   .hero { padding: 60px 0 54px; }
   .hero p.lead { font-size: 18px; }

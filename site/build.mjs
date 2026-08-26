@@ -42,9 +42,16 @@ for (const m of modules) {
 modules.sort((a, b) => a.roadmap.order - b.roadmap.order)
 
 const isFree = (m) => m.core || m.pricing === 'free'
-// Tier pricing, not module pricing: paid capability lives in the Trade plan.
+// Tier pricing, not module pricing: paid capability lives in the Trade plan -
+// except Genie, whose full allowance is its own $99 tier (Free/Trade get a
+// taster). Saying "In Trade" for Genie contradicted the cards on the same
+// page (issue 78).
 const priceTag = (m) =>
-  isFree(m) ? '<span class="tag free">Free</span>' : '<span class="tag paid">In Trade</span>'
+  isFree(m)
+    ? '<span class="tag free">Free</span>'
+    : m.id === 'genie'
+      ? '<span class="tag paid">Taster in Free & Trade · Full in Genie</span>'
+      : '<span class="tag paid">In Trade</span>'
 
 const STATUS = {
   live: { label: 'Available now', cls: 'live' },
@@ -104,8 +111,8 @@ const footer = () => `<footer>
     </div>
     <div class="foot-col">
       <h4>Product</h4>
-      <a href="/#modules">Modules</a>
-      <a href="/pricing">Pricing</a>
+      <a href="/pricing">Modules & pricing</a>
+      <a href="/compare/jobber">MakerBay vs Jobber</a>
       <a href="https://demo.makerbay.app" rel="noopener">Live example page</a>
     </div>
     <div class="foot-col">
@@ -209,13 +216,21 @@ ${faq}
 
 <section class="band">
   <div class="wrap">
-    <h2>${m.status === 'live' ? 'Try it on your own documents' : 'Start with the assistant today'}</h2>
+    <h2>${
+      // The old closer said "Try it on your own documents" on EVERY module
+      // page - assistant copy on the Bookings page (issue 90 consult).
+      m.status !== 'live'
+        ? 'Start with what is live today'
+        : m.id === 'assistant'
+          ? 'Try it on your own documents'
+          : `Switch on ${esc(m.name)} in minutes`
+    }</h2>
     <p>${
       m.status === 'live'
         ? 'Free plan, no card required. You will know within ten minutes whether it is useful to you.'
-        : `${esc(m.name)} is ${STATUS[m.status].label.toLowerCase()}. The AI assistant is live now, and every module shares the same account.`
+        : `${esc(m.name)} is ${STATUS[m.status].label.toLowerCase()}. Everything live today shares the same account, so you lose nothing by starting now.`
     }</p>
-    <a class="btn lg" href="${APP}">Get started free</a>
+    <a class="btn lg" href="${APP}">Start free</a>
   </div>
 </section>`,
   })
@@ -389,6 +404,7 @@ const pricingPage = () => {
         </ul>
         <a class="btn" href="${APP}">Get started</a>
         <p class="meta" style="margin-top:12px">$290 a year — 2 months free.</p>
+        <p class="meta founding">Founding offer: the first 100 workspaces pay <strong>$19/mo</strong> — and keep that price for as long as they stay.</p>
       </div>
       <div class="price">
         <h3>Genie</h3>
@@ -405,10 +421,11 @@ const pricingPage = () => {
       </div>
     </div>
     <p class="meta" style="margin-top:20px">
-      Pay-as-you-go applies only to things that cost us money per use: assistant
-      messages beyond your allowance ($0.02 each, opt-in — the default is a polite
-      stop), and voice minutes when voice ships. Never per booking, per quote or
-      per invoice — we will not tax your own success.
+      All prices in USD, the same everywhere. Pay-as-you-go applies only to things
+      that cost us money per use: assistant messages beyond your allowance ($0.02
+      each, opt-in — the default is a polite stop), and voice minutes when voice
+      ships. Never per booking, per quote or per invoice — we will not tax your
+      own success. Card payments carry no MakerBay fee — Stripe's rate is Stripe's.
     </p>
   </div>
 </section>
@@ -628,6 +645,75 @@ ${paths.map((p) => `  <url><loc>${ORIGIN}${p}</loc></url>`).join('\n')}
 </urlset>
 `
 
+// ── Compare: MakerBay vs Jobber ─────────────────────────────────────────
+// One honest mechanics comparison (issue 84). Their numbers are their
+// published prices; we say when they are the better pick, because a
+// comparison page you can't trust is worth less than no page.
+
+const comparePage = () =>
+  page({
+    title: 'MakerBay vs Jobber - an honest comparison',
+    description:
+      'Jobber starts at $39/month for one user with AI answering as a paid add-on. MakerBay is $29 flat with the assistant included, and a free plan that is not a trial. The mechanics, side by side.',
+    path: '/compare/jobber',
+    body: `
+<div class="hero">
+  <div class="wrap">
+    <h1>MakerBay vs Jobber</h1>
+    <p class="lead">
+      Jobber is good software. This page is not a hit piece - it is the
+      pricing mechanics side by side, because the mechanics are where the
+      real difference lives. Their numbers are their published prices
+      (mid-2026); check them yourself at jobber.com/pricing.
+    </p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head"><h2>The mechanics, side by side</h2></div>
+    <div class="scroll-x">
+      <table class="pricing-table">
+        <thead><tr><th></th><th>Jobber</th><th>MakerBay</th></tr></thead>
+        <tbody>
+          <tr><td>Entry price</td><td>$39/mo (Core, billed monthly), one user</td><td>$29/mo flat (Trade) - or $0 forever on Free</td></tr>
+          <tr><td>Free plan</td><td>No - 14-day trial only</td><td>Yes - a real plan with real allowances, no clock</td></tr>
+          <tr><td>AI that answers customers</td><td>AI Receptionist is a paid add-on (~$99/mo)</td><td>Included on every plan - grounded in your documents, with sources shown</td></tr>
+          <tr><td>Extra team members</td><td>+$29/user/mo</td><td>Solo-first today; no per-seat pricing</td></tr>
+          <tr><td>Tier jumps</td><td>$39 &rarr; $119 &rarr; $199 as features unlock</td><td>$29 switches everything on; $99 adds the Genie copilot</td></tr>
+          <tr><td>Card payment fees</td><td>Processing via Jobber Payments</td><td>We add no fee - Stripe's rate is Stripe's</td></tr>
+          <tr><td>Contract</td><td>Monthly or annual</td><td>Month to month; cancel from the billing page, not a phone call</td></tr>
+          <tr><td>Your data</td><td>Export available</td><td>CSV export on every plan - <a href="/roadmap">the roadmap pledges it publicly</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="meta" style="margin-top:14px">All MakerBay prices in USD, the same everywhere.</p>
+  </div>
+</section>
+
+<section class="soft">
+  <div class="wrap">
+    <div class="sec-head"><h2>When Jobber is the better pick</h2>
+    <p>
+      Honestly: if you run a crew of five with dispatch, GPS tracking, and
+      QuickBooks sync as daily needs, Jobber is built for that today and
+      MakerBay is not. MakerBay is built for the solo operator or small team
+      whose real problem is being found, answered and booked while their
+      hands are full - with an AI assistant included instead of sold as an
+      add-on.
+    </p></div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <h2>Try the difference in ten minutes</h2>
+    <p>Free plan, no card, no trial clock. If it isn't useful, you've lost ten minutes.</p>
+    <a class="btn lg" href="${APP}">Start free</a>
+  </div>
+</section>`,
+  })
+
 // ── Build ────────────────────────────────────────────────────────────────
 
 await rm(dist, { recursive: true, force: true })
@@ -655,6 +741,7 @@ await write('roadmap', roadmapPage())
 await write('pricing', pricingPage())
 
 await write('changelog', changelogPage(releases))
+await write('compare/jobber', comparePage())
 
 // Inject the generated module grid wherever a page asks for it.
 const marker = '<!--modules-grid-->'

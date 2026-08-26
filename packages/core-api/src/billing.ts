@@ -269,6 +269,41 @@ async function annualPrice(
   })
 }
 
+// ── Founding members (issue 84) ─────────────────────────────────────────
+// The first 100 workspaces pay $19/mo for Trade and keep that price for as
+// long as they stay - the price rides their subscription, so "keep it" is
+// simply how Stripe works. Seats are counted from live subscriptions on the
+// founding price itself; when they are gone, checkout quietly uses the
+// standard price.
+
+const FOUNDING_LIMIT = 100
+const FOUNDING_PRICE_CENTS = 1900
+
+async function foundingPrice(
+  stripe: Awaited<ReturnType<typeof stripeClient>>,
+  productId: string,
+) {
+  const lookup = `${PRO_PRODUCT_KEY}-base-founding`
+  const existing = await stripe.prices.list({ lookup_keys: [lookup], limit: 1 })
+  if (existing.data[0]) return existing.data[0]
+  return await stripe.prices.create({
+    product: productId,
+    currency: 'usd',
+    unit_amount: FOUNDING_PRICE_CENTS,
+    recurring: { interval: 'month' },
+    lookup_key: lookup,
+    nickname: 'Founding member',
+  })
+}
+
+async function foundingSeatsLeft(
+  stripe: Awaited<ReturnType<typeof stripeClient>>,
+  priceId: string,
+): Promise<number> {
+  const subs = await stripe.subscriptions.list({ price: priceId, status: 'active', limit: 100 })
+  return Math.max(0, FOUNDING_LIMIT - subs.data.length)
+}
+
 async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayProxyResultV2> {
   const body = JSON.parse(event.body ?? '{}')
   const interval: 'month' | 'year' = body.interval === 'year' ? 'year' : 'month'
@@ -301,7 +336,15 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
   } else if (interval === 'year') {
     lineItems = [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
   } else {
-    lineItems = [{ price: base.id, quantity: 1 }, { price: metered.id }]
+    // Monthly Trade: founding price while seats last, standard after.
+    let monthlyBase = base
+    try {
+      const founding = await foundingPrice(stripe, product.id)
+      if ((await foundingSeatsLeft(stripe, founding.id)) > 0) monthlyBase = founding
+    } catch (err) {
+      console.warn('founding price unavailable, using standard', String(err))
+    }
+    lineItems = [{ price: monthlyBase.id, quantity: 1 }, { price: metered.id }]
   }
 
   const session = await stripe.checkout.sessions.create({

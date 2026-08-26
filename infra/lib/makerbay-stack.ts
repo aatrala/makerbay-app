@@ -507,6 +507,8 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_PAYMENTS: payments.tableName,
       TABLE_REVIEWS: reviews.tableName,
       TABLE_BOOKINGSERVICES: bookingServices.tableName,
+      // Timezone truth for "today"/"tomorrow" answers (issue 77).
+      TABLE_BOOKINGCONFIG: bookingConfig.tableName,
       TABLE_PRESENCECONFIG: presenceConfig.tableName,
       TABLE_QUOTESCONFIG: quotesConfig.tableName,
       CHAT_MODEL_ID,
@@ -893,7 +895,7 @@ export class MakerbayStack extends cdk.Stack {
     // change a thing, and the IAM policy says so as loudly as the prompt.
     genieSessions.grantReadWriteData(genieFn)
     for (const t of [audit, bookings, requests, quotes, invoices, payments, reviews,
-      bookingServices, presenceConfig, quotesConfig, tenants, users, apiKeys, entitlements, grants, usage]) {
+      bookingServices, bookingConfig, presenceConfig, quotesConfig, tenants, users, apiKeys, entitlements, grants, usage]) {
       t.grantReadData(genieFn)
     }
     bus.grantPutEventsTo(genieFn)

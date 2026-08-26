@@ -214,6 +214,90 @@ behind +, bubbles capped at a readable width, and a "checked: bookings,
 money" caption under each answer. Variant B (structured briefing cards
 with row-level actions) queued as the follow-up.
 
+## Issues 76-84 (from the marketing & flow review, approved 2026-08-26)
+
+Decisions of record: **USD everywhere, always** (no AUD display);
+founding-member pricing approved; hero must not look cheap (design
+consult before build). Deferred by founder: Google sign-in, Google
+Calendar two-way sync, QuickBooks/Xero, WhatsApp.
+
+### 76 — SES production access ⛔ founder appeal needed (case 178755823800807)
+Submitting hit a wall worth knowing about: a PREVIOUS request (contact
+aatral@makerbay.xyz) was already DENIED, and after a denial the API
+refuses re-submission. **Do:** AWS Console → Support Center → case
+178755823800807 → reply asking for reconsideration. Paste the appeal
+drafted in planning/ses-appeal.md (transactional-only, suppression
+handling, low volume). Until this lands, emails only reach verified
+addresses (yours works).
+
+### 77 — Genie misreads the diary ✅ (P0 bug, fixed + deployed)
+Three compounding causes confirmed and fixed: "today" is now computed
+in the tenant's booking timezone (was UTC - one day behind Sydney
+every morning), date-only tool bounds are local days converted to UTC
+instants (was raw string compares that dropped the entire end day),
+and every booking in tool results carries a "local" wall-clock stamp
+the model is told to report. **Test:** ask Genie "what's booked
+tomorrow?" before 10am with a booking tomorrow - it names it.
+
+### 78 — Pricing page Genie contradiction ✅
+The module table now says "Taster in Free & Trade · Full in Genie";
+the stale published dist (which still carried the old tag) rebuilt
+and republished.
+
+### 79 — Login: forgot password + tagline ✅
+Full reset flow (code by email via Cognito - works even in SES
+sandbox) + login modes; tagline and meta description now match the
+site's positioning. **Test:** Sign in → Forgot password? → code →
+new password → signed in.
+
+### 80 — Mobile CSS ✅
+Menu toggle readable (specificity fixed), and the bottom thumb nav
+renders for the first time since issue 27 (source-order bug). 375px
+device check still worth a founder glance.
+
+### 81 — Settled workspaces land on Genie ✅
+landingPath now skips taster-plan modules; after setup you land on
+your work, not the upsell.
+
+### 82 — Quote validity ✅
+"Valid for N days" on New quote + a compose-time warning when notes
+mention validity. One date on the document.
+
+### 83 — Trade picker + neutral placeholders ✅
+Optional "What do you do?" at signup (stored on the tenant for later
+templates/analytics); "Standard cut" placeholder neutralised.
+
+### 84 — Homepage wave ✅ (built to the hero consult's spec)
+Living hero demo: a staged real conversation (question → cited answer
+→ booking) that plays on scroll and swaps in the LIVE demo assistant
+on tap; JS-off shows the final frame. Founding offer on hero pill +
+pricing cards AND wired into checkout (first 100 monthly Trade
+subscriptions get a $19 price they keep; counted from Stripe itself);
+no-fee-on-payments line; /compare/jobber (honest, incl. "when Jobber
+is the better pick"); USD stated. Consult-found fixes riding along:
+voice module tagged paid (was contradicting the Trade card), fossil
+assistant page's nonexistent "Pro" plan removed, personas no longer
+recommend the unshipped rescue module, module pages stop saying "your
+own documents" for the diary, phones can reach Pricing/Sign in, CTA
+labels unified on "Start free".
+
+### 90 — Marketing identity consults ⏳ (four agents running)
+Founder-requested proposals to evaluate: (a) 3 site design directions
+(visual system + structure), (b) 15 tagline candidates in three
+groups, (c) 6 logo concepts as production SVGs, (d) a written
+rationale + critique of the current content structure and style.
+
+### 91 — Product-flow review per module ⏳ (two agents running)
+Owner-side flows (dashboard, phone-first solo tradie) and
+customer-side flows (public page, chat, booking incl. deposits, quote
+accept, invoice pay, reviews) each audited for concrete improvements,
+ranked value ÷ effort with a proposed first batch.
+
+### Scheduled after launch (founder-agreed order, not yet built)
+Google sign-in (first post-launch item) → Google Calendar two-way
+sync (deferred; give it a public roadmap date) → PWA + push → booking
+intake fields → recurring appointments → QuickBooks/Xero (deferred).
+
 ### 70 — WhatsApp surface for Genie 📋 HELD (revisit at 100+ users + marketing)
 Founder decision 2026-08-26: hold until after 100+ users and marketing.
 The build plan, ready for that day:

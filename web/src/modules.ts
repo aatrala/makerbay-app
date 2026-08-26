@@ -47,8 +47,12 @@ export const enabledModules = (me: Me): DashboardModule[] =>
 export const landingPath = (me: Me, _firstRun: boolean): string => {
   const modules = enabledModules(me)
   // Core modules are always present, so they must never win the landing slot
-  // over the module the customer actually signed up for.
-  const first = modules.find((m) => !CORE.has(m.id)) ?? modules[0]
+  // over the module the customer actually signed up for. Neither may a
+  // taster: Genie is "enabled" for everyone as a teaser, which made every
+  // settled workspace land on the upsell chat (issue 81).
+  const owned = (m: DashboardModule) =>
+    !CORE.has(m.id) && me.entitlements?.modules[m.id]?.plan !== 'taster'
+  const first = modules.find(owned) ?? modules.find((m) => !CORE.has(m.id)) ?? modules[0]
   if (!first) return '/usage'
   return first.nav[0].to
 }

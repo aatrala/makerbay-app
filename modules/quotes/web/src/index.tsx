@@ -221,8 +221,14 @@ function NewQuote() {
   const [customerName, setCustomerName] = useState(params.get('name') ?? '')
   const [customerEmail, setCustomerEmail] = useState(params.get('email') ?? '')
   const [notes, setNotes] = useState(dup.notes ?? '')
+  const [validDays, setValidDays] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // Validity lives in ONE place - the quote's own expiry. A note that also
+  // talks validity puts two contradicting statements on a money document
+  // (issue 82), so warn at compose time.
+  const notesMentionValidity = /valid|expir/i.test(notes)
 
   useEffect(() => {
     void api('GET', '/v1/quotes/items').then((r) => setItems(r.items ?? [])).catch(() => setItems([]))
@@ -256,6 +262,7 @@ function NewQuote() {
         const r = await api('POST', '/v1/quotes', {
           customerName, customerEmail, notes, requestId,
           contactId: contactId || undefined,
+          validDays: validDays ? Number(validDays) : undefined,
           lines: lines
             .filter((l) => l.description.trim())
             .map((l) => ({
@@ -348,6 +355,18 @@ function NewQuote() {
           <label htmlFor="q-notes">Notes for the customer</label>
           <textarea id="q-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
             placeholder="Access needed through the side gate. Price excludes waste removal." />
+          {notesMentionValidity && (
+            <Notice tone="warn">
+              The quote already carries its own "valid until" date — set it below instead of writing
+              validity into the notes, or the customer sees two different answers.
+            </Notice>
+          )}
+          <div className="row mt" style={{ alignItems: 'center' }}>
+            <label htmlFor="q-valid" style={{ margin: 0 }}>Valid for</label>
+            <input id="q-valid" type="number" min={1} max={365} className="narrow" value={validDays}
+              onChange={(e) => setValidDays(e.target.value)} placeholder="30" />
+            <span className="meta">days — blank uses your quote settings; shown on the quote as one clear date.</span>
+          </div>
           <div className="mt">
             <button disabled={busy || !lines.some((l) => l.description.trim())}>
               {busy ? 'Creating…' : 'Create draft'}

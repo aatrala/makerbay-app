@@ -11,6 +11,8 @@
 <meta property="og:type" content="website" />
 <link rel="canonical" href="https://makerbay.app" />
 <link rel="stylesheet" href="/assets/mb.css" />
+<link rel="preconnect" href="https://chat.makerbay.app" />
+<script src="/assets/hero-demo.js" defer></script>
 </head>
 <body>
 
@@ -29,36 +31,34 @@
 <div class="hero">
   <div class="wrap hero-flex">
     <div class="hero-copy">
+      <span class="offer-pill">First 100 workspaces: Trade $19/mo USD — for as long as you stay</span>
       <h1>Be found, answered and booked — without lifting a finger</h1>
       <p class="lead">
-        You are on the tools all day. Meanwhile customers are searching, asking
-        questions and trying to book. MakerBay is the part of your business that
-        answers while your hands are full — a real web page, an assistant that
-        knows your prices, a diary customers book themselves into, and quotes
-        they accept on their phone.
+        MakerBay answers while your hands are full — a real page, an assistant
+        that knows your prices, a diary customers book themselves into.
+        Watch it happen →
       </p>
       <div class="cta">
         <a class="btn lg" href="https://app.makerbay.app">Start free</a>
-        <a class="btn lg ghost" href="https://demo.makerbay.app" rel="noopener">See a live example page</a>
+        <a class="btn lg ghost" href="https://demo.makerbay.app" rel="noopener">Explore the demo workspace</a>
       </div>
-      <small>Free plan, no card required · Live in about ten minutes</small>
+      <small>Free plan · No card to start · Month to month</small>
     </div>
-    <div class="hero-art" aria-hidden="true">
-      <svg viewBox="0 0 300 340" xmlns="http://www.w3.org/2000/svg" role="img">
-        <rect x="20" y="10" width="260" height="320" rx="24" fill="#292524" stroke="#57433a" stroke-width="2"/>
-        <rect x="40" y="40" width="180" height="46" rx="12" fill="#3a2b22"/>
-        <text x="52" y="59" fill="#d6d3d1" font-size="11" font-family="system-ui">Hi! Do you do emergency</text>
-        <text x="52" y="75" fill="#d6d3d1" font-size="11" font-family="system-ui">call-outs in Newtown?</text>
-        <rect x="80" y="100" width="180" height="46" rx="12" fill="#c2410c"/>
-        <text x="92" y="119" fill="#fff" font-size="11" font-family="system-ui">Yes — 24/7. A call-out is</text>
-        <text x="92" y="135" fill="#fff" font-size="11" font-family="system-ui">$120. Want a time today?</text>
-        <rect x="40" y="160" width="220" height="64" rx="12" fill="#fff"/>
-        <text x="56" y="184" fill="#1c1917" font-size="12" font-weight="700" font-family="system-ui">Tuesday 2:30pm ✓</text>
-        <text x="56" y="204" fill="#57534e" font-size="11" font-family="system-ui">Booked — confirmation sent</text>
-        <rect x="40" y="240" width="220" height="60" rx="12" fill="#3a2b22"/>
-        <text x="56" y="263" fill="#fcd34d" font-size="12" font-family="system-ui">★★★★★</text>
-        <text x="56" y="283" fill="#d6d3d1" font-size="11" font-family="system-ui">"Fast, tidy, fair price."</text>
-      </svg>
+    <div class="hero-demo">
+      <div class="phone" data-live="https://chat.makerbay.app/makerbay-demo">
+        <div class="phone-url" aria-hidden="true">chat.makerbay.app/makerbay-demo</div>
+        <div class="phone-body">
+          <div class="hb msg-c">Do you do emergency call-outs in Newtown?</div>
+          <div class="hb msg-a">Yes — 24/7. A call-out is $120 including the first half hour.
+            <span class="src">From: Price list</span></div>
+          <div class="hb slot-card">
+            <strong>Book a time</strong>
+            <span class="slots"><em>Tue 2:30 pm</em><em>Wed 8:00 am</em></span>
+          </div>
+          <div class="hb msg-a">Booked for Tuesday 2:30 pm — confirmation sent ✓</div>
+        </div>
+        <button class="phone-live" type="button">It's real — tap to ask your own question</button>
+      </div>
     </div>
   </div>
 </div>
@@ -120,7 +120,7 @@
         <h3>On the tools all day</h3>
         <p class="p-who">Electricians, plumbers, builders, landscapers, mobile mechanics</p>
         <p>Your phone rings in a roof cavity. Missed-call rescue texts the caller your booking link and writes their voicemail into your inbox — job, address, urgency. Quote it from your price list at smoko, invoice it when they accept.</p>
-        <p class="p-start">Start with: <a href="/modules/voice">Missed-call rescue</a> and <a href="/modules/quotes">Quotes</a></p>
+        <p class="p-start">Start with: <a href="/modules/quotes">Quotes</a> and <a href="/modules/presence">Your page</a> — <a href="/modules/voice">missed-call rescue</a> joins when it reaches your region</p>
       </div>
       <div class="card">
         <h3>A day made of appointments</h3>
@@ -158,47 +158,10 @@
         <figcaption>An accepted quote becomes an invoice</figcaption>
       </figure>
     </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>The assistant answers in your words</h2>
-      <p>
-        Upload your FAQ, price list, or policies. The assistant answers customer
-        questions from those documents — and says honestly when it doesn't know,
-        instead of inventing an answer.
-      </p>
-    </div>
-    <div class="grid">
-      <div class="card">
-        <h3>Answers from your documents</h3>
-        <p>Every reply is grounded in the files you uploaded, with the sources shown. No made-up opening hours or invented refund policies.</p>
-      </div>
-      <div class="card">
-        <h3>Three ways to use it</h3>
-        <p>A chat bubble on your website, a shareable link that needs no website at all, or an API your developer can call directly.</p>
-      </div>
-      <div class="card">
-        <h3>It gets better every week</h3>
-        <p>See every question your customers asked. When the assistant couldn't answer one, write the answer once and it handles it from then on.</p>
-      </div>
-    </div>
-    <p style="margin-top:26px"><a href="/modules/assistant">How the assistant works →</a></p>
-  </div>
-</section>
-
-<section class="soft" id="modules">
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>One account, more modules over time</h2>
-      <p>
-        Most of them are free and stay free. You switch each one on separately, and you never pay
-        for what you haven't turned on. <a href="/roadmap">See where each one sits on the roadmap</a>.
-      </p>
-    </div>
-    <!--modules-grid-->
+    <p style="margin-top:26px">
+      <a href="/modules/assistant">How the assistant works →</a> ·
+      <a href="/pricing">Every module and what it costs →</a>
+    </p>
   </div>
 </section>
 
@@ -297,6 +260,7 @@
         </ul>
         <a class="btn" href="https://app.makerbay.app">Get started</a>
         <p class="meta" style="margin-top:10px">$290 a year — 2 months free</p>
+        <p class="meta founding">Founding offer: the first 100 workspaces pay $19/mo — and keep that price for as long as they stay.</p>
       </div>
       <div class="price">
         <h3>Genie</h3>
@@ -313,7 +277,9 @@
     </div>
     <p style="margin-top:22px" class="faq">
       Same prices worldwide, in USD. Every plan includes a Genie taster — 25 messages a
-      month on Free, 250 on Trade. <a href="/pricing">The full pricing page</a>.
+      month on Free, 250 on Trade; the full Genie allowance is its own plan.
+      We add no fee on card payments — Stripe's rate is Stripe's.
+      <a href="/pricing">The full pricing page</a>.
     </p>
   </div>
 </section>

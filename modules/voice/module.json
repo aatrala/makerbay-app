@@ -16,7 +16,7 @@
     "rescue.booked"
   ],
   "entitlementKey": null,
-  "pricing": "free",
+  "pricing": "paid",
   "dependsOn": [
     "presence",
     "booking"

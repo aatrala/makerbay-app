@@ -11,6 +11,37 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.25.0 - 2026-08-26
+
+> **The truth pass** - Genie learns your timezone, the login learns
+> forgiveness, the phone learns navigation, and the homepage shows the
+> real thing instead of a sketch.
+
+- Fixed `genie` Genie now answers "what's booked tomorrow?" from YOUR
+  calendar, not UTC's - it reads the booking timezone, treats date
+  ranges as local days, and reports every time in local wall-clock.
+  It could previously miss a real booking by a day.
+- Added `platform` Forgot password on the sign-in screen - a reset
+  code by email, no support ticket needed. The login tagline now says
+  what the product does.
+- Fixed `platform` Two phone bugs: the Menu button was invisible
+  (ink-on-ink) and the bottom thumb nav never rendered at any width.
+  Both live now.
+- Fixed `platform` After setup, the app lands on your work - not on
+  the Genie upsell chat.
+- Added `quotes` "Valid for N days" on every new quote, with a warning
+  when notes mention validity - one date, one truth, on the document.
+- Added `platform` A trade picker at signup (optional) and neutral
+  service placeholders.
+- Changed `platform` The homepage hero now plays a real conversation -
+  question, cited answer, booking - and a tap swaps in the live demo
+  assistant. Pricing carries the founding offer (first 100 workspaces:
+  Trade $19/mo USD, kept for as long as you stay - applied
+  automatically at checkout), the no-fee-on-payments stance, and an
+  honest MakerBay-vs-Jobber page. Fixed in passing: the pricing table
+  said Genie was "In Trade", a module page advertised a plan that
+  does not exist, and phones had no way to reach Pricing or Sign in.
+
 ## 2.24.0 - 2026-08-26
 
 > **Deposits, a front door, and a ghostwriter** - bookings that cost a

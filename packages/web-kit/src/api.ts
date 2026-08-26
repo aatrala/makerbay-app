@@ -52,6 +52,20 @@ export async function confirmSignUp(email: string, code: string): Promise<void> 
   await cognito('ConfirmSignUp', { ClientId: CLIENT_ID, Username: email, ConfirmationCode: code })
 }
 
+/** Self-service password reset (issue 79): Cognito emails a code. */
+export async function forgotPassword(email: string): Promise<void> {
+  await cognito('ForgotPassword', { ClientId: CLIENT_ID, Username: email })
+}
+
+export async function confirmForgotPassword(email: string, code: string, newPassword: string): Promise<void> {
+  await cognito('ConfirmForgotPassword', {
+    ClientId: CLIENT_ID,
+    Username: email,
+    ConfirmationCode: code,
+    Password: newPassword,
+  })
+}
+
 export async function login(email: string, password: string): Promise<void> {
   const r = await cognito('InitiateAuth', {
     ClientId: CLIENT_ID,
@@ -168,7 +182,8 @@ export async function streamChat(
 
 export const CHAT_BASE = 'https://chat.makerbay.app'
 export const WIDGET_BASE = 'https://widget.makerbay.app'
-export const createTenant = (name: string) => api('POST', '/v1/core/tenants', { name })
+export const createTenant = (name: string, trade?: string) =>
+  api('POST', '/v1/core/tenants', { name, trade })
 export const enableModule = (id: string) => api('POST', `/v1/core/modules/${id}/enable`, {})
 
 // ── Human error messages ─────────────────────────────────────────────────

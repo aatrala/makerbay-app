@@ -294,7 +294,7 @@ function Services({ me }: { me: Me }) {
             <div className="grow">
               <label htmlFor="s-name">Name</label>
               <input id="s-name" value={form.name} required
-                onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Standard cut" />
+                onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Standard service call" />
             </div>
             <div>
               <label htmlFor="s-dur">Minutes</label>
