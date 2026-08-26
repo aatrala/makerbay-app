@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
-import { ddb, getEntitlements, getTenant, listGrants, sendEmail, ulid } from '@makerbay/core'
+import { ddb, getEntitlements, getTenant, json, listGrants, sendEmail, ulid } from '@makerbay/core'
 
 /**
  * Support tickets (issue 49 V1). Customers write from the dashboard, staff
@@ -9,12 +9,6 @@ import { ddb, getEntitlements, getTenant, listGrants, sendEmail, ulid } from '@m
  */
 
 const Tickets = () => process.env.TABLE_TICKETS!
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export type TicketCategory = 'problem' | 'question' | 'idea'
 export type TicketStatus = 'open' | 'answered' | 'closed'

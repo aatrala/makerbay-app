@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const b=[...document.querySelectorAll('main button')].find(x=>x.innerText.trim()==='New quote');b.click();return 'ok';})()"},"session":"makerbay-test"}

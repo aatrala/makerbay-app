@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const m=document.querySelector('main');return JSON.stringify({url:location.href,text:m?m.innerText.slice(0,900):document.body.innerText.slice(0,900)});})()"},"session":"makerbay-test"}

@@ -2,7 +2,7 @@ import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { PollyClient, SynthesizeSpeechCommand } from '@aws-sdk/client-polly'
 import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
-import { ddb, getTenant, getUser, type CallerContext } from '@makerbay/core'
+import { type CallerContext, ddb, getTenant, getUser, json } from '@makerbay/core'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -28,12 +28,6 @@ const DEFAULT_GREETING = (business: string) =>
   `Hi, you have reached ${business}. We can't get to the phone right now - ` +
   `we are texting you a booking link as you listen. You can also leave a message after the tone, ` +
   `and we will call you back.`
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const method = event.requestContext.http.method

@@ -9,6 +9,7 @@ import {
   getTenantBySlug,
   getUser,
   hashApiKey,
+  json,
   linkToken,
   money,
   sendEmail,
@@ -62,12 +63,6 @@ interface PaymentReceivedEvent {
     contactId?: string
   }
 }
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 const CHAT = 'https://chat.makerbay.app'
 const APP = 'https://app.makerbay.app'

@@ -9,6 +9,7 @@ import {
   getUser,
   hashApiKey,
   isPaidWorkspace as isPaidTenant,
+  json,
   sendEmail,
   ulid,
   upsertContact,
@@ -29,12 +30,6 @@ import {
 } from './db'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 const KINDS: RequestKind[] = ['handoff', 'lead', 'feedback', 'missedcall']
 const STATUSES: RequestStatus[] = ['new', 'open', 'closed']

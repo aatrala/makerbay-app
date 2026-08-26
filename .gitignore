@@ -146,3 +146,7 @@ vite.config.ts.timestamp-*
 cdk.out/
 cdk.context.json
 infra/outputs.json
+
+# Scratch: browser-automation payloads, probe screenshots, throwaway output.
+# Anything worth keeping belongs in docs/ or planning/.
+tmp/

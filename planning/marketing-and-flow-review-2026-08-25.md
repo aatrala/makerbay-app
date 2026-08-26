@@ -321,7 +321,7 @@ Ordered by expected impact on the "found, answered, booked" promise.
 
 Ran the full flow in a real browser with a fresh test account
 (`aatrala+mbtest1@gmail.com`, workspace "Harbour Test Plumbing").
-Screenshots in `tmp/shots/`.
+Screenshots in `docs/shots/`.
 
 **Signup → workspace: ~1 minute, smooth.** Email → password → 6-digit code →
 business name → in. No card, no sales call — the promise is kept.

@@ -10,6 +10,7 @@ import {
   getTenantBySlug,
   getUser,
   type CallerContext,
+  json,
 } from '@makerbay/core'
 import {
   DEFAULT_PRESENCE,
@@ -31,12 +32,6 @@ type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
 const s3 = new S3Client({})
 const PHOTO_BUCKET = () => process.env.PHOTO_BUCKET!
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 const html = (statusCode: number, body: string): APIGatewayProxyResultV2 => ({
   statusCode,

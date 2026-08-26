@@ -10,6 +10,7 @@
  * down together. See docs/analysis-search-visibility.md.
  */
 
+import { readableOn } from '@makerbay/core/color'
 import { DEFAULT_BLOCKS, type AssistantView, type BlockId, type FontPair, type HoursView, type PresenceConfigRow, type ServiceView } from './db'
 
 export interface ReviewView {
@@ -221,13 +222,6 @@ const THEME_VARS: Record<ThemeStyle, string> = {
   bold: `--paper: #ffffff; --panel: #f5f5f4; --ink: #18181b; --body: #52525b; --muted: #a1a1aa;
     --line: #e4e4e7; --hero-bg: #18181b; --hero-ink: #fafafa; --hero-sub: #d4d4d8;
     --head-font: inherit; --radius: 16px;`,
-}
-
-/** White on a dark button colour, near-black on a light one. */
-const readableOn = (hex: string): string => {
-  const n = parseInt(hex.slice(1), 16)
-  const lum = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)
-  return lum > 186 ? '#1c1917' : '#ffffff'
 }
 
 const styles = (brand: string, theme: ThemeStyle, config: PresenceConfigRow) => {

@@ -406,7 +406,7 @@ duration + price) → **Hours** (your weekly working hours) → Diary shows
 bookings; then Your page → show booking so customers can book. Free
 includes 20 bookings/month.
 
-### 64 — Help centre empty / no authoring ✅ (day 1) / 💬 (native articles)
+### 64 — Help centre empty / no authoring ✅ (both halves)
 Diagnosis: your 19 sources were ALL ready but publishing lived only on
 the Knowledge page, so the centre stayed empty. Shipped 2026-08-25: the
 Help centre tab now has an Articles card - published list (with
@@ -415,10 +415,9 @@ Publish / Publish-all (and Unpublish / Unpublish-all), and a plain
 callout when the centre is live but nothing is published.
 **Test:** Assistant → Help centre → Articles card → Publish all →
 open your help centre (index refreshes within ~1 minute).
-**Proposal awaiting your agreement:** write articles natively in the
-Help centre tab (a text editor creating a text source - it trains the
-assistant automatically via the existing ingestion), edit them later,
-and a "help article" badge on Knowledge. No new tier caps.
+**The native-authoring half shipped 2026-08-26 — see issue 71.** Write
+articles in the Help centre tab, edit them any time, "help article" badge
+on Knowledge, no new tier caps. Images in articles remain unbuilt.
 
 ### 65 — Help centre presentation + bulk + counts ✅
 Quick wins shipped 2026-08-25 (Unpublish/Unpublish-all, ~1-min index
@@ -615,10 +614,6 @@ form. The alarm email is the trigger to revisit.
 
 ## Awaiting your decision 💬
 
-- **Native help-article authoring** (64 proposal A) — write and edit
-  articles directly in the Help centre tab; each is a text source, so
-  it trains the assistant automatically; "help article" badge on
-  Knowledge. Images in articles ride along. Say go and I build.
 - **WhatsApp surface for Genie** — text your Genie on WhatsApp instead
   of opening the app; same briefings + confirmation cards. Costs: WABA
   number, Meta verification, per-conversation fees. Parked until you say go.
@@ -639,11 +634,12 @@ form. The alarm email is the trigger to revisit.
 
 ## External waits
 
-- **Stripe Connect platform-profile review** (issue 63) — you submitted
-  the questionnaire; account creation stays blocked until Stripe
-  approves. Ping me when the email lands and I retest + run the full
-  Connect onboarding and live payment e2e (already approved). Key
-  scopes are DONE - Accounts Write confirmed working.
+- ~~Stripe Connect platform-profile review~~ (issue 63) — CLEARED
+  2026-08-26: the profile acknowledgment propagated and account creation
+  works (Express account created on the demo workspace, onboarding links
+  generating, Accounts Write confirmed). What remains is yours, not
+  Stripe's: finish the hosted form and run one live payment - see issue
+  63's two finishing steps.
 - SES production access. SMS origination identity registration.
 - ~~Chime SDK Voice enablement~~ — no longer needed: the probe now uses
   Amazon Connect's native Nova Sonic agentic self-service.
@@ -658,7 +654,7 @@ form. The alarm email is the trigger to revisit.
 
 ## Standing facts
 
-- Releases: CHANGELOG.md (2.23.1). Platform 1.33.0.
+- Releases: CHANGELOG.md (2.25.0). Platform 1.35.0 (packages/core/src/version.ts).
 - Founder workspace (aatralarasu) comps: Presence Pro + Genie 2500,
   seeded via scripts/seed-founder-grants.mjs.
 - Demo workspace (makerbay-demo / Southside Plumbing): docPrefix SP,

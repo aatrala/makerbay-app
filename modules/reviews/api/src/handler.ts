@@ -9,6 +9,7 @@ import {
   getTenant,
   getTenantBySlug,
   getUser,
+  json,
   linkToken,
   sendEmail,
   ulid,
@@ -61,12 +62,6 @@ export interface ReviewRow {
   createdAt: string
   respondedAt?: string
 }
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (
   event: Event | BookingCompletedEvent,

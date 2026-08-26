@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.includes('Accept this quote'));b.click();return 'accept';})()"},"session":"makerbay-test"}

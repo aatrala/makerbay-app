@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import { appendContactEvent, ddb, emitUsage, getTenant, linkToken, money, sendEmail, ulid } from '@makerbay/core'
+import { appendContactEvent, ddb, emitUsage, getTenant, json, linkToken, money, sendEmail, ulid } from '@makerbay/core'
 import { getQuotesConfig, type QuoteLine, type QuoteRow } from './db'
 
 /**
@@ -47,12 +47,6 @@ export interface InvoiceRow {
   paidAt?: string
   notifyError?: string
 }
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 /** Invoice numbers are their own atomic series - INV-7 must never repeat. */
 async function nextInvoiceNumber(tenantId: string): Promise<number> {

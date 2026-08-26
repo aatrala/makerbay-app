@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const b=[...document.querySelectorAll('main button')].find(x=>x.innerText.trim()==='Add service');b.click();return 'added';})()"},"session":"makerbay-test"}

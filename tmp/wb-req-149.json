@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const ins=[...document.querySelectorAll('main input, main select')].map(i=>({t:i.type,v:i.value}));return JSON.stringify(ins);})()"},"session":"makerbay-test"}

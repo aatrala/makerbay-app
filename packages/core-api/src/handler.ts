@@ -2,6 +2,7 @@ import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV
 import { QueryCommand } from '@aws-sdk/lib-dynamodb'
 import {
   ddb as ddbDoc,
+  json,
   recordAudit,
   freeModuleLimits,
   freeModules,
@@ -62,12 +63,6 @@ const MODULE_CATALOG: Record<string, ModuleEntitlement> = {
     limits: { reviewsPerMonth: 20 },
   },
 }
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const ctx = event.requestContext.authorizer.lambda

@@ -220,7 +220,7 @@ export async function setTenantBilling(
     new UpdateCommand({
       TableName: Tables.tenants(),
       Key: { tenantId },
-      UpdateExpression: `SET ${entries.map(([k], i) => `#k${i} = :v${i}`).join(', ')}`,
+      UpdateExpression: `SET ${entries.map((_, i) => `#k${i} = :v${i}`).join(', ')}`,
       ExpressionAttributeNames: Object.fromEntries(entries.map(([k], i) => [`#k${i}`, k])),
       ExpressionAttributeValues: Object.fromEntries(entries.map(([, v], i) => [`:v${i}`, v])),
       ConditionExpression: 'attribute_exists(tenantId)',

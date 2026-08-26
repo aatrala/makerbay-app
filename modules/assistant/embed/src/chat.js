@@ -104,12 +104,23 @@
    */
   /* White text on a dark brand, near-black on a light one - a tenant can
      pick any colour and every brand-filled button stays readable. */
+  // Mirrors readableOn in packages/core/src/color.ts. This file is served raw
+  // to browsers, so it cannot import; color.test.ts fails if the two drift.
   function readableOn(hex) {
     var m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim())
-    if (!m) return '#fff'
+    if (!m) return '#ffffff'
     var n = parseInt(m[1], 16)
-    var lum = 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)
-    return lum > 186 ? '#1c1917' : '#fff'
+    var lin = function (v) {
+      var c = v / 255
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+    }
+    var lum = function (r, g, b) { return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) }
+    var ratio = function (a, b) {
+      var hi = Math.max(a, b), lo = Math.min(a, b)
+      return (hi + 0.05) / (lo + 0.05)
+    }
+    var L = lum(n >> 16 & 255, n >> 8 & 255, n & 255)
+    return ratio(L, lum(28, 25, 23)) >= ratio(L, lum(255, 255, 255)) ? '#1c1917' : '#ffffff'
   }
 
   function renderChips() {

@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { DeleteCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
-import { ddb, listGrants, recordAudit, resolveEntitlement, ulid } from '@makerbay/core'
+import { ddb, json, listGrants, recordAudit, resolveEntitlement, ulid } from '@makerbay/core'
 import {
   BLOCK_IDS,
   DEFAULT_BLOCKS,
@@ -20,12 +20,6 @@ import {
  * HERE, server-side - the dashboard shows locked options on purpose, and
  * nothing it sends is trusted.
  */
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export type PageTier = 'free' | 'pro' | 'genie'
 

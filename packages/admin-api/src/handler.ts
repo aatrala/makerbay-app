@@ -17,6 +17,7 @@ import {
   getMonthUsage,
   getTenant,
   grantManual,
+  json,
   listGrants,
   listTenantUsers,
   MODULES,
@@ -42,12 +43,6 @@ interface StaffContext {
   staffRole: string
 }
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<StaffContext>
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 const PLANS: Record<string, Record<string, number>> = {
   free: { messagesPerMonth: 200, sources: 20, sourceBytes: 25 * 1024 * 1024 },

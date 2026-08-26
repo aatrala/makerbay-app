@@ -9,6 +9,7 @@ import {
   getTenantBySlug,
   getUser,
   hashApiKey,
+  json,
   linkToken,
   sendEmail,
   ulid,
@@ -46,12 +47,6 @@ import {
 import { displayTime, openDates, slotStillFree, slotsFor, zoned } from './slots'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 const CHAT = 'https://chat.makerbay.app'
 const APP = 'https://app.makerbay.app'

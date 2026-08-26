@@ -13,7 +13,7 @@
 import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime'
 import { BedrockAgentRuntimeClient, RetrieveCommand } from '@aws-sdk/client-bedrock-agent-runtime'
-import { emitUsage, getEffectiveEntitlement, getMonthUsage, getTenant } from '@makerbay/core'
+import { emitUsage, getEffectiveEntitlement, getMonthUsage, getTenant, json } from '@makerbay/core'
 import { activeServices, bookingHours, getPresenceConfig, publishedReviews } from './db'
 import { pageTier } from './page'
 
@@ -21,12 +21,6 @@ const runtime = new BedrockRuntimeClient({})
 const retriever = new BedrockAgentRuntimeClient({})
 const MODEL_ID = () => process.env.CHAT_MODEL_ID!
 const KB_ID = () => process.env.KB_ID!
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 const FIELDS = ['headline', 'intro', 'faq'] as const
 type Field = (typeof FIELDS)[number]

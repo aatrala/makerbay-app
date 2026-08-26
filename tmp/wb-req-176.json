@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const m=document.querySelector('main');const a=[...m.querySelectorAll('a')].find(x=>x.href&&x.href.includes('/q/'));const inp=[...m.querySelectorAll('input')].map(i=>i.value).filter(v=>v.includes('http'));return JSON.stringify({href:a?a.href:null,inputs:inp});})()"},"session":"makerbay-test"}

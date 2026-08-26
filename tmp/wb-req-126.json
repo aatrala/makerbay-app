@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='Paste text');if(!b)return 'not found';b.click();return 'clicked';})()"},"session":"makerbay-test"}

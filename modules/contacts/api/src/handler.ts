@@ -8,6 +8,7 @@ import {
   deleteContact,
   getContact,
   importContactsCsv,
+  json,
   listContactEvents,
   listContacts,
   updateContact,
@@ -16,14 +17,6 @@ import {
 } from '@makerbay/core'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
-
-const ID = /^[0-9A-Z]{26}$/
 
 /**
  * Contacts is core: it ships with every workspace and is never entitlement

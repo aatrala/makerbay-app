@@ -12,7 +12,7 @@ import {
   GetDistributionConfigCommand,
   UpdateDistributionCommand,
 } from '@aws-sdk/client-cloudfront'
-import { listGrants, resolveEntitlement } from '@makerbay/core'
+import { json, listGrants, resolveEntitlement } from '@makerbay/core'
 import { getPresenceConfig, putPresenceConfig, type PresenceConfigRow } from './db'
 
 /**
@@ -31,12 +31,6 @@ import { getPresenceConfig, putPresenceConfig, type PresenceConfigRow } from './
 
 const acm = new ACMClient({})
 const cf = new CloudFrontClient({})
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 // A plausible hostname with at least one dot, and never one of ours. The
 // operator allowlist exists so the whole flow can be exercised end-to-end

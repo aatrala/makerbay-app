@@ -13,6 +13,7 @@ import {
   getUser,
   hashApiKey,
   isPaidWorkspace,
+  json,
   listGrants,
   ulid,
   type CallerContext,
@@ -62,12 +63,6 @@ type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
 const s3 = new S3Client({})
 const BUCKET = () => process.env.KNOWLEDGE_BUCKET!
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const method = event.requestContext.http.method

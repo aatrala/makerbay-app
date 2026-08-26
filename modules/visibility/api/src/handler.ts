@@ -7,6 +7,7 @@ import {
   getContact,
   getTenant,
   getUser,
+  json,
   sendEmail,
   type CallerContext,
 } from '@makerbay/core'
@@ -50,12 +51,6 @@ export async function getVisibilityConfig(tenantId: string): Promise<VisibilityC
   const r = await ddb.send(new GetCommand({ TableName: Tables.config(), Key: { tenantId } }))
   return { tenantId, ...DEFAULTS, ...(r.Item ?? {}) } as VisibilityConfigRow
 }
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const method = event.requestContext.http.method

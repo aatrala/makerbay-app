@@ -6,6 +6,7 @@ import {
   getMonthUsage,
   getTenant,
   getUser,
+  json,
   setModuleEntitlement,
   setTenantBilling,
   type CallerContext,
@@ -13,12 +14,6 @@ import {
 import { ANNUAL_PRICE_CENTS, GENIE_PRODUCT_KEY, isTestMode, METER_EVENT_NAME, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const ctx = event.requestContext.authorizer.lambda

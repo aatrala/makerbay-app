@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const m=document.querySelector('main');return JSON.stringify({url:location.href,text:m.innerText.slice(0,1000),buttons:[...m.querySelectorAll('button')].map(b=>b.innerText.trim()).filter(Boolean)});})()"},"session":"makerbay-test"}

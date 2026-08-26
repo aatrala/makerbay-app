@@ -13,6 +13,7 @@ import {
   getMonthUsage,
   getTenant,
   getUser,
+  json,
   money,
   recordAudit,
   ulid,
@@ -104,12 +105,6 @@ const localStamp = (iso: string, timeZone: string): string =>
     timeZone, weekday: 'short', day: 'numeric', month: 'short',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(iso))
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const method = event.requestContext.http.method
@@ -390,7 +385,7 @@ const WRITE_TOOLS: Record<string, WriteTool> = {
       if (!r.ok) return { error: String(r.body.message ?? r.body.error ?? 'block_failed') }
       return { receipt: `Time blocked: ${p.date} ${p.from}-${p.to}.` }
     },
-    audit: (p) => ({ action: 'booking.time_blocked', moduleId: 'booking' }),
+    audit: () => ({ action: 'booking.time_blocked', moduleId: 'booking' }),
   },
 }
 

@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const ta=document.querySelector('main textarea');const inp=[...document.querySelectorAll('main input')];return JSON.stringify({textarea:!!ta, inputs:inp.map(i=>({ph:i.placeholder,type:i.type}))});})()"},"session":"makerbay-test"}

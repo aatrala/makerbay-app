@@ -1,1 +1,0 @@
-{"action":"evaluate","args":{"code":"(()=>{const b=[...document.querySelectorAll('main button')].map(x=>x.innerText.trim());return JSON.stringify(b);})()"},"session":"makerbay-test"}

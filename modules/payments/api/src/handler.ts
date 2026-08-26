@@ -9,6 +9,7 @@ import {
   getTenantBySlug,
   getTenantByStripeAccount,
   getUser,
+  json,
   setTenantConnect,
   ulid,
   type CallerContext,
@@ -59,12 +60,6 @@ export interface PaymentRow {
   paidAt?: string
   refundedAt?: string
 }
-
-const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
-  statusCode,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-})
 
 export const handler = async (
   event: Event | StripeForwardedEvent,

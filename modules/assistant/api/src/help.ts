@@ -13,6 +13,7 @@
  */
 
 import type { APIGatewayProxyResultV2 } from 'aws-lambda'
+import { readableOn, shade, tint } from '@makerbay/core/color'
 import type { AssistantConfigRow, SourceRow } from './db'
 
 const esc = (s: string): string =>
@@ -82,31 +83,6 @@ const titleOf = (source: SourceRow): string => {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
-// ── Colour helpers ───────────────────────────────────────────────────────
-
-const hexRgb = (hex: string): [number, number, number] => {
-  const h = hex.replace('#', '')
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
-}
-const rgbHex = (r: number, g: number, b: number): string =>
-  '#' + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('')
-
-/** Mix toward black (factor 0..1 = how far). Keeps hue; brand headers never go mud. */
-const shade = (hex: string, factor: number): string => {
-  const [r, g, b] = hexRgb(hex)
-  return rgbHex(r * (1 - factor), g * (1 - factor), b * (1 - factor))
-}
-/** Mix toward white. */
-const tint = (hex: string, factor: number): string => {
-  const [r, g, b] = hexRgb(hex)
-  return rgbHex(r + (255 - r) * factor, g + (255 - g) * factor, b + (255 - b) * factor)
-}
-/** Black or white, whichever reads on this background. */
-const readableOn = (hex: string): string => {
-  const [r, g, b] = hexRgb(hex)
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 150 ? '#1c1917' : '#ffffff'
-}
-
 const GOOGLE_FONT_RE = /^[A-Za-z0-9 ]{2,40}$/
 
 // ── Theme definitions ────────────────────────────────────────────────────
@@ -168,7 +144,6 @@ const styles = (theme: HelpTheme, brand: string, opts: HelpRenderOpts, fontHeadO
   const darker = shade(brand, 0.62)
   const onBrand = readableOn(brand)
   const onDark = readableOn(dark)
-  const brandSoft = tint(brand, 0.86)
   const brandLine = tint(brand, 0.55)
   const accent2 = opts.tier === 'genie' && /^#[0-9a-fA-F]{6}$/.test(opts.accent2 ?? '') ? opts.accent2! : brand
 
