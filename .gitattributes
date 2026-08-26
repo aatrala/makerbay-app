@@ -1,0 +1,17 @@
+# One line ending in the repository, whatever the checkout platform.
+# The repo was mixed - some files CRLF, some LF, some internally both - which
+# breaks text tooling that matches across line boundaries.
+* text=auto eol=lf
+
+# Binary: never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+# Generated; keep diffs out of review.
+package-lock.json linguist-generated=true -diff
