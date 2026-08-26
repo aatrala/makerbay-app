@@ -758,6 +758,29 @@ for (const file of ['index.html', ...modules.map((m) => `modules/${m.id}/index.h
   if (out !== html) await writeFile(path, out, 'utf8')
 }
 
+// Cache-bust every asset link with the release version (issue 92): browsers
+// heuristically cache /assets/* for hours, so a shipped HTML change can
+// render against a stale stylesheet - which is exactly how the hero demo
+// appeared as unstyled text on the founder's machine. A ?v= per release
+// makes every browser fetch the matching CSS/JS the moment a page updates.
+const walk = async (dir) => {
+  const { readdir } = await import('node:fs/promises')
+  const out = []
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) out.push(...(await walk(p)))
+    else if (e.name.endsWith('.html')) out.push(p)
+  }
+  return out
+}
+for (const file of await walk(dist)) {
+  const html = await readFile(file, 'utf8')
+  const out = html
+    .replaceAll('/assets/mb.css', `/assets/mb.css?v=${LATEST}`)
+    .replaceAll('/assets/hero-demo.js', `/assets/hero-demo.js?v=${LATEST}`)
+  if (out !== html) await writeFile(file, out, 'utf8')
+}
+
 await writeFile(
   join(dist, 'sitemap.xml'),
   sitemap(['/', '/pricing', '/roadmap', '/changelog', ...modules.map((m) => `/modules/${m.id}`)]),
