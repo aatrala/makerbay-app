@@ -76,22 +76,29 @@ header nav a:hover { color: var(--ink); text-decoration: none; }
 /* ── The living demo (issue 84): a real conversation, staged in HTML so it
    paints instantly, replayed on scroll-in, swapped for the live product on
    tap. JS off = this final state, which is a perfectly good hero. ─────── */
-.hero-demo { flex: 0 1 340px; min-width: 0; }
+.hero-demo { flex: 0 0 390px; min-width: 0; }
+/* A real bezel: a visible warm border plus a dark outer ring, so the frame
+   reads as a device against the dark hero instead of a borderless blob
+   (issue 92 - the old 1px #57433a computed to an invisible hairline). */
 .phone {
-  background: #292524; border: 1px solid #57433a; border-radius: 20px;
-  padding: 10px 10px 12px; filter: drop-shadow(0 18px 40px rgba(0,0,0,.35));
+  background: #292524; border: 2px solid #7c6455; border-radius: 22px;
+  padding: 12px 12px 14px;
+  box-shadow: 0 0 0 5px #121009, 0 22px 48px rgba(0, 0, 0, 0.45);
 }
 .phone-url {
-  font-size: 12px; color: #a8a29e; background: #1c1917; border-radius: 8px;
-  padding: 6px 12px; margin-bottom: 10px; text-align: center;
+  font-size: 12.5px; color: #a8a29e; background: #1c1917; border: 1px solid #3f3733;
+  border-radius: 8px; padding: 7px 12px; margin-bottom: 12px; text-align: center;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .phone-body {
-  aspect-ratio: 3 / 3.6; display: flex; flex-direction: column; gap: 9px;
+  aspect-ratio: 3 / 3.3; display: flex; flex-direction: column; gap: 10px;
+  /* Chat reads bottom-anchored: the void, if any, belongs above the first
+     message, never under the last. */
+  justify-content: flex-end;
   overflow: hidden; position: relative;
 }
 .phone-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 10px; background: #fff; }
-.hb { max-width: 88%; border-radius: 12px; padding: 9px 13px; font-size: 13.5px; line-height: 1.45; }
+.hb { max-width: 88%; border-radius: 13px; padding: 10px 14px; font-size: 14.5px; line-height: 1.5; }
 .hb.msg-c { background: #3a2b22; color: #d6d3d1; align-self: flex-start; }
 .hb.msg-a { background: var(--accent); color: #fff; align-self: flex-end; }
 .hb .src { display: block; margin-top: 5px; font-size: 11px; color: #fed7aa; }
@@ -115,10 +122,13 @@ header nav a:hover { color: var(--ink); text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .phone.playing .hb { opacity: 1; transform: none; }
 }
+@media (max-width: 1100px) {
+  .hero-demo { flex-basis: 350px; }
+}
 @media (max-width: 860px) {
   .hero-flex { flex-direction: column; align-items: stretch; }
   .hero .cta .btn { flex: 1 1 auto; text-align: center; }
-  .hero-demo { flex: none; max-width: 340px; margin: 34px auto 0; width: 100%; }
+  .hero-demo { flex: none; max-width: 370px; margin: 34px auto 0; width: 100%; }
 }
 
 /* The customer journey: five linked steps, each owned by a module. */

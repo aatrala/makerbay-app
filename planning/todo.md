@@ -281,6 +281,17 @@ recommend the unshipped rescue module, module pages stop saying "your
 own documents" for the diary, phones can reach Pricing/Sign in, CTA
 labels unified on "Start free".
 
+### 92 — Hero demo too small + no visible frame ✅
+Founder caught it on a 17" screen; measurements agreed: the frame was
+a fixed 340px with dead space beside it, the bubbles filled 263px of a
+382px body (void at the bottom), and the border computed to an
+invisible 0.8px hairline of near-identical brown. Fixed 2026-08-26:
+frame widened to 390px (350px under 1100px, up to 370px centered on
+phones), a real bezel (2px warm border + 5px dark outer ring + deeper
+shadow), larger message type, and bubbles bottom-anchored so any void
+sits above the conversation, chat-style. Verified live at 1920px and
+375px - no horizontal overflow, mobile nav intact.
+
 ### 90 — Marketing identity consults ⏳ (four agents running)
 Founder-requested proposals to evaluate: (a) 3 site design directions
 (visual system + structure), (b) 15 tagline candidates in three
