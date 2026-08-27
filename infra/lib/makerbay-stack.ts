@@ -1203,6 +1203,18 @@ export class MakerbayStack extends cdk.Stack {
     // right for a booking page and wrong for a job that drives headless
     // Chromium and Bedrock. The stranger flow is phase 4 and needs per-IP and
     // per-email caps before it exists at all (docs/spec-concierge.md).
+    // The ONE unauthenticated route in the setup module, and the most
+    // expensive public thing the platform does: it fetches a stranger's web
+    // page, may render it with headless Chromium, and calls Bedrock. POST
+    // only, one exact path, never a proxy - a `{proxy+}` here would expose
+    // every other setup route to the internet. Spend is bounded per IP and
+    // globally per day in modules/setup/api/src/caps.ts, because the
+    // platform-wide 50 req/s throttle is far too coarse to protect it.
+    httpApi.addRoutes({
+      path: '/v1/public/setup/draft',
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('SetupPublicIntegration', setupFn),
+    })
     httpApi.addRoutes({
       path: '/v1/setup/{proxy+}',
       // Only what the handler serves. Every method is a separate Route and a

@@ -5,15 +5,17 @@ import {
   ddb,
   getEffectiveEntitlement,
   json,
+  linkToken,
   recordAudit,
   requireScope,
   ulid,
   type CallerContext,
 } from '@makerbay/core'
 import { discoverPages, scrapePage } from '@makerbay/scrape'
-import { EMPTY, extractFacts } from './extract'
+import { EMPTY, extractFacts, type ExtractedFacts } from './extract'
 import { KINDS, type CurrentState, type StageInput } from './kinds'
-import { getJob, listArtifacts, listJobs, putArtifact, putJob, type JobArtifact, type JobKind, type JobRow } from './db'
+import { callerIp, claim } from './caps'
+import { getJob, getProspect, listArtifacts, listJobs, putArtifact, putJob, putProspect, type JobArtifact, type JobKind, type JobRow } from './db'
 
 /**
  * "Set it up for me" - the agent does the setup, the owner approves it, and
@@ -42,7 +44,13 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
   const method = event.requestContext.http.method
   const path = event.rawPath
   try {
-    const ctx = event.requestContext.authorizer.lambda
+    // The public draft runs before anything reads a caller context, because
+    // there is not one: this is the only route in the platform a stranger can
+    // reach, and it is capped rather than authorised (see caps.ts).
+    if (method === 'POST' && path === '/v1/public/setup/draft') {
+      return await publicDraft(event)
+    }
+    const ctx = event.requestContext.authorizer?.lambda
     const tenantId = ctx.tenantId
     if (!tenantId) return json(401, { error: 'unauthorized' })
 
@@ -51,6 +59,9 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     }
     if (method === 'POST' && path === '/v1/setup/jobs') {
       return await startJob(tenantId, ctx, body(event))
+    }
+    if (method === 'POST' && path === '/v1/setup/claim') {
+      return await claimDraft(tenantId, ctx, body(event))
     }
     const m = path.match(/^\/v1\/setup\/jobs\/([0-9A-Z]{26})(\/confirm|\/release)?$/)
     if (m) {
@@ -64,6 +75,186 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     console.error('setup error', { path, method, err })
     return json(500, { error: 'internal_error' })
   }
+}
+
+
+/**
+ * A stranger pastes a web address and gets a real draft page back. No
+ * account, no card, nothing created in any workspace.
+ *
+ * The whole design rests on one property: **this creates no tenant.** The
+ * draft lives on its own row keyed by a random token, so a script hammering
+ * this endpoint leaves behind capped rows that expire, not half-built
+ * workspaces. The workspace is created later, when a real person signs up and
+ * claims the draft.
+ */
+async function publicDraft(event: Event): Promise<APIGatewayProxyResultV2> {
+  const b = body(event)
+  const url = String(b.url ?? '').trim()
+  if (!url || url.length < 4) {
+    return json(400, { error: 'url_required', message: 'Paste your website, Facebook page or Google listing.' })
+  }
+
+  // Caps first, before any fetch or model call, so a refused request costs a
+  // single conditional write rather than a page render and a Bedrock call.
+  if (!(await claim('global', 'all'))) {
+    return json(429, {
+      error: 'busy',
+      message: 'We have built a lot of pages today. Try again tomorrow, or start free and do it in the app.',
+    })
+  }
+  if (!(await claim('ip', callerIp(event)))) {
+    return json(429, {
+      error: 'rate_limited',
+      message: 'That is several pages from one place today. Try again tomorrow, or start free and do it in the app.',
+    })
+  }
+
+  let facts: ExtractedFacts
+  let excerpt = ''
+  try {
+    const page = await scrapePage(url)
+    if (!page.text || page.text.trim().length < 80) {
+      return json(200, {
+        ok: false,
+        message: 'There was not enough on that page to work from, and we are not going to make up a business. Start free and paste your details instead, it takes about ten minutes.',
+      })
+    }
+    excerpt = page.text.slice(0, 400)
+    facts = await extractFacts(page.text)
+  } catch {
+    return json(200, {
+      ok: false,
+      message: 'We could not read that address. Check it opens in a browser, or start free and paste your details instead.',
+    })
+  }
+
+  // Staged against an empty workspace, because there is no workspace. Every
+  // field is therefore a proposal, and the same rules apply: no invented
+  // business, no licence numbers or insurance off a scrape.
+  const draft = KINDS['presence.page'].stage(
+    { facts, pages: [] },
+    { presence: {}, services: [], assistant: {}, sources: [], quotes: {} },
+  )
+  if (draft.diff.length === 0) {
+    return json(200, {
+      ok: false,
+      message: 'We could not find enough about the business on that page. Start free and paste your details instead.',
+    })
+  }
+
+  const token = linkToken()
+  await putProspect({
+    pk: `prospect#${token}`,
+    sk: 'draft',
+    url,
+    excerpt,
+    proposed: draft.proposed,
+    diff: draft.diff,
+    createdAt: new Date().toISOString(),
+    // A draft nobody claims is gone in a fortnight.
+    expiresAt: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60,
+  })
+
+  return json(201, {
+    ok: true,
+    // Handed back on screen rather than emailed: SES cannot reach a stranger
+    // while the account is sandboxed (issue 76), and a claim link that never
+    // arrives is worse than one the visitor has to keep.
+    token,
+    draft: { url, diff: draft.diff },
+    message: 'Nothing is public and nobody can see this but you. Keep this link to come back to it.',
+  })
+}
+
+
+/**
+ * Turn a draft built before signup into a job in a real workspace.
+ *
+ * The draft is not applied here. It becomes an ordinary staged job that the
+ * owner reviews and confirms exactly like any other, so a page built for a
+ * stranger goes live by the same gate as everything else. Signing up is not
+ * consent to publish.
+ */
+async function claimDraft(
+  tenantId: string,
+  ctx: CallerContext,
+  b: Record<string, unknown>,
+): Promise<APIGatewayProxyResultV2> {
+  const token = String(b.token ?? '').trim()
+  if (!token) return json(400, { error: 'token_required' })
+
+  const draft = await getProspect(token)
+  if (!draft) {
+    return json(404, {
+      error: 'draft_not_found',
+      message: 'That link has expired or was already used. Start a new one from Set it up for me.',
+    })
+  }
+  // Single use. A claim token is a credential, and one that keeps working
+  // after it has been spent is one that can be spent again by whoever else
+  // has seen the link.
+  if (draft.claimedBy) {
+    return json(409, {
+      error: 'already_claimed',
+      message: 'That draft has already been used.',
+    })
+  }
+
+  const current = await readCurrent(tenantId)
+  // Re-stage against the workspace as it actually is now, rather than trusting
+  // what was proposed against an empty one. Signing up may already have filled
+  // in a business name, and a field the owner has set is never overwritten.
+  const keep = draft.diff.filter((d) => !asText(current.presence[d.field]).trim())
+  if (keep.length === 0) {
+    await putProspect({ ...draft, claimedBy: tenantId })
+    return json(200, {
+      claimed: true,
+      applied: 0,
+      message: 'Your page already says everything that draft had, so there was nothing to bring over.',
+    })
+  }
+  const proposed = Object.fromEntries(
+    Object.entries(draft.proposed).filter(([field]) => keep.some((d) => d.field === field)),
+  )
+
+  const jobId = ulid()
+  const job: JobRow = {
+    tenantId,
+    jobId,
+    kind: 'presence.page',
+    status: 'ready',
+    plan: {
+      resources: KINDS['presence.page'].resources,
+      sourceUrls: [draft.url],
+      steps: ['Read the page', 'Draft your page', 'Show you the changes'],
+    },
+    priceCents: 0,
+    scopes: KINDS['presence.page'].scopes,
+    reviseCount: 0,
+    createdBy: ctx.userId ?? 'unknown',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  await putJob(job)
+  await putArtifact({
+    pk: `${tenantId}#${jobId}`,
+    sk: `ARTIFACT#presence.page#${ulid()}`,
+    jobId,
+    kind: 'presence.page',
+    proposed,
+    current: current.presence,
+    diff: keep,
+    provenance: Object.fromEntries(keep.map((d) => [d.field, { url: draft.url, excerpt: draft.excerpt }])),
+    status: 'staged',
+  })
+  await putProspect({ ...draft, claimedBy: tenantId })
+
+  return json(201, {
+    claimed: true,
+    job,
+    message: 'Brought over. Have a look, and it goes on your page when you say so.',
+  })
 }
 
 /**

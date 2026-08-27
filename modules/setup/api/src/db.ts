@@ -120,3 +120,35 @@ export async function listArtifacts(tenantId: string, jobId: string): Promise<Jo
   }))
   return (r.Items ?? []) as JobArtifact[]
 }
+
+/**
+ * A draft built for someone who has no account yet.
+ *
+ * Deliberately NOT a tenant. A stranger flow that created a workspace per
+ * visitor would leave a graveyard of half-built businesses and would let a
+ * script fill the tenant table. This is one row, keyed by a random token the
+ * visitor keeps, and it expires in a fortnight if nobody claims it.
+ */
+export interface ProspectDraft {
+  pk: string
+  sk: 'draft'
+  url: string
+  excerpt: string
+  proposed: Record<string, unknown>
+  diff: JobArtifact['diff']
+  createdAt: string
+  expiresAt: number
+  claimedBy?: string
+}
+
+export async function putProspect(d: ProspectDraft): Promise<void> {
+  await ddb.send(new PutCommand({ TableName: TABLE(), Item: d }))
+}
+
+export async function getProspect(token: string): Promise<ProspectDraft | undefined> {
+  const r = await ddb.send(new GetCommand({
+    TableName: TABLE(),
+    Key: { pk: `prospect#${token}`, sk: 'draft' },
+  }))
+  return r.Item as ProspectDraft | undefined
+}

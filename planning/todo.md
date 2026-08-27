@@ -602,7 +602,38 @@ form. The alarm email is the trigger to revisit.
 
 ## Issues 93-94 (in consultation, 2026-08-27)
 
-### 93 — Live assistant as a service ("Set it up for me") 🔶 PHASES 1-2 LIVE, founder test welcome
+### 93 — Live assistant as a service ("Set it up for me") 🔶 PHASES 1, 2, 4 LIVE; phase 3 awaiting your call
+**Phase 4 (strangers) shipped 2026-08-27, ahead of phase 3.** Founder chose
+"build it behind caps, no email", so the claim link comes back on screen
+rather than by mail and the whole flow works while SES is sandboxed.
+- **`POST /v1/public/setup/draft`** is the ONE unauthenticated route: POST
+  only, one exact path, never a proxy. A `{proxy+}` there would have exposed
+  every other setup route to the internet.
+- **It creates no tenant.** A stranger flow that made a workspace per visitor
+  would leave a graveyard of half-built businesses and let a script fill the
+  tenant table. The draft is one row keyed by a random token the visitor
+  keeps, expiring in a fortnight.
+- **Caps before spend** (`caps.ts`): 5 per IP, 200 globally, per day, claimed
+  with a conditional write so the count and the limit are one atomic
+  operation - a check-then-increment could be won by a racing request. A
+  refused call costs one conditional write, not a page render and a Bedrock
+  call. The platform-wide 50 req/s throttle is far too coarse here: two
+  requests a second stays well under it and still burns a day's model budget.
+- **X-Forwarded-For is ignored** - it is caller-supplied, and trusting it
+  would make every cap bypassable by adding a header.
+- **Claiming re-stages against the real workspace** rather than trusting what
+  was proposed against an empty one, and lands as an ordinary staged job the
+  owner confirms. Signing up is not consent to publish. Single use.
+**Verified in production, not just locally:** POST to the exact path 400s on
+a bad body; GET 404s; `/v1/public/setup/jobs`, `/v1/public/setup` and
+`/v1/public/setup/anything` all 404; `/v1/setup/jobs` still 401. Hit the live
+endpoint seven times: five 201s then two 429s, exactly at the cap. Scanned
+the tenants table afterwards - **six tenants, newest from the day before, so
+the flow created none.** All it left was 5 prospect rows and 2 cap counters,
+all of which expire.
+**Still to do for phase 4:** the hero field on makerbay.app, and the screen
+that takes a claim token.
+
 **Phase 2 complete 2026-08-27: five job kinds, live.**
 **All five kinds shipped.** `presence.page`, `booking.services`,
 `assistant.knowledge`, `help.centre`, `quotes.documents`. The machine took
