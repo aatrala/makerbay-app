@@ -940,7 +940,7 @@ Also in scope: Resend as an alternative or failover if the SES appeal
 (issue 76) stays blocked, and the exact Cognito mechanism for email
 one-time-code sign-in.
 
-## Issues 95-111 (repo audit + item 93/94 consults, 2026-08-27)
+## Issues 95-112 (repo audit + item 93/94 consults, 2026-08-27)
 
 Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
@@ -1135,6 +1135,37 @@ typecheck clean, all 16 Lambda entry points bundle.
 above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
+
+### 112 — MakerBay HQ has no owner 🔶 half done, one founder step left
+Found while making the $99 session bookable. **HQ was seeded to power the
+assistant widget on makerbay.app and has never had a user, booking config or
+presence config** - so the session link shipped in issue 93 pointed at a page
+with nothing bookable on it.
+**Done 2026-08-27** (`scripts/seed-hq-session.mjs`): booking config with
+weekday afternoons only, 24-hour lead time, and the "Setup session, 45
+minutes" service at $99 with a $99 deposit and a 15-minute buffer.
+**Verified live:** the public booking API reports the service for
+`makerbay-hq`, and Monday returns 45-minute slots from 1pm Sydney spaced by
+duration plus buffer, while Sunday correctly returns none.
+**Still needed, and only the founder can do it:** HQ has no sign-in.
+`makerbay-users` rows carry exactly ONE `tenantId`, so an existing account
+cannot be added to HQ without moving that person off their own workspace -
+aatrala@gmail.com is the owner of "GreenLight", not of HQ.
+**The sequence:**
+1. Sign up at app.makerbay.app with **aatrala+mbhq@gmail.com** (a plus
+   address reaches the same inbox). Founder sets their own password; nobody
+   else ever holds it, which is why this step cannot be automated.
+2. Let onboarding create its workspace.
+3. `node scripts/connect-hq-owner.mjs` for a dry run, then `--apply`. It
+   repoints the user at HQ and removes the throwaway **only if it is empty** -
+   it counts contacts and bookings first and keeps anything with content.
+4. Sign out and back in to land in HQ.
+Until then bookings still work: `notifyEmail` on HQ is set to
+aatrala+mbhq@gmail.com, so a sale reaches a human by email even with no
+dashboard. What is missing without the login is the diary - no way to see,
+reschedule or complete a booked session.
+**Note:** that notification is one of the emails SES cannot deliver while the
+account is sandboxed (issue 76) unless the address is verified.
 
 ### 111 — The CDK stack is at CloudFormation's 500-resource ceiling ✅ SPLIT DONE, pattern established
 **2026-08-27, third pass: the split. Parent 453 -> 450, plus a nested stack
