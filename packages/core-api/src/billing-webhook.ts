@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 import type Stripe from 'stripe'
 import { emitEvent, putStripeGrant, setModuleEntitlement, setTenantBilling } from '@makerbay/core'
-import { FREE_MODULE_BASELINES, GENIE_ALLOWANCES, GENIE_PRODUCT_KEY, PLANS, stripeClient, TRADE_BUNDLE, webhookSecret } from './stripe-client'
+import { FREE_MODULE_BASELINES, GENIE_ALLOWANCES, GENIE_PRODUCT_KEY, PLANS, PRO_PRODUCT_KEY, stripeClient, TRADE_BUNDLE, webhookSecret } from './stripe-client'
 
 /**
  * Stripe subscription lifecycle. The request is authenticated by its
@@ -44,17 +44,22 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
         const plan = entitled ? (isGenie ? PLANS.genie : PLANS.pro) : PLANS.free
         let item = sub.items?.data.find((i) => i.price?.recurring?.usage_type === 'metered')
 
-        // Genie checkout carries only the base line so the checkout page
-        // reads as one product; the metered assistant-messages item is
-        // attached here, on the subscription's first event. Idempotent:
-        // once the item exists this never runs again.
-        if (entitled && isGenie && !item) {
+        // Checkout carries only the base line, so the page reads as ONE
+        // product rather than the same name twice. Stripe labels each line by
+        // its PRODUCT name, not the price nickname, and the base and metered
+        // prices share a product - which is why a Trade checkout used to read
+        // "MakerBay Trade and 1 more" with two identically named rows.
+        //
+        // The metered assistant-messages item is attached here instead, on the
+        // subscription's first event. Idempotent: once the item exists this
+        // never runs again. Genie did this from issue 56; monthly Trade joined
+        // it when the same defect surfaced there.
+        const isAnnualSub = sub.items?.data.some((i) => i.price?.recurring?.interval === 'year') ?? false
+        if (entitled && !item && !isAnnualSub) {
           try {
             const stripe = await stripeClient()
-            const prices = await stripe.prices.list({
-              lookup_keys: [`${GENIE_PRODUCT_KEY}-messages`],
-              limit: 2,
-            })
+            const lookup = isGenie ? `${GENIE_PRODUCT_KEY}-messages` : `${PRO_PRODUCT_KEY}-messages`
+            const prices = await stripe.prices.list({ lookup_keys: [lookup], limit: 2 })
             const meteredPrice = prices.data[0]
             if (meteredPrice) {
               const created = await stripe.subscriptionItems.create({
@@ -62,18 +67,18 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
                 price: meteredPrice.id,
               })
               item = created as unknown as typeof item
-              console.log('genie metered item attached', { tenantId, sub: sub.id })
+              console.log('metered item attached', { tenantId, sub: sub.id, lookup })
             }
           } catch (err) {
             // Metering degrades gracefully: the allowance still gates usage
             // in-app; only overage billing would be missed. Log loudly.
-            console.error('genie metered item attach failed', { tenantId, err: String(err) })
+            console.error('metered item attach failed', { tenantId, err: String(err) })
           }
         }
         // Annual subscriptions carry no metered item: the assistant pauses at
         // the included allowance instead of billing overage (no catch-up
         // surprise at renewal).
-        const isAnnual = sub.items?.data.some((i) => i.price?.recurring?.interval === 'year') ?? false
+        const isAnnual = isAnnualSub
         const assistantLimits = entitled && isAnnual
           ? { ...plan.limits, messagesPerMonth: plan.includedMessages }
           : plan.limits

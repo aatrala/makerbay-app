@@ -940,7 +940,7 @@ Also in scope: Resend as an alternative or failover if the SES appeal
 (issue 76) stays blocked, and the exact Cognito mechanism for email
 one-time-code sign-in.
 
-## Issues 95-112 (repo audit + item 93/94 consults, 2026-08-27)
+## Issues 95-113 (repo audit + item 93/94 consults, 2026-08-27)
 
 Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
@@ -1135,6 +1135,33 @@ typecheck clean, all 16 Lambda entry points bundle.
 above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
+
+### 113 — Trade checkout showed the same name twice, and never explained the $19 ✅ FIXED
+Founder saw: "Subscribe to MakerBay Trade and 1 more", then two rows both
+labelled **MakerBay Trade** with the same description - one $19 flat, one
+"billed monthly based on usage". And nothing said why it was $19 rather than
+the advertised $29.
+**Cause, and it is issue 56 in a second place.** Stripe Checkout labels each
+line by its **product name**, never the price nickname. The flat price and
+the metered assistant-messages price sit on the SAME product, so both rows
+read "MakerBay Trade". The metered price does carry
+`nickname: 'Assistant messages'`, which is exactly the field Checkout does
+not show. Genie already had this fixed - `line_items` carries only the base
+and the webhook attaches the metered item on the subscription's first event -
+and monthly Trade simply never got the same treatment.
+**Fix:** monthly Trade now lists the base line only, and the webhook attaches
+the metered item for Trade as it already did for Genie. One code path for
+both, keyed off the lookup prefix. Annual is excluded, as before: it carries
+no metered item at all because the assistant pauses at the allowance rather
+than billing overage.
+**Second fix:** the founding price was substituted silently. A price quietly
+$10 below the advertised one invites "why?", and an unexplained discount
+reads as a trick rather than an offer. Checkout now carries `custom_text`
+stating it plainly: founding member price, what the standard price is, that
+they keep it for as long as they stay, and how many of the 100 places are
+left. Only when the founding price is actually being applied.
+**Note for testing:** existing subscriptions keep the metered item they
+already have. This changes what a NEW checkout displays.
 
 ### 112 — MakerBay HQ has no owner ✅ DONE
 **Closed 2026-08-27.** `aatrala+mbhq@gmail.com` is the owner of HQ, verified

@@ -304,7 +304,9 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
   const interval: 'month' | 'year' = body.interval === 'year' ? 'year' : 'month'
   const wantGenie = body.plan === 'genie'
   const stripe = await stripeClient()
-  const { base, metered, product } = await proPrices(stripe)
+  // proPrices still creates the metered price; checkout no longer lists it,
+  // and the webhook attaches it to the subscription instead.
+  const { base, product } = await proPrices(stripe)
 
   let customerId = tenant.stripeCustomerId
   if (!customerId) {
@@ -321,6 +323,8 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
   // the allowance, not a catch-up bill at renewal. Genie is month-to-month
   // for now - it is new, and nobody should prepay a year of it.
   let lineItems: Array<{ price: string; quantity?: number }>
+  // Non-zero only when this checkout is actually getting the founding price.
+  let foundingSeats = 0
   if (wantGenie) {
     // Base price only, so checkout reads "Subscribe to MakerBay Genie" with
     // no "and 1 more" (issue 56 follow-up). geniePrices still ensures the
@@ -335,11 +339,21 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
     let monthlyBase = base
     try {
       const founding = await foundingPrice(stripe, product.id)
-      if ((await foundingSeatsLeft(stripe, founding.id)) > 0) monthlyBase = founding
+      const left = await foundingSeatsLeft(stripe, founding.id)
+      if (left > 0) {
+        monthlyBase = founding
+        foundingSeats = left
+      }
     } catch (err) {
       console.warn('founding price unavailable, using standard', String(err))
     }
-    lineItems = [{ price: monthlyBase.id, quantity: 1 }, { price: metered.id }]
+    // Base line only. Stripe labels each checkout line by its PRODUCT name,
+    // not the price nickname, and the base and metered prices share a
+    // product - so listing both read "MakerBay Trade and 1 more" with the
+    // same name twice, which tells a customer nothing and looks like a
+    // double charge. The metered item is attached by the webhook on the
+    // subscription's first event, exactly as Genie has done since issue 56.
+    lineItems = [{ price: monthlyBase.id, quantity: 1 }]
   }
 
   const session = await stripe.checkout.sessions.create({
@@ -348,6 +362,21 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
     line_items: lineItems,
     client_reference_id: tenant.tenantId,
     subscription_data: { metadata: { tenantId: tenant.tenantId } },
+    // A price that is quietly $10 less than the one advertised invites the
+    // question "why?", and an unexplained discount reads as a trick rather
+    // than an offer. Say what it is and that it lasts.
+    ...(foundingSeats > 0
+      ? {
+          custom_text: {
+            submit: {
+              message:
+                `Founding member price: $${(FOUNDING_PRICE_CENTS / 100).toFixed(0)} a month instead of `
+                + `$${(PLANS.pro.monthlyPriceCents / 100).toFixed(0)}, and you keep it for as long as you stay. `
+                + `${foundingSeats} of ${FOUNDING_LIMIT} places left.`,
+            },
+          },
+        }
+      : {}),
     success_url: `${process.env.APP_URL}/billing?upgraded=1`,
     cancel_url: `${process.env.APP_URL}/billing`,
   })
