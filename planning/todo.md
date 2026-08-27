@@ -1065,7 +1065,31 @@ above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
 
-### 111 — The CDK stack is at CloudFormation's 500-resource ceiling 🔶 headroom won, split still owed
+### 111 — The CDK stack is at CloudFormation's 500-resource ceiling ✅ SPLIT DONE, pattern established
+**2026-08-27, third pass: the split. Parent 453 -> 450, plus a nested stack
+with its own 500-resource budget.**
+`infra/lib/setup-stack.ts` is a `NestedStack` holding the setup module's
+table, Lambda, role and IAM. A nested stack costs the parent ONE resource and
+carries its own ceiling, so this module and everything phases 3 and 4 add -
+the job state machine, the payment plumbing - grow without touching the
+parent again.
+**Why only this module moved, and it is the important part:** every table in
+the parent has an explicit `tableName` AND `RemovalPolicy.RETAIN`. Move one
+and it orphans under its name, and the new stack then cannot create a table
+whose name is taken - or worse, succeeds against a fresh empty table while
+the real data sits orphaned. **Setup was the one place the migration was
+free**: its table was created the same day, held zero items (checked before
+touching it), so it could simply be renamed `makerbay-setupjobs` ->
+`makerbay-setup-jobs`, sidestepping the collision entirely. The orphan was
+verified empty a second time and then deleted.
+**Verified:** diff showed only setup resources moving and nothing else
+destroyed; nested stack CREATE_COMPLETE; new table ACTIVE; `/v1/setup/jobs`
+still 401; live table untouched after the orphan delete.
+**The rule going forward, recorded in setup-stack.ts:** new modules start in
+a nested stack, not the parent. Moving an existing data-bearing table needs
+CloudFormation **resource import**, one seam at a time, verified per table -
+never a plain move.
+
 **2026-08-27, second pass: 486 -> 453 resources, deployed and smoke-tested.**
 Measured first rather than guessed: routes + permissions + integrations were
 **273 of 486, over half the stack**. Two changes, neither touching data:

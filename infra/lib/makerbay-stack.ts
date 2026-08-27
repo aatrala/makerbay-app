@@ -28,6 +28,7 @@ import * as s3vectors from 'aws-cdk-lib/aws-s3vectors'
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers'
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
+import { SetupStack } from './setup-stack'
 
 const repoRoot = path.join(__dirname, '..', '..')
 
@@ -69,10 +70,6 @@ export class MakerbayStack extends cdk.Stack {
     // prices, assistant settings. Presence has had snapshots since issue 45;
     // these had neither a trail nor a way back (issue 99).
     const configVersions = table('ConfigVersions', 'pk', 'sk')
-    // "Set it up for me" (docs/spec-concierge.md): the agent stages every
-    // change as an artifact and the owner approves it. Nothing reaches a live
-    // surface from these tables directly.
-    const setupJobs = table('SetupJobs', 'pk', 'sk')
     // Support tickets (issue 49): customers write in-app, staff answer in
     // the console, email carries the notifications both ways.
     const tickets = table('Tickets', 'tenantId', 'ticketId')
@@ -517,32 +514,26 @@ export class MakerbayStack extends cdk.Stack {
     })
     // Genie: the owner's read-everything copilot. Same chat model as the
     // assistant; its own session table; read-only views over the business.
-    const setupFn = fn('SetupApiFn', 'modules/setup/api/src/handler.ts', {
-      ...tableEnv,
-      TABLE_SETUPJOBS: setupJobs.tableName,
-      // Read only, to diff against what the page says now. Every WRITE goes
-      // back over the module API carrying the owner's own token, so the agent
-      // never holds a credential of its own.
-      TABLE_PRESENCECONFIG: presenceConfig.tableName,
-      TABLE_BOOKINGSERVICES: bookingServices.tableName,
-      TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
-      TABLE_SOURCES: sources.tableName,
-      TABLE_QUOTESCONFIG: quotesConfig.tableName,
-      API_BASE: `https://api.${DOMAIN}`,
-    }, { timeoutSeconds: 120, memorySize: 1024 })
-    setupJobs.grantReadWriteData(setupFn)
-    presenceConfig.grantReadData(setupFn)
-    bookingServices.grantReadData(setupFn)
-    // Read-only, purely to diff against. Every write leaves over the module
-    // API with the owner's own token.
-    for (const t of [assistantConfig, sources, quotesConfig]) t.grantReadData(setupFn)
-    bus.grantPutEventsTo(setupFn)
-    setupFn.addToRolePolicy(new iam.PolicyStatement({
-      // Extraction only. The model that reads a scraped page is invoked with
-      // no tools at all, so this grant cannot reach anything but text.
-      actions: ['bedrock:InvokeModel'],
-      resources: ['*'],
-    }))
+    // "Set it up for me" lives in its own nested stack. CloudFormation caps a
+    // stack at 500 resources and this one hit 509 the day the module first
+    // tried to deploy (issue 111); a nested stack costs the parent ONE
+    // resource and brings its own budget, so this module and everything phase
+    // 3 adds grow without touching the parent's ceiling again.
+    const setupStack = new SetupStack(this, 'Setup', {
+      repoRoot,
+      domain: DOMAIN,
+      bus,
+      readTables: {
+        presenceConfig,
+        bookingServices,
+        assistantConfig,
+        sources,
+        quotesConfig,
+      },
+      coreTableEnv: tableEnv,
+      coreTables: [tenants, users, apiKeys, entitlements, grants, usage],
+    })
+    const setupFn = setupStack.handler
 
     const genieFn = fn('GenieApiFn', 'modules/genie/api/src/handler.ts', {
       ...tableEnv,
