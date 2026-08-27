@@ -1136,7 +1136,22 @@ above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
 
-### 112 — MakerBay HQ has no owner 🔶 half done, one founder step left
+### 112 — MakerBay HQ has no owner ✅ DONE
+**Closed 2026-08-27.** `aatrala+mbhq@gmail.com` is the owner of HQ, verified
+in `makerbay-users`, and the founder can see the session service in the
+dashboard. The $99 setup session is bookable end to end.
+**A bug in the first version of connect-hq-owner.mjs is worth remembering:**
+signing up creates a COGNITO user, but the `makerbay-users` row is only
+written when onboarding completes. The script only looked at DynamoDB, so it
+told the founder "no account yet" when they had just made one. It now checks
+Cognito first and distinguishes three states - no user, unconfirmed code, and
+signed-up-without-a-workspace. That third case is now handled by writing the
+user row straight at HQ, which skips onboarding entirely and creates no
+throwaway workspace to clean up afterwards.
+**Still worth doing:** verify `aatrala+mbhq@gmail.com` as an SES identity, or
+the booking notification for a sale will not deliver while the account is
+sandboxed (issue 76).
+
 Found while making the $99 session bookable. **HQ was seeded to power the
 assistant widget on makerbay.app and has never had a user, booking config or
 presence config** - so the session link shipped in issue 93 pointed at a page
