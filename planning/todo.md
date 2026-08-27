@@ -662,7 +662,7 @@ Also in scope: Resend as an alternative or failover if the SES appeal
 (issue 76) stays blocked, and the exact Cognito mechanism for email
 one-time-code sign-in.
 
-## Issues 95-105 (repo audit + item 93/94 consults, 2026-08-27)
+## Issues 95-110 (repo audit + item 93/94 consults, 2026-08-27)
 
 Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
@@ -710,6 +710,97 @@ hits reply on a booking confirmation, an invoice, a review invite or a
 reply-from-the-business writes to `hello@makerbay.app`, which nobody reads.
 **Fix:** Reply-To on every customer-bound send, pointing at
 `config.notifyEmail`. Rides along with 103.
+
+### 106 — Replies from paying customers are thrown away ⛔ P0
+Grep `infra/lib/makerbay-stack.ts` for `ReceiptRule`, `MxRecord` or
+`new route53.MxRecord`: zero hits. There is no inbound mail on makerbay.app
+at all. Combined with issue 105 (eight of nine customer-bound emails set no
+Reply-To), a homeowner who hits reply on their booking confirmation, their
+invoice or a quote is writing to hello@makerbay.app, which does not exist as
+a mailbox. Those messages are being discarded silently, today, in
+production. The consult called this the highest-value single fix in the
+whole email review and it is hard to disagree.
+**Fix:** make `replyTo` a REQUIRED field on `sendEmail` when the audience is
+a customer, pointing at `config.notifyEmail`. Type error to omit it. That
+alone fixes it without needing inbound mail at all.
+
+### 107 — Bounces and complaints are generated and discarded ⛔ P0
+`EmailConfigSet` (`makerbay-stack.ts:200`) sets `tlsPolicy` and
+`reputationMetrics` and nothing else - zero event destinations in the whole
+stack. SES is raising BOUNCE and COMPLAINT events right now and nothing
+consumes them. Consequences:
+- `notifyError` only captures synchronous API failure, so a message SES
+  accepts and then hard-bounces 30 seconds later leaves the row reading
+  "sent". The "email failed" chip in `quotes/web/src/index.tsx:102` can
+  never fire for a real bounce.
+- A tradesperson has no way to learn their customer never got the quote.
+- Account-level suppression is cross-tenant: one tenant's bounce suppresses
+  that address for every other tenant.
+**Fix:** EventBridge event destination on the config set (the `makerbay` bus
+already exists and is a stable contract) into a `MailLog` table keyed
+tenantId/messageId, plus a per-tenant `emailStatus` on the Contact and a
+pre-send check.
+**Not blocked by the sandbox:** the SES mailbox simulator works while
+sandboxed (`bounce@`, `complaint@`, `ooto@simulator.amazonses.com`), so this
+entire pipeline can be built and end-to-end tested today.
+**Alarm note:** SES reviews at 5% bounce / 0.1% complaint. At 100 sends a
+day a SINGLE complaint is 1%, ten times the review threshold. Alarm on
+absolute counts, not rates, until volume is in the thousands.
+
+### 108 — No DMARC record 🔶 P1
+SPF, DKIM and a custom MAIL FROM are all correctly written by CDK
+(`makerbay-stack.ts:206`, `ses.Identity.publicHostedZone` plus
+`mailFromDomain`). `_dmarc` appears nowhere in the stack. Without it the
+anti-phishing promise in issue 94 has no technical substance: anyone can
+spoof makerbay.app and nothing rejects it.
+**Fix:** ramp p=none with aggregate monitoring, then quarantine at
+25/50/100%, then reject. Keep `adkim=r` - the Return-Path is on a subdomain.
+**Trap to test first:** Cognito on COGNITO_DEFAULT sends from
+verificationemail.com, so DMARC does not apply. The moment issue 104 sets a
+custom makerbay.app FROM, that stream must DKIM-align or p=reject silently
+kills every signup. Verify alignment before tightening past p=none, and do
+not make both changes in the same week.
+
+### 109 — Header injection through the business name 🔶 P1
+`TenantRow.name` reaches `subject:` unescaped at eight call sites (e.g.
+`quotes/api/src/invoices.ts:141`). `Content.Simple` is likely safe today,
+but `List-Unsubscribe` on review invites and the digest (needed for the
+Gmail/Yahoo bulk rules) requires `Raw` content, and at that point a business
+name containing CRLF is header injection.
+**Fix now, before the HTML work makes Raw attractive:** a `headerSafe()`
+next to `esc()` in core - strip CR/LF, collapse whitespace, cap at 78, RFC
+2047 encode non-ASCII. Separately, validate the display name where tenants
+set it: a business name is attacker-controlled text that will appear in
+strangers' inboxes on your authenticated domain. Reject names containing @,
+a URL, or a known-brand lookalike, or "PayPal Security" becomes a phishing
+sender with valid DKIM on makerbay.app.
+
+### 110 — Email one-time-code sign-in: mechanism confirmed 📋 ready to build
+Founder approved this as the default sign-in (issue 93). Native Cognito
+passwordless email OTP shipped 2024-11-22 and is the right mechanism - do
+NOT build the older CUSTOM_AUTH trigger trio, which AWS themselves now
+deprecate in favour of it.
+**The installed CDK already supports it.** aws-cdk-lib resolves to 2.266.0
+and `node_modules/aws-cdk-lib/aws-cognito/lib/user-pool.d.ts` carries both
+`allowedFirstAuthFactors` and `emailOtp`. Config:
+`featurePlan: cognito.FeaturePlan.ESSENTIALS`,
+`signInPolicy: { allowedFirstAuthFactors: { password: true, emailOtp: true } }`,
+client `authFlows: { user: true }`, `AuthSessionValidity: 10` minutes.
+Flow is `InitiateAuth USER_AUTH` with `PREFERRED_CHALLENGE: EMAIL_OTP`, then
+`RespondToAuthChallenge`. Drivable from the SDK, so the existing React login
+stays.
+**Constraints:** Essentials plan is $0 at MakerBay's scale (10,000 MAU
+free). MFA cannot be required on a pool with email OTP - fine for the
+customer pool, and NEVER enable it on `staffPool`, which is deliberately
+`mfa: REQUIRED`. Code length is undocumented; accept 6-8 digits rather than
+hardcoding a six-box mask. No documented resend path for an in-flight
+challenge - restart with InitiateAuth and debounce client-side.
+**Blocked on:** AWS documents email OTP as requiring SES configuration, so
+issue 76 gates it. One unverified escape hatch worth a one-day spike: a
+`CustomEmailSender` Lambda makes Cognito stop sending entirely, which may
+satisfy the requirement without SES production access and would also remove
+the 50/day cap from issue 104. Stand up a throwaway pool and call
+InitiateAuth to settle it.
 
 ### 95 — Metered usage can double-count and overbill ⛔ P0
 `packages/core-api/src/usage-aggregator.ts` declares `idempotencyKey` on its
