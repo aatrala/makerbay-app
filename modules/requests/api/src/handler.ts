@@ -10,6 +10,7 @@ import {
   hashApiKey,
   isPaidWorkspace as isPaidTenant,
   json,
+  ownerReplyTo,
   sendEmail,
   ulid,
   upsertContact,
@@ -233,6 +234,7 @@ async function create(
     const notifyTo = config.notifyEmail || (await ownerEmail(tenantId))
     const notice = await sendEmail({
       to: notifyTo,
+      audience: 'owner' as const,
       replyTo: contact.email,
       subject: `New ${kind} from ${name || contact.email || contact.phone}`,
       text: [
@@ -339,6 +341,9 @@ async function addReply(
   const notice = request.email
     ? await sendEmail({
         to: request.email,
+        audience: 'customer' as const,
+        fromName: tenant?.name ?? 'MakerBay',
+        replyTo: await ownerReplyTo(tenantId),
         subject: `Re: ${request.subject}`,
         text: `${text}\n\n—\n${tenant?.name ?? 'The team'}`,
       })

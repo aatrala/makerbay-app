@@ -112,6 +112,7 @@ export async function createTicket(
 
   await sendEmail({
     to: process.env.SUPPORT_EMAIL ?? '',
+    audience: 'staff' as const,
     replyTo: actor.email,
     subject: `[${row.priority === 'priority' ? 'PRIORITY' : 'support'}] ${category}: ${subject}`,
     text: [
@@ -150,6 +151,7 @@ export async function replyTicket(
   await ddb.send(new PutCommand({ TableName: Tickets(), Item: updated }))
   await sendEmail({
     to: process.env.SUPPORT_EMAIL ?? '',
+    audience: 'staff' as const,
     replyTo: actor.email,
     subject: `Re: ${ticket.subject}`,
     text: [

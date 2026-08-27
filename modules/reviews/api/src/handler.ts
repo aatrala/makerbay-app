@@ -11,6 +11,7 @@ import {
   getUser,
   json,
   linkToken,
+  ownerReplyTo,
   sendEmail,
   ulid,
   type CallerContext,
@@ -228,6 +229,9 @@ export async function createInvite(
   const url = `${CHAT}/review?slug=${encodeURIComponent(tenant?.slug ?? '')}&token=${inviteToken}`
   const notice = await sendEmail({
     to: who.email,
+    audience: 'customer' as const,
+    fromName: tenant?.name ?? 'MakerBay',
+    replyTo: await ownerReplyTo(tenantId),
     subject: `How did we do? - ${tenant?.name ?? ''}`,
     text: [
       `${who.name ?? 'Hi'},`,
@@ -279,6 +283,9 @@ async function onBookingCompleted(detail: BookingCompletedEvent['detail']): Prom
     const tenant = await getTenant(tenantId)
     const notice = await sendEmail({
       to: email,
+      audience: 'customer' as const,
+      fromName: tenant?.name ?? 'MakerBay',
+      replyTo: await ownerReplyTo(tenantId),
       subject: `How did we do? - ${tenant?.name ?? ''}`,
       text: [
         String(cfg.Item?.askMessage ?? 'Thanks for choosing us! A Google review takes a minute and makes a real difference.'),

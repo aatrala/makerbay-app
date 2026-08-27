@@ -8,6 +8,7 @@ import {
   getTenant,
   getUser,
   json,
+  ownerReplyTo,
   sendEmail,
   type CallerContext,
 } from '@makerbay/core'
@@ -141,6 +142,9 @@ async function ask(tenantId: string, event: Event): Promise<APIGatewayProxyResul
   const tenant = await getTenant(tenantId)
   const notice = await sendEmail({
     to: contact.email,
+    audience: 'customer' as const,
+    fromName: tenant?.name ?? 'MakerBay',
+    replyTo: await ownerReplyTo(tenantId),
     subject: `How did we do? - ${tenant?.name ?? ''}`,
     text: [
       `${contact.name ?? 'Hi'},`,

@@ -19,30 +19,81 @@ export interface EmailResult {
   error?: string
 }
 
-export interface EmailInput {
+/**
+ * Anything a tenant typed that reaches a mail header. A business name flows
+ * into the display name and the subject, and it is attacker-controlled text
+ * that lands in strangers' inboxes on a domain we authenticate. Under
+ * Content.Simple a CRLF is harmless; under Raw, which List-Unsubscribe needs,
+ * it is header injection. Sanitise at the boundary now, before the HTML work
+ * makes Raw attractive. (issue 109)
+ */
+export const headerSafe = (s: string): string =>
+  String(s ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 78)
+
+interface EmailBase {
   to: string
   subject: string
   text: string
   replyTo?: string
+  /**
+   * The name the recipient sees in their inbox list, which on a phone is the
+   * ONLY thing they see before deciding. Owner mail leaves this unset and
+   * arrives as MakerBay.
+   */
+  fromName?: string
 }
 
+/**
+ * Who is receiving this, declared at every call site on purpose.
+ *
+ * `customer` means the tenant's own customer: a homeowner who booked a
+ * plumber, who has never heard of MakerBay. Their mail must wear the
+ * tradesperson's name and carry a Reply-To that reaches them, so the type
+ * makes both mandatory. Before this, eight of nine customer-bound emails had
+ * no Reply-To and there is no inbound mail on the domain, so those replies
+ * were being discarded. (issues 103, 105, 106)
+ */
+export type EmailInput =
+  | (EmailBase & { audience: 'owner' | 'staff' })
+  | (EmailBase & { audience: 'customer'; fromName: string; replyTo: string })
+
 const FROM = () => process.env.EMAIL_FROM ?? 'hello@makerbay.app'
+/**
+ * Customer mail will move to its own verified subdomain so a homeowner marking
+ * spam cannot damage the domain our security emails come from. Until that
+ * identity is verified this is unset and customer mail keeps the same envelope
+ * address, wearing the business name in the display name. That display name is
+ * what the inbox shows, so it is most of the fix on its own.
+ */
+const FROM_CUSTOMER = () => process.env.EMAIL_FROM_CUSTOMER
 const CONFIG_SET = () => process.env.EMAIL_CONFIG_SET
+
+/** RFC 5322 display name. Quoted and escaped, never interpolated raw. */
+const addressWithName = (name: string | undefined, address: string): string => {
+  const clean = headerSafe(name ?? '')
+  if (!clean) return address
+  return `"${clean.replace(/["\\]/g, '')}" <${address}>`
+}
 
 export async function sendEmail(input: EmailInput): Promise<EmailResult> {
   const to = input.to?.trim()
   if (!to || !to.includes('@')) return { sent: false, error: 'no_recipient' }
 
   try {
+    const envelope = input.audience === 'customer' ? (FROM_CUSTOMER() ?? FROM()) : FROM()
     await ses.send(
       new SendEmailCommand({
-        FromEmailAddress: FROM(),
+        FromEmailAddress: addressWithName(input.fromName, envelope),
         Destination: { ToAddresses: [to] },
         ...(input.replyTo ? { ReplyToAddresses: [input.replyTo] } : {}),
         ConfigurationSetName: CONFIG_SET(),
         Content: {
           Simple: {
-            Subject: { Data: input.subject.slice(0, 200) },
+            Subject: { Data: headerSafe(input.subject).slice(0, 200) },
             Body: { Text: { Data: input.text } },
           },
         },
@@ -152,4 +203,23 @@ export function explainSmsError(error?: string): string | undefined {
   }
   if (error === 'no_recipient') return 'The caller withheld their number, so no text could be sent.'
   return `The text could not be sent (${error}).`
+}
+
+/**
+ * The address a customer's reply should reach.
+ *
+ * Customer-bound mail must always carry a Reply-To that lands somewhere a
+ * tradesperson reads, because there is no inbound mail on makerbay.app and a
+ * reply without one is discarded (issue 106). Not every module stores a
+ * notify address of its own - reviews and visibility do not - so this
+ * resolves the best available: whatever the module knows, then the owner's
+ * own sign-in address.
+ */
+export async function ownerReplyTo(tenantId: string, preferred?: string): Promise<string> {
+  const p = (preferred ?? '').trim()
+  if (p.includes('@')) return p
+  const { listTenantUsers } = await import('./db')
+  const users = await listTenantUsers(tenantId)
+  const owner = users.find((u) => u.role === 'owner') ?? users[0]
+  return owner?.email ?? ''
 }

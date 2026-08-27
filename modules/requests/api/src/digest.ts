@@ -50,6 +50,7 @@ export const handler = async (): Promise<void> => {
         })
       await sendEmail({
         to,
+        audience: 'owner' as const,
         subject: `${rows.length} new request${rows.length === 1 ? '' : 's'} for ${tenant?.name ?? 'your business'} yesterday`,
         text: [
           `While you were working, ${rows.length === 1 ? 'someone' : `${rows.length} people`} left you a message:`,

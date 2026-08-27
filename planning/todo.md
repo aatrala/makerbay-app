@@ -781,7 +781,34 @@ Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
 verified against the code, not inferred.
 
-### 103 — Every customer-bound email is sent by MakerBay, not the business ⛔ P0
+### Email P0 fixes shipped 2026-08-27 (103 partial, 105, 106, 109)
+Ahead of the rest of docs/spec-email.md, because replies from paying
+customers were being discarded in production.
+- **`EmailInput` is now a discriminated union on `audience`.** The
+  `customer` branch makes `fromName` AND `replyTo` **required**, so it is a
+  type error to send a homeowner an email that does not name the business or
+  give them somewhere to reply. That forced all 19 call sites to declare who
+  they are writing to: **9 customer, 8 owner, 2 staff**, matching the spec's
+  inventory exactly. The compiler found every place my assumption about scope
+  was wrong.
+- **105/106:** every customer-bound send now carries a Reply-To. Where the
+  module had no notify address of its own (reviews, visibility), a new
+  `ownerReplyTo(tenantId, preferred?)` in core resolves the best available and
+  falls back to the owner's own sign-in address.
+- **109:** `headerSafe()` strips CR/LF, collapses whitespace and caps at 78,
+  applied to the display name and every subject. 5 tests, including the
+  `
+Bcc:` injection. Prerequisite for the `Raw` MIME that
+  `List-Unsubscribe` needs.
+- **103 is HALF fixed.** The display name now says the business - which is
+  what a phone shows in the inbox list, so it is most of the fix. The envelope
+  address still reads hello@makerbay.app until `send.makerbay.app` is verified
+  as an SES identity; `EMAIL_FROM_CUSTOMER` is read but unset, so the move is
+  one env var once DNS is done.
+**Verified:** typecheck clean, 103 tests (was 98), web/admin/infra typecheck,
+all Lambda entry points bundle.
+
+### 103 — Every customer-bound email is sent by MakerBay, not the business 🔶 HALF FIXED
 `EmailInput` in `packages/core/src/notify.ts` has no `from` field, and
 `FROM()` hardcodes `process.env.EMAIL_FROM ?? 'hello@makerbay.app'`. Every
 Lambda sets `EMAIL_FROM: hello@makerbay.app`. So a homeowner who booked
@@ -816,7 +843,7 @@ a `userVerification` block carrying the approved copy.
 **Note:** SES production access (issue 76) gates the volume, not the sender
 identity - the sender fix is worth doing either way.
 
-### 105 — Customer-bound mail has almost no Reply-To 🔶 P1
+### 105 — Customer-bound mail has almost no Reply-To ✅ FIXED
 Five of twenty sends set `replyTo`, and only one of those five is
 customer-bound (`modules/quotes/api/src/handler.ts:499`). So a homeowner who
 hits reply on a booking confirmation, an invoice, a review invite or a
@@ -824,7 +851,7 @@ reply-from-the-business writes to `hello@makerbay.app`, which nobody reads.
 **Fix:** Reply-To on every customer-bound send, pointing at
 `config.notifyEmail`. Rides along with 103.
 
-### 106 — Replies from paying customers are thrown away ⛔ P0
+### 106 — Replies from paying customers are thrown away ✅ FIXED
 Grep `infra/lib/makerbay-stack.ts` for `ReceiptRule`, `MxRecord` or
 `new route53.MxRecord`: zero hits. There is no inbound mail on makerbay.app
 at all. Combined with issue 105 (eight of nine customer-bound emails set no
@@ -874,7 +901,7 @@ custom makerbay.app FROM, that stream must DKIM-align or p=reject silently
 kills every signup. Verify alignment before tightening past p=none, and do
 not make both changes in the same week.
 
-### 109 — Header injection through the business name 🔶 P1
+### 109 — Header injection through the business name ✅ FIXED
 `TenantRow.name` reaches `subject:` unescaped at eight call sites (e.g.
 `quotes/api/src/invoices.ts:141`). `Content.Simple` is likely safe today,
 but `List-Unsubscribe` on review invites and the digest (needed for the

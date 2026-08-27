@@ -415,6 +415,9 @@ async function confirmSideEffects(
     : ''
   const customerMail = await sendEmail({
     to: row.email ?? '',
+    audience: 'customer' as const,
+    fromName: businessName,
+    replyTo: notifyEmail,
     subject: `Your ${row.serviceName} booking with ${businessName}`,
     text: [
       `${row.name || 'Hello'},`,
@@ -440,6 +443,7 @@ async function confirmSideEffects(
 
   await sendEmail({
     to: notifyEmail || '',
+    audience: 'owner' as const,
     replyTo: row.email,
     subject: `New booking: ${row.serviceName}, ${view.date} ${view.time}`,
     text: [
@@ -475,6 +479,7 @@ async function onDepositPaid(detail: PaymentReceivedEvent['detail']): Promise<vo
     const config = await getBookingConfig(tenantId)
     await sendEmail({
       to: config.notifyEmail || '',
+      audience: 'owner' as const,
       subject: 'A deposit arrived for a booking that lapsed',
       text: `A $${(detail.amountCents / 100).toFixed(2)} deposit was paid for a ${row.serviceName} booking whose hold had expired. Refund it from ${APP}/payments if the time no longer works.`,
     })
@@ -590,6 +595,7 @@ async function cancelByToken(
   })
   await sendEmail({
     to: config.notifyEmail || '',
+    audience: 'owner' as const,
     subject: `Cancelled: ${booking.serviceName}, ${displayTime(booking.startsAt, config.timezone)}`,
     text: `${booking.name || booking.email} cancelled their ${booking.serviceName} booking.\n\n${businessName}`,
   })
@@ -801,6 +807,9 @@ async function patchBooking(tenantId: string, bookingId: string, event: Event): 
     const tenant = await getTenant(tenantId)
     await sendEmail({
       to: existing.email ?? '',
+      audience: 'customer' as const,
+      fromName: tenant?.name ?? 'MakerBay',
+      replyTo: config.notifyEmail,
       subject: `Your ${existing.serviceName} booking has been cancelled`,
       text: `Your ${existing.serviceName} on ${displayTime(existing.startsAt, config.timezone)} has been cancelled.\n\n${tenant?.name ?? ''}`,
     })

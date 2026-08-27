@@ -138,6 +138,9 @@ export async function sendInvoice(tenantId: string, invoiceId: string): Promise<
   const due = new Date(invoice.dueAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const notice = await sendEmail({
     to: invoice.customerEmail,
+    audience: 'customer' as const,
+    fromName: tenant?.name ?? 'MakerBay',
+    replyTo: config.notifyEmail ?? '',
     subject: `Invoice ${label} from ${tenant?.name ?? 'us'} - ${money(invoice.totalCents, invoice.currency)}`,
     text: [
       `${invoice.customerName ?? 'Hello'},`,

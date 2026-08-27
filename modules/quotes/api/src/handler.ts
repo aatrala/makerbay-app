@@ -300,6 +300,7 @@ async function respond(
   })
   await sendEmail({
     to: config.notifyEmail || '',
+    audience: 'owner' as const,
     subject: `Quote ${qLabel} ${accepted ? 'accepted' : 'declined'}`,
     text: [
       `${quote.customerName ?? 'Your customer'} ${accepted ? 'accepted' : 'declined'} quote ${qLabel}.`,
@@ -496,7 +497,9 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
 
   const notice = await sendEmail({
     to: quote.customerEmail,
-    replyTo: config.notifyEmail || undefined,
+    audience: 'customer' as const,
+    fromName: tenant?.name ?? 'MakerBay',
+    replyTo: config.notifyEmail ?? '',
     subject: `Quote ${qLabel} from ${tenant?.name ?? 'us'}`,
     text: [
       `${quote.customerName ?? 'Hello'},`,
@@ -651,6 +654,7 @@ async function onPaymentReceived(detail: PaymentReceivedEvent['detail']): Promis
       })
       await sendEmail({
         to: config.notifyEmail || '',
+        audience: 'owner' as const,
         subject: `Deposit paid on quote ${qLabel}`,
         text: [
           `${quote.customerName ?? 'Your customer'} paid the ${money(detail.amountCents, detail.currency)} deposit on quote ${qLabel}.`,

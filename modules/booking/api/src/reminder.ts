@@ -30,6 +30,9 @@ export const handler = async (event: { tenantId: string; bookingId: string }): P
 
   const notice = await sendEmail({
     to: String(booking.email),
+    audience: 'customer' as const,
+    fromName: tenant?.name ?? 'MakerBay',
+    replyTo: String(cfg.Item?.notifyEmail ?? ''),
     subject: `Reminder: ${booking.serviceName} ${when} at ${displayTime(String(booking.startsAt), timezone)}`,
     text: [
       `${booking.name ?? 'Hi'},`,
