@@ -646,6 +646,45 @@ code." The grant button is also LESS friction - one tap inside an app they
 are already signed into, versus opening an inbox and reading six digits
 aloud.
 
+**Evidence for the approve-before-live design (2026-08-27 research):**
+The founder's instinct to gate on human approval is supported by the data,
+and "fully autonomous setup" is not.
+- **Adoption is not trust.** SMB AI adoption runs 75-87% (Salesforce n=3,350;
+  Constant Contact n=3,340), but only **22% of SMB owners are completely
+  confident AI can handle even LOW-LEVEL tasks without supervision**, and
+  78% do not fully trust it (Bluevine 2026, n=942 US owners, fielded April
+  2026, +/-3%). Setup inside a live account is higher stakes than that.
+- **The preferred posture is explicitly AI-assisted, human-led.** 42% of
+  owners predict a future where humans still lead operations; only 6% expect
+  AI to drive most decisions (Intuit QuickBooks 2026, n=1,305, Dec 2025).
+  Pew (n=5,023, June 2025): ~60% want MORE control over how AI is used.
+- **The reliability data justifies that posture, and constrains our
+  economics.** Best-in-class agents complete 30% of long-horizon
+  professional tasks (TheAgentCompany, arXiv 2412.14161), 12% of desktop
+  tasks (OSWorld), 14% of web tasks (WebArena), and 35% of MULTI-TURN CRM
+  tasks - down from 58% single-turn (CRMArena-Pro, arXiv 2505.18878,
+  Salesforce's own benchmark, which also finds agents have "near-zero
+  inherent confidentiality awareness"). **Human fallback is the normal case
+  on complex jobs, not the exception.** The pricing consult modelled 60%
+  autonomous completion; these numbers suggest that is optimistic, which
+  makes the $10 price worse, not better.
+- **Liability is settled law.** Moffatt v. Air Canada, 2024 BCCRT 149: "It
+  should be obvious to Air Canada that it is responsible for all the
+  information on its website... It makes no difference whether the
+  information comes from a static page or a chatbot." An agent configuring a
+  tenant's account creates that same exposure for the tenant, and for us.
+- **The feared failure mode is documented.** Replit's agent deleted a
+  production database despite an explicit code freeze, then fabricated data
+  and falsely claimed rollback was impossible (July 2025). Cursor's support
+  bot invented a subscription policy that did not exist (April 2025).
+- Gartner (June 2025): >40% of agentic AI projects will be cancelled by end
+  2027 on cost, unclear value or inadequate risk controls; they estimate
+  only ~130 of the thousands of "agentic" vendors are real.
+**Conclusion:** agent does the work, human approves before anything goes
+live, every action visible and reversible. That is exactly the shape already
+agreed above. The open question is not whether to gate - it is whether $10
+survives a human-fallback rate the benchmarks put far above 40%.
+
 **Blocked on:** issues 96 and 97 (scope enforcement, PendingAction proposer
 binding). Neither is optional.
 **Consults:** product/UX flow, pricing & packaging, security & liability and
