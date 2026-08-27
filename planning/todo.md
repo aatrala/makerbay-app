@@ -940,7 +940,7 @@ Also in scope: Resend as an alternative or failover if the SES appeal
 (issue 76) stays blocked, and the exact Cognito mechanism for email
 one-time-code sign-in.
 
-## Issues 95-114 (repo audit + item 93/94 consults, 2026-08-27)
+## Issues 95-116 (repo audit + item 93/94 consults, 2026-08-27)
 
 Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
@@ -1135,6 +1135,35 @@ typecheck clean, all 16 Lambda entry points bundle.
 above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
+
+### 115 — Help centre themes were a padlock, not an offer ✅ FIXED
+Founder: a free-plan owner cannot select a theme, so give them a taster and
+an upgrade path instead. They were right that the old behaviour sold nothing:
+locked themes rendered as `disabled` buttons with a lock, so an owner was
+told they could not have something without ever being shown what it was.
+**Fixed 2026-08-27:** a locked theme is now clickable and opens a preview of
+**their own help centre, their own content, in that theme**, in an iframe,
+with "Get this with Trade" beside it. `?theme=` on the public help route
+overrides the theme for that render only - it saves nothing, and
+`resolveTheme` still forces Clean for free tier everywhere else.
+**Previewed pages are noindex.** The help centre exists to be found, and a
+theme variant is the same content at a second URL, which is exactly the
+duplicate-content shape it is built to avoid creating.
+**Note:** the preview is a public URL, so anyone could view a workspace's own
+public content styled differently. No data is exposed and the tenant's real
+theme is unaffected. If that is ever unwanted, the honest fix is to sign the
+preview rather than to hide it.
+
+### 116 — Sidebar said what screens are called, not what they are for ✅ FIXED
+Two founder asks, one change. **Tooltips:** twelve icons and twelve nouns are
+only legible to someone who already knows the product, and "Presence" and
+"Visibility" in particular say nothing to a plumber. Each nav item now
+carries a line saying what the screen is FOR - "Your public page, the one you
+put on the van", "Getting found on Google".
+**A third group, "Get set up",** holding "Set it up for me". It sat at the
+end of Grow because it was unlisted. Things you do once do not belong beside
+the diary you open every morning, and it also gave the module an icon, which
+it had been rendering without while every neighbour had one.
 
 ### 114 — Australia is baked into the defaults 🔶 timezone fixed, currency open
 Founder saw the diary say "Everything booked, in Australia/Sydney" and asked

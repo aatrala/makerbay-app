@@ -277,6 +277,14 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
   if (wantsSitemap) return renderSitemap(slug, published)
 
   const opts = await helpRenderOpts(tenant.tenantId, config)
+  // ?theme= shows what a paid theme would look like on this workspace's own
+  // content, so a free-tier owner can see what they would be buying instead
+  // of a padlock. It changes CSS only, saves nothing, and the renderer marks
+  // any previewed page noindex so a variant never competes with the real one.
+  const wantedTheme = String(q.theme ?? '').trim()
+  if (wantedTheme && (HELP_THEMES as readonly string[]).includes(wantedTheme)) {
+    opts.previewTheme = wantedTheme as (typeof HELP_THEMES)[number]
+  }
 
   if (article) {
     const sourceId = sourceIdFromSlug(article)

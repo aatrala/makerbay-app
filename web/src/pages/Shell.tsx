@@ -13,6 +13,8 @@ import { api, logout, type DashboardModule, type Me } from '@makerbay/web-kit'
 const ICONS: Record<string, string> = {
   genie: 'M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z',
   requests: 'M4 6h16v12H4z M4 10h16',
+  // A wand: the one screen where something is done FOR you.
+  setup: 'M4 20l9-9 M13 11l3-3 M15 3l.9 2.1L18 6l-2.1.9L15 9l-.9-2.1L12 6l2.1-.9z M19 12l.6 1.4L21 14l-1.4.6L19 16l-.6-1.4L17 14l1.4-.6z',
   booking: 'M8 3v4 M16 3v4 M3 11h18 M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
   quotes: 'M6 2h9l5 5v15H6z M14 2v6h6 M9 13h6 M9 17h6',
   payments: 'M3 7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z M3 10h18',
@@ -25,9 +27,35 @@ const ICONS: Record<string, string> = {
 }
 
 // Work: the daily money screens, in job-lifecycle order. Grow: everything
-// that earns the next customer. Unlisted modules land at the end of Grow.
+// that earns the next customer. Get set up: the things you do once, which is
+// why they sit apart - a screen you visit twice a year does not belong beside
+// the diary you open every morning. Unlisted modules land at the end of Grow.
 const WORK = ['requests', 'booking', 'quotes', 'payments', 'contacts', 'voice']
 const GROW = ['genie', 'assistant', 'presence', 'visibility', 'reviews']
+const SETUP = ['setup']
+
+/**
+ * One line each, in the owner's words, for the sidebar tooltip.
+ *
+ * A sidebar of twelve icons and twelve nouns is only legible to someone who
+ * already knows the product. "Presence" and "Visibility" in particular say
+ * nothing to a plumber. These say what the screen is FOR, not what it is
+ * called.
+ */
+const HINTS: Record<string, string> = {
+  requests: 'People who asked you something, and your answers back',
+  booking: 'Your diary, your services and the times customers can book',
+  quotes: 'Quotes and invoices, and what is still owed',
+  payments: 'Getting paid, and where the money is up to',
+  contacts: 'Everyone you have dealt with, and their whole history',
+  voice: 'Missed calls turned into texts and bookings',
+  genie: 'Ask about your own business and get things done by chat',
+  assistant: 'What your assistant knows, and your help centre',
+  presence: 'Your public page, the one you put on the van',
+  visibility: 'Getting found on Google',
+  reviews: 'Asking happy customers to say so',
+  setup: 'Paste your website and we build it for you',
+}
 
 function Icon({ id }: { id: string }) {
   const d = ICONS[id]
@@ -76,9 +104,10 @@ export default function Shell({ me, modules, stripeMode }: {
 
   const byId = new Map(modules.map((m) => [m.id, m]))
   const ordered = (ids: string[]) => ids.map((id) => byId.get(id)).filter(Boolean) as DashboardModule[]
-  const listed = new Set([...WORK, ...GROW])
+  const listed = new Set([...WORK, ...GROW, ...SETUP])
   const work = ordered(WORK)
   const grow = [...ordered(GROW), ...modules.filter((m) => !listed.has(m.id))]
+  const setup = ordered(SETUP)
 
   const moduleActive = (m: DashboardModule) =>
     m.nav.some((n) => location.pathname === n.to || location.pathname.startsWith(n.to + '/'))
@@ -89,7 +118,12 @@ export default function Shell({ me, modules, stripeMode }: {
   const tabs = active && active.nav.length > 1 ? active.nav : null
 
   const moduleLink = (m: DashboardModule) => (
-    <NavLink key={m.id} to={m.nav[0].to} className={moduleActive(m) ? 'modlink on' : 'modlink'}>
+    <NavLink
+      key={m.id}
+      to={m.nav[0].to}
+      className={moduleActive(m) ? 'modlink on' : 'modlink'}
+      title={HINTS[m.id]}
+    >
       <Icon id={m.id} />{m.label}
     </NavLink>
   )
@@ -113,6 +147,12 @@ export default function Shell({ me, modules, stripeMode }: {
             {work.map(moduleLink)}
             <div className="navlabel">Grow</div>
             {grow.map(moduleLink)}
+            {setup.length > 0 && (
+              <>
+                <div className="navlabel">Get set up</div>
+                {setup.map(moduleLink)}
+              </>
+            )}
           </nav>
 
           <div className="spacer" />

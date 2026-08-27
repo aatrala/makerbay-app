@@ -200,12 +200,19 @@ function ThemeCard({ config, tier, patch, slug }: {
   slug: string
 }) {
   const current = config.helpTheme ?? 'clean'
+  // What a locked theme looks like on THIS workspace's own content. A
+  // disabled button with a padlock tells an owner they cannot have something
+  // without ever showing them what it is; this shows them and then asks.
+  const [previewing, setPreviewing] = useState<string | null>(null)
+  const previewUrl = (theme: string) =>
+    `https://help.makerbay.app/${encodeURIComponent(slug)}?theme=${encodeURIComponent(theme)}`
+
   return (
     <div className="card">
       <h2>Theme</h2>
       <p className="meta">
         How your help centre looks at <code>help.makerbay.app/{slug}</code>.
-        {tier === 'free' && ' Themes beyond Clean come with Trade.'}
+        {tier === 'free' && ' Clean is yours on the free plan. Have a look at the others below.'}
       </p>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
         {THEME_CHOICES.map((t) => {
@@ -216,16 +223,44 @@ function ThemeCard({ config, tier, patch, slug }: {
               key={t.key}
               type="button"
               className={on ? '' : 'ghost'}
-              disabled={locked}
               title={t.blurb}
-              onClick={() => void patch({ helpTheme: t.key })}
+              // A locked theme is no longer dead: it opens a preview instead
+              // of saving, so the answer to "what is Signwriter?" is the page
+              // itself rather than a padlock.
+              onClick={() => (locked ? setPreviewing(t.key) : void patch({ helpTheme: t.key }))}
             >
-              {t.name}{locked ? ' 🔒' : ''}
+              {t.name}{locked ? ' · preview' : ''}
             </button>
           )
         })}
       </div>
       <p className="meta mt">{THEME_CHOICES.find((t) => t.key === current)?.blurb}</p>
+
+      {previewing && (
+        <div className="mt" style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 12 }}>
+          <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+            <strong className="grow">
+              {THEME_CHOICES.find((t) => t.key === previewing)?.name}, on your own help centre
+            </strong>
+            <button type="button" className="ghost" onClick={() => setPreviewing(null)}>Close</button>
+          </div>
+          <p className="meta">{THEME_CHOICES.find((t) => t.key === previewing)?.blurb}</p>
+          <iframe
+            title={`${previewing} theme preview`}
+            src={previewUrl(previewing)}
+            style={{ width: '100%', height: 460, border: '1px solid var(--line)', borderRadius: 6, background: '#fff' }}
+          />
+          <p className="meta mt">
+            This is your real content, styled. Nothing has changed and nobody else can see it.
+          </p>
+          <div className="row mt" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <Link className="btn" to="/billing">Get this with Trade</Link>
+            <a className="btn ghost" href={previewUrl(previewing)} target="_blank" rel="noopener">
+              Open full size
+            </a>
+          </div>
+        </div>
+      )}
 
       {tier === 'genie' ? (
         <>

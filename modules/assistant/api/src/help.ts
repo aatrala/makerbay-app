@@ -44,6 +44,14 @@ export const HELP_THEMES: HelpTheme[] = ['clean', 'bold', 'editorial', 'ledger',
 /** Everything the renderer needs beyond the assistant config itself. */
 export interface HelpRenderOpts {
   tier: 'free' | 'trade' | 'genie'
+  /**
+   * Show this theme regardless of tier, for a free-tier owner looking at what
+   * a paid one would give them. It changes CSS and nothing else - the content
+   * is the same public content either way - and a previewed page is always
+   * noindex, so a theme variant can never compete with the real page for the
+   * search traffic the help centre exists to win.
+   */
+  previewTheme?: HelpTheme
   phone?: string
   email?: string
   logoUrl?: string
@@ -123,7 +131,14 @@ const THEME_FONTS: Record<HelpTheme, ThemeDef> = {
   },
 }
 
-export const resolveTheme = (config: AssistantConfigRow, tier: HelpRenderOpts['tier']): HelpTheme => {
+export const resolveTheme = (
+  config: AssistantConfigRow,
+  tier: HelpRenderOpts['tier'],
+  previewTheme?: HelpTheme,
+): HelpTheme => {
+  // A preview wins over both the saved theme and the tier. Nothing is stored,
+  // so this cannot become the tenant's actual theme by accident.
+  if (previewTheme && HELP_THEMES.includes(previewTheme)) return previewTheme
   const t = (config.helpTheme ?? 'clean') as HelpTheme
   if (!HELP_THEMES.includes(t)) return 'clean'
   // A theme kept after a downgrade silently falls back rather than 402s the
@@ -583,7 +598,7 @@ export function renderIndex(
   excerpts: Record<string, string>,
   opts: HelpRenderOpts,
 ): APIGatewayProxyResultV2 {
-  const theme = resolveTheme(config, opts.tier)
+  const theme = resolveTheme(config, opts.tier, opts.previewTheme)
   const siteName = config.helpTitle?.trim() || `${config.name} help centre`
   const intro = config.helpIntro?.trim() || 'Straight answers about our services, prices and how we work.'
 
@@ -723,8 +738,11 @@ ${askBlock(slug, config.name, opts)}`
       theme,
       opts,
       config,
-      // An empty help centre should not be indexed as a thin page.
-      noindex: sources.length === 0,
+      // An empty help centre should not be indexed as a thin page, and a
+      // theme preview must never be: it is the same content at a second URL,
+      // which is precisely the duplicate-content shape the help centre exists
+      // to avoid creating.
+      noindex: sources.length === 0 || Boolean(opts.previewTheme),
       body,
     }),
     // The index is where a fresh publish shows up; cache it lightly so the
@@ -798,7 +816,7 @@ export function renderArticle(
   formattedBody?: string,
   related: SourceRow[] = [],
 ): APIGatewayProxyResultV2 {
-  const theme = resolveTheme(config, opts.tier)
+  const theme = resolveTheme(config, opts.tier, opts.previewTheme)
   const siteName = config.helpTitle?.trim() || `${config.name} help centre`
   const title = titleOf(source)
   const updated = source.fetchedAt ?? source.updatedAt
