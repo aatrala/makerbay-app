@@ -729,7 +729,42 @@ binding). Neither is optional.
 **Consults:** product/UX flow, pricing & packaging, security & liability and
 technical architecture are complete. Market & competitive is running.
 
-### 94 — Transactional email templates ⏳ consults running
+### 94 — Transactional email templates 💬 SPEC WRITTEN, awaiting sign-off
+**Spec: docs/spec-email.md, written 2026-08-27.** Copy is a separate approval
+and is published as an artifact for review, not in the repo.
+**Core path, phases 0-6: about 13.5 developer-days, none of it blocked.**
+Key decisions:
+- **Resend becomes the active provider now** ($20/mo Pro), SES appeal
+  continues in parallel, and **no automatic failover** - two live providers
+  means two suppression lists that never reconcile, and a retry after the
+  provider accepted a message sends the customer two invoices. One active via
+  `EMAIL_PROVIDER`; cutover is an env var and a deploy. Migration is ~2 days
+  only because all 20 call sites already go through `sendEmail`.
+- **Sender identity:** customer mail becomes `"Southside Plumbing"
+  <southside-plumbing@send.makerbay.app>` with the owner's address as
+  Reply-To. Never `From: joe@theirdomain.com` - that is the spoof, and it
+  damages the customer's own domain reputation.
+- **Hand-rolled templates in `packages/email`**, block model rendering HTML
+  and text from one source so the two cannot drift. Justified on four facts
+  about this repo, not on principle - two server-side renderers already exist
+  in the same idiom, and eight 256MB Lambdas would carry the bundle.
+- **Undo the dark-mode assumption:** under partial inversion (Gmail Android,
+  Outlook.com) `readableOn`'s guarantee genuinely breaks, because those
+  clients transform background and text independently. Never paint a large
+  filled brand band; use the accent as a 4px rule, the button fill and the
+  link colour. Add `accentOn()` to color.ts for dark surfaces.
+- **The bounce pipeline is NOT blocked by the sandbox** - the SES mailbox
+  simulator works while sandboxed, so it can be built and tested today.
+- **Alarm on absolute counts, not rates.** SES reviews at 0.1% complaint; at
+  100 sends a day a single complaint is 1%, ten times the threshold.
+- **Email OTP (issue 110)** is native Cognito and the installed CDK supports
+  it, but AWS documents it as requiring SES. One-day spike first: does
+  `CustomEmailSender` satisfy that without production access? If yes,
+  passwordless login stops being blocked by the appeal entirely.
+- **Before replying to the SES case**, run `aws sesv2 get-account --query
+  "Details.ReviewDetails"`. If the status is FAILED rather than DENIED, AWS
+  never received the prior appeal and it can simply be resubmitted.
+
 Nineteen distinct emails from eight modules, assembled ad hoc at each call
 site, plus Cognito's own signup and reset codes on separate templates. Two
 recipient classes that must never be confused: the OWNER (mail from
