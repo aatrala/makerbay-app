@@ -956,7 +956,36 @@ does not. Fix regardless of 93.
 **Fix:** move retrieved context to a user-role message inside delimiters,
 labelled with provenance, plus the standing data-not-instructions rule.
 
-### 99 — No audit or version history on the surfaces 93 will write 🔶 P1
+### Issues 99 + 100 shipped 2026-08-27, pulled forward ahead of phase 1
+An agent writing prices with no trail and no rollback is the liability the
+security consult warned about, so these landed before any concierge code.
+- **100:** both 402 gates removed from `listVersions`/`restoreVersion`, and
+  the `tier !== 'free'` gate removed from the Version history card in
+  `StylePage.tsx` (the API was open but the UI still hid it). Undo is free on
+  every tier. A snapshot was already written for everyone on every save, so
+  paywalling the way back showed free-tier owners a change they could not
+  reverse. It is also one of only three differentiated positions we hold.
+- **99:** new `packages/core/src/versions.ts` - `snapshotConfig`,
+  `listConfigVersions`, `readConfigVersion` over a new `ConfigVersions` table
+  (pk `{tenantId}#{surface}`, newest 20 kept, generalising what presence has
+  had since issue 45). Snapshots and `recordAudit` now wrap **booking config,
+  service create/patch/delete, assistant config and source deletion**. A price
+  change reads "Changed the price of X from 150.00 to 180.00"; an hours change
+  says the working hours moved.
+- **Undo endpoints**: `GET /v1/booking/versions?surface=config|services` and
+  `POST /v1/booking/versions/restore`. Already routed by the existing
+  `/v1/booking/{proxy+}`, so no CDK route change. Service restore is a
+  replace, not a merge - half a restore is worse than none.
+- **Attribution groundwork:** `CallerContext` gains optional `taskId` and
+  `onBehalfOf`, and both modules derive an actor via `auditActorOf`, so a
+  setup job records as "MakerBay setup, on the owner's authorisation" rather
+  than as the owner. The delegation key type that populates them is phase 1;
+  until then the code falls through to the ordinary user branch.
+**Verified:** typecheck clean, 98 tests, web/admin/infra typecheck, all
+Lambda entry points bundle.
+**Needs a deploy** for the `ConfigVersions` table and the Usage TTL.
+
+### 99 — No audit or version history on the surfaces 93 will write ✅ FIXED
 `recordAudit` is called from only three places (`presence/api/src/page.ts`,
 `genie/api/src/handler.ts:436`, and three sites in `core-api/handler.ts`).
 Booking config, booking services (including `priceCents`), assistant sources
@@ -966,7 +995,7 @@ Presence is the exception: `writeVersion()` snapshots every save, 20 kept.
 **Fix:** `recordAudit` + snapshots on those surfaces before any agent can
 touch them.
 
-### 100 — Version restore is paywalled 🔶 P1
+### 100 — Version restore is paywalled ✅ FIXED
 `listVersions` and `restoreVersion` both return 402 on the free tier
 (`modules/presence/api/src/page.ts`), so a free-tier owner cannot undo a page
 change. Indefensible once MakerBay is the party that made the change and

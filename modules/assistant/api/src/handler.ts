@@ -3,6 +3,8 @@ import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, S3Client } fr
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import {
+  type AuditActor,
+  type AuditEntry,
   ddb as ddbRaw,
   emitUsage,
   findApiKeyByHash,
@@ -15,7 +17,9 @@ import {
   isPaidWorkspace,
   json,
   listGrants,
+  recordAudit,
   requireScope,
+  snapshotConfig,
   ulid,
   type CallerContext,
 } from '@makerbay/core'
@@ -108,7 +112,7 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'DELETE' && deleteMatch) {
       const denied = requireScope(ctx, 'assistant:sources:write')
       if (denied) return denied
-      return await removeSource(tenantId, deleteMatch[1])
+      return await removeSource(tenantId, deleteMatch[1], event)
     }
     if (method === 'PUT' && deleteMatch) {
       const denied = requireScope(ctx, 'assistant:sources:write')
@@ -720,9 +724,10 @@ async function getSources(tenantId: string): Promise<APIGatewayProxyResultV2> {
   return json(200, { sources: rows, cap: sourceCapFor(tier, ent.limits), used: rows.length })
 }
 
-async function removeSource(tenantId: string, sourceId: string): Promise<APIGatewayProxyResultV2> {
+async function removeSource(tenantId: string, sourceId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const source = await getSource(tenantId, sourceId)
   if (!source) return json(404, { error: 'source_not_found' })
+  const { actor, origin } = auditActorOf(event)
   await s3.send(
     new DeleteObjectsCommand({
       Bucket: BUCKET(),
@@ -736,11 +741,36 @@ async function removeSource(tenantId: string, sourceId: string): Promise<APIGate
     }),
   )
   await deleteSource(tenantId, sourceId)
+  await recordAudit({
+    tenantId,
+    actor,
+    origin,
+    action: 'assistant.source_deleted',
+    moduleId: 'assistant',
+    targetId: sourceId,
+    summary: `Removed "${source.name}" from what the assistant knows`,
+  })
   await tryStartIngestion() // prune vectors for the removed document
   return json(200, { deleted: sourceId })
 }
 
 // ── Config & conversations ───────────────────────────────────────────────
+
+/**
+ * Who is making this change, for the audit trail. A setup job carries its own
+ * id and the owner who authorised it (docs/spec-concierge.md).
+ */
+const auditActorOf = (event: Event): { actor: AuditActor; origin: AuditEntry['origin'] } => {
+  const ctx = event.requestContext.authorizer.lambda
+  if (ctx.taskId) {
+    return {
+      actor: { type: 'setup', id: ctx.taskId, label: 'MakerBay setup', onBehalfOf: ctx.onBehalfOf ?? ctx.userId },
+      origin: 'setup',
+    }
+  }
+  if (ctx.userId) return { actor: { type: 'user', id: ctx.userId, label: ctx.email }, origin: 'ui' }
+  return { actor: { type: 'apikey', id: ctx.keyId ?? 'unknown' }, origin: 'api' }
+}
 
 async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const body = JSON.parse(event.body ?? '{}')
@@ -791,7 +821,20 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
     helpAccent2: accent2,
     helpShowLogo: showLogo,
   }
+  const { actor, origin } = auditActorOf(event)
+  await snapshotConfig(tenantId, 'assistant.config', prev, 'before saving assistant settings', actor.id)
   await putConfig(config)
+  await recordAudit({
+    tenantId,
+    actor,
+    origin,
+    action: 'assistant.config_updated',
+    moduleId: 'assistant',
+    targetId: tenantId,
+    summary: prev?.helpEnabled !== config.helpEnabled
+      ? `Turned the help centre ${config.helpEnabled ? 'on' : 'off'}`
+      : 'Saved assistant settings',
+  })
   return json(200, { config })
 }
 

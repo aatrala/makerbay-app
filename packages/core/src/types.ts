@@ -60,6 +60,16 @@ export interface CallerContext {
   keyId?: string
   scopes: string
   entitlements: string
+  /**
+   * Set only when a delegated principal is acting for an owner: a setup job
+   * the owner granted with one tap (docs/spec-concierge.md). Present here so
+   * every write can be attributed to the job and the person who authorised
+   * it, rather than recorded as the owner doing it themselves. The key type
+   * that populates these arrives with phase 1; until then they are never set,
+   * and the code reading them falls through to the ordinary user branch.
+   */
+  taskId?: string
+  onBehalfOf?: string
 }
 
 // ── Contacts ─────────────────────────────────────────────────────────────

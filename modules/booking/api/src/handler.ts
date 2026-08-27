@@ -1,6 +1,8 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import {
   appendContactEvent,
+  type AuditActor,
+  type AuditEntry,
   emitEvent,
   emitUsage,
   findApiKeyByHash,
@@ -11,8 +13,12 @@ import {
   hashApiKey,
   json,
   linkToken,
+  listConfigVersions,
+  readConfigVersion,
+  recordAudit,
   requireScope,
   sendEmail,
+  snapshotConfig,
   ulid,
   upsertContact,
   type CallerContext,
@@ -96,6 +102,16 @@ export const handler = async (
       const [config, tenant] = await Promise.all([getBookingConfig(tenantId), getTenant(tenantId)])
       return json(200, { config, payoutsEnabled: tenant?.payoutsEnabled === true })
     }
+    // Undo, free on every tier. A snapshot is taken before every write above,
+    // so anything the owner or a setup job changed can be put back (issue 100).
+    if (method === 'GET' && path === '/v1/booking/versions') {
+      const surface = event.queryStringParameters?.surface === 'services' ? 'booking.services' : 'booking.config'
+      return json(200, { versions: (await listConfigVersions(tenantId, surface)).map((v) => ({ sk: v.sk, at: v.at, label: v.label })) })
+    }
+    if (method === 'POST' && path === '/v1/booking/versions/restore') {
+      const { actor, origin } = auditActorOf(event)
+      return await restoreBooking(tenantId, body(event), actor, origin)
+    }
     if (method === 'PUT' && path === '/v1/booking/config') {
       const denied = requireScope(ctx, 'booking:config:write')
       if (denied) return denied
@@ -120,7 +136,8 @@ export const handler = async (
     if (method === 'DELETE' && svc) {
       const denied = requireScope(ctx, 'booking:services:write')
       if (denied) return denied
-      return await removeService(tenantId, svc[1])
+      const { actor, origin } = auditActorOf(event)
+      return await removeService(tenantId, svc[1], actor, origin)
     }
 
     if (method === 'GET' && path === '/v1/booking/bookings') return await diary(tenantId, event)
@@ -581,8 +598,64 @@ async function cancelByToken(
 
 // ── Authenticated surface ────────────────────────────────────────────────
 
+/**
+ * Who is making this change, for the audit trail. A setup job carries its own
+ * id and the owner who authorised it, so months later the Activity feed can
+ * say MakerBay changed this on your say-so rather than naming the owner for
+ * something they did not personally do (docs/spec-concierge.md).
+ */
+const auditActorOf = (event: Event): { actor: AuditActor; origin: AuditEntry['origin'] } => {
+  const ctx = event.requestContext.authorizer.lambda
+  if (ctx.taskId) {
+    return {
+      actor: { type: 'setup', id: ctx.taskId, label: 'MakerBay setup', onBehalfOf: ctx.onBehalfOf ?? ctx.userId },
+      origin: 'setup',
+    }
+  }
+  if (ctx.userId) return { actor: { type: 'user', id: ctx.userId, label: ctx.email }, origin: 'ui' }
+  return { actor: { type: 'apikey', id: ctx.keyId ?? 'unknown' }, origin: 'api' }
+}
+
+/** Put a surface back to a snapshot. The restore itself is audited and snapshotted. */
+async function restoreBooking(
+  tenantId: string,
+  b: Record<string, unknown>,
+  actor: AuditActor,
+  origin: AuditEntry['origin'],
+): Promise<APIGatewayProxyResultV2> {
+  const surface = b.surface === 'services' ? 'booking.services' : 'booking.config'
+  const sk = String(b.sk ?? '')
+  const snap = await readConfigVersion(tenantId, surface, sk)
+  if (snap === undefined) return json(404, { error: 'version_not_found' })
+
+  if (surface === 'booking.config') {
+    await snapshotConfig(tenantId, surface, await getBookingConfig(tenantId), 'before restoring', actor.id)
+    await putBookingConfig(snap as Awaited<ReturnType<typeof getBookingConfig>>)
+  } else {
+    const rows = snap as ServiceRow[]
+    if (!Array.isArray(rows)) return json(409, { error: 'version_unreadable' })
+    const current = await listServices(tenantId)
+    await snapshotConfig(tenantId, surface, current, 'before restoring', actor.id)
+    // Restore is a replace: anything added since the snapshot goes, anything
+    // removed comes back. Half a restore is worse than none.
+    for (const row of current) if (!rows.some((r) => r.serviceId === row.serviceId)) await deleteService(tenantId, row.serviceId)
+    for (const row of rows) await putService(row)
+  }
+  await recordAudit({
+    tenantId,
+    actor,
+    origin,
+    action: 'booking.restored',
+    moduleId: 'booking',
+    targetId: tenantId,
+    summary: `Put ${surface === 'booking.config' ? 'booking settings' : 'the service list'} back to how it was on ${sk.split('#')[0].slice(0, 10)}`,
+  })
+  return json(200, { restored: surface })
+}
+
 async function createService(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const b = body(event)
+  const { actor, origin } = auditActorOf(event)
   const name = String(b.name ?? '').trim()
   if (name.length < 2) return json(400, { error: 'name_required' })
 
@@ -598,7 +671,17 @@ async function createService(tenantId: string, event: Event): Promise<APIGateway
     active: b.active !== false,
     createdAt: new Date().toISOString(),
   }
+  await snapshotConfig(tenantId, 'booking.services', await listServices(tenantId), `before adding ${row.name}`, actor.id)
   await putService(row)
+  await recordAudit({
+    tenantId,
+    actor,
+    origin,
+    action: 'booking.service_created',
+    moduleId: 'booking',
+    targetId: row.serviceId,
+    summary: `Added the service "${row.name}"${row.priceCents !== undefined ? ` at ${(row.priceCents / 100).toFixed(2)}` : ''}, ${row.durationMinutes} minutes`,
+  })
   return json(201, { service: row })
 }
 
@@ -615,6 +698,7 @@ const clamp = (n: number, lo: number, hi: number) =>
 
 async function patchService(tenantId: string, serviceId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const b = body(event)
+  const { actor, origin } = auditActorOf(event)
   const existing = await getService(tenantId, serviceId)
   if (!existing) return json(404, { error: 'not_found' })
 
@@ -628,14 +712,38 @@ async function patchService(tenantId: string, serviceId: string, event: Event): 
     ...(b.depositCents !== undefined ? { depositCents: depositClamp(b.depositCents) } : {}),
     ...(b.active !== undefined ? { active: b.active === true } : {}),
   }
+  await snapshotConfig(tenantId, 'booking.services', await listServices(tenantId), `before editing ${existing.name}`, actor.id)
   await putService(row)
+  const priceMoved = b.priceCents !== undefined && existing.priceCents !== row.priceCents
+  await recordAudit({
+    tenantId,
+    actor,
+    origin,
+    action: 'booking.service_updated',
+    moduleId: 'booking',
+    targetId: row.serviceId,
+    summary: priceMoved
+      ? `Changed the price of "${row.name}" from ${((existing.priceCents ?? 0) / 100).toFixed(2)} to ${((row.priceCents ?? 0) / 100).toFixed(2)}`
+      : `Edited the service "${row.name}"`,
+  })
   return json(200, { service: row })
 }
 
-async function removeService(tenantId: string, serviceId: string): Promise<APIGatewayProxyResultV2> {
+async function removeService(tenantId: string, serviceId: string, actor: AuditActor, origin: AuditEntry['origin']): Promise<APIGatewayProxyResultV2> {
   // Existing bookings keep their serviceName, so removing a service never
   // orphans an appointment already in the diary.
+  const existing = await getService(tenantId, serviceId)
+  await snapshotConfig(tenantId, 'booking.services', await listServices(tenantId), `before removing ${existing?.name ?? serviceId}`, actor.id)
   await deleteService(tenantId, serviceId)
+  await recordAudit({
+    tenantId,
+    actor,
+    origin,
+    action: 'booking.service_deleted',
+    moduleId: 'booking',
+    targetId: serviceId,
+    summary: `Removed the service "${existing?.name ?? serviceId}"`,
+  })
   return json(200, { deleted: serviceId })
 }
 
@@ -754,6 +862,7 @@ async function removeBlock(tenantId: string, bookingId: string): Promise<APIGate
 
 async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayProxyResultV2> {
   const b = body(event)
+  const { actor, origin } = auditActorOf(event)
   const existing = await getBookingConfig(tenantId)
   const timezone = String(b.timezone ?? existing.timezone)
   // A bad timezone would silently shift every appointment, so prove it first.
@@ -779,7 +888,23 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
     notifyEmail: String(b.notifyEmail ?? existing.notifyEmail).slice(0, 200),
     intro: String(b.intro ?? DEFAULT_BOOKING_CONFIG.intro).slice(0, 300),
   }
+  await snapshotConfig(tenantId, 'booking.config', existing, 'before saving hours and availability', actor.id)
   await putBookingConfig(config)
+  const hoursChanged = JSON.stringify(existing.hours) !== JSON.stringify(config.hours)
+  const tzChanged = existing.timezone !== config.timezone
+  await recordAudit({
+    tenantId,
+    actor,
+    origin,
+    action: 'booking.config_updated',
+    moduleId: 'booking',
+    targetId: tenantId,
+    summary: tzChanged
+      ? `Changed the booking timezone from ${existing.timezone} to ${config.timezone}`
+      : hoursChanged
+        ? 'Changed the working hours customers can book inside'
+        : 'Saved booking settings',
+  })
   return json(200, { config })
 }
 

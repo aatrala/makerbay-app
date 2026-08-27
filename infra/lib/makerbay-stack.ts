@@ -65,6 +65,10 @@ export class MakerbayStack extends cdk.Stack {
     })
     // Page-settings snapshots (issue 45): one row per save, newest 20 kept.
     const presenceVersions = table('PresenceVersions', 'tenantId', 'sk')
+    // Undo for the other surfaces an agent can write - booking hours, service
+    // prices, assistant settings. Presence has had snapshots since issue 45;
+    // these had neither a trail nor a way back (issue 99).
+    const configVersions = table('ConfigVersions', 'pk', 'sk')
     // Support tickets (issue 49): customers write in-app, staff answer in
     // the console, email carries the notifications both ways.
     const tickets = table('Tickets', 'tenantId', 'ticketId')
@@ -484,6 +488,7 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_BOOKINGSERVICES: bookingServices.tableName,
       TABLE_BOOKINGS: bookings.tableName,
       TABLE_BOOKINGCONFIG: bookingConfig.tableName,
+      TABLE_CONFIGVERSIONS: configVersions.tableName,
       // A completed job asks for a review; a booking after a missed call
       // closes the rescued request and counts the conversion.
       TABLE_REQUESTS: requests.tableName,
@@ -672,6 +677,7 @@ export class MakerbayStack extends cdk.Stack {
         TABLE_SOURCES: sources.tableName,
         TABLE_CONVERSATIONS: conversations.tableName,
         TABLE_ASSISTANT_CONFIG: assistantConfig.tableName,
+        TABLE_CONFIGVERSIONS: configVersions.tableName,
         // Grounding: services, hours, areas and currency answerable with
         // zero uploaded documents.
         TABLE_BOOKINGSERVICES: bookingServices.tableName,
@@ -865,7 +871,7 @@ export class MakerbayStack extends cdk.Stack {
     for (const t of [requests, requestsConfig]) t.grantReadWriteData(requestsFn)
     for (const t of [requests, requestsConfig, tenants, users, entitlements, grants]) t.grantReadData(requestsDigestFn)
     requestsDigestFn.addToRolePolicy(sesSendPolicy)
-    for (const t of [bookingServices, bookings, bookingConfig]) t.grantReadWriteData(bookingFn)
+    for (const t of [bookingServices, bookings, bookingConfig, configVersions]) t.grantReadWriteData(bookingFn)
     for (const t of [priceItems, quotes, quotesConfig, invoices]) t.grantReadWriteData(quotesFn)
     // The business photo doubles as the document logo (issue 61b).
     presenceConfig.grantReadData(quotesFn)
@@ -975,7 +981,7 @@ export class MakerbayStack extends cdk.Stack {
     // emits its own events.
     usage.grantReadData(presenceFn)
     bus.grantPutEventsTo(presenceFn)
-    for (const t of [sources, conversations, assistantConfig]) t.grantReadWriteData(assistantFn)
+    for (const t of [sources, conversations, assistantConfig, configVersions]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)
     // Grounding reads: what the workspace already knows about itself.
     for (const t of [bookingServices, bookingConfig, presenceConfig, quotesConfig]) t.grantReadData(assistantFn)

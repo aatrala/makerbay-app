@@ -173,10 +173,13 @@ export async function writePage(
 }
 
 export async function listVersions(tenantId: string): Promise<APIGatewayProxyResultV2> {
-  const tier = await pageTier(tenantId)
-  if (tier === 'free') {
-    return json(402, { error: 'plan_required', message: 'Version history comes with the Trade plan.' })
-  }
+  // Undo is free on every tier, deliberately. A snapshot is written on every
+  // save for everyone, so paywalling the way back means a free-tier owner can
+  // be shown a change they cannot reverse. That is indefensible in general and
+  // untenable once the setup agent is the party that made the change and
+  // charged for it (docs/spec-concierge.md). Version history is also one of
+  // the few genuinely differentiated positions we hold, so hiding it behind a
+  // plan works against us twice.
   const r = await ddb.send(new QueryCommand({
     TableName: Versions(),
     KeyConditionExpression: 'tenantId = :t',
@@ -200,10 +203,13 @@ export async function restoreVersion(
   b: Record<string, unknown>,
   actor: { userId?: string; email?: string },
 ): Promise<APIGatewayProxyResultV2> {
-  const tier = await pageTier(tenantId)
-  if (tier === 'free') {
-    return json(402, { error: 'plan_required', message: 'Version history comes with the Trade plan.' })
-  }
+  // Undo is free on every tier, deliberately. A snapshot is written on every
+  // save for everyone, so paywalling the way back means a free-tier owner can
+  // be shown a change they cannot reverse. That is indefensible in general and
+  // untenable once the setup agent is the party that made the change and
+  // charged for it (docs/spec-concierge.md). Version history is also one of
+  // the few genuinely differentiated positions we hold, so hiding it behind a
+  // plan works against us twice.
   const sk = String(b.sk ?? '')
   const r = await ddb.send(new QueryCommand({
     TableName: Versions(),

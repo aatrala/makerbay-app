@@ -73,7 +73,7 @@ export function StyleSections({ onSaved }: { onSaved?: () => void }) {
         setPage(r.page)
         if (onSaved) onSaved()
         setNote('Saved - the preview shows it now. Visitors see it within about 5 minutes.')
-        if (tier !== 'free') void api('GET', '/v1/presence/versions').then((v) => setVersions(v.versions ?? [])).catch(() => {})
+        void api('GET', '/v1/presence/versions').then((v) => setVersions(v.versions ?? [])).catch(() => {})
       })
       .catch((e) => setError(explain(e)))
       .finally(() => setBusy(false))
@@ -201,7 +201,7 @@ export function StyleSections({ onSaved }: { onSaved?: () => void }) {
         )}
       </div>
 
-      {tier !== 'free' && (
+      {(
         <div className="card">
           <h2>Version history</h2>
           <p className="meta">Every save is kept (newest 20). Restoring never loses anything — the restore itself becomes the newest version.</p>
