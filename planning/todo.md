@@ -602,7 +602,7 @@ form. The alarm email is the trigger to revisit.
 
 ## Issues 93-94 (in consultation, 2026-08-27)
 
-### 93 — Live assistant as a service ("Set it up for me") ⏳ spec in progress
+### 93 — Live assistant as a service ("Set it up for me") 💬 SPEC WRITTEN, awaiting sign-off
 A concierge layer where the assistant does setup and configuration work FOR
 the customer. Founder principle: every task must ALSO be doable by the
 customer themselves in the UI. The concierge is a "do it for me" option
@@ -645,6 +645,45 @@ every OTP fraud, and it forecloses ever saying "we will never ask for your
 code." The grant button is also LESS friction - one tap inside an app they
 are already signed into, versus opening an inbox and reading six digits
 aloud.
+
+**Spec: docs/spec-concierge.md, written 2026-08-27** from seven consults.
+Founder decisions added this round:
+- **Free on any paid plan; $10 only on the free tier.** Makes $10 an anchor
+  that sells the $29 plan rather than a revenue line.
+- **"Move me over" is $49**, not $10 - most expensive to deliver, likeliest
+  to need a person, and the named switching cost in every competitor's
+  reviews.
+- **The $20 Stripe Connect task is KILLED.** Stripe gives every user free
+  24/7 support and the thing being troubleshot is our own onboarding flow.
+  Guidance and payout diagnostics become a free feature of payments.
+- **Revisions are unlimited**, scope frozen at acceptance. Two brakes that
+  cost nothing: anything off the scope card gets classified rather than done,
+  and on the THIRD revision the agent escalates to a person free, on its own
+  initiative. Because revisions are unlimited, the card hold captures at day
+  6 (authorisations expire ~day 7) with an honest message and a standing
+  14-day no-questions refund.
+
+**Market verdict:** activation and retention instrument, not a business line.
+At $10 across a few tasks it adds $10-40 one-off against a $29/mo
+subscription. Willingness to hire setup out is FALLING (51% -> 66% -> 71%
+preferring self-service, 2022-2025), and the vendors who solved this absorbed
+it rather than sold it (ServiceM8 refunds up to $2,000 of setup cost; Jobber
+bundles a specialist; GlossGenius does migrations free). The one vendor that
+line-items onboarding is HubSpot at $3,000 mandatory, the most complained-
+about fee in SMB software.
+
+**The approval gate is table stakes**, not a differentiator - Jobber already
+ships "AI recommendations you review and approve before anything goes live",
+and so do Zapier, n8n, Gumloop, Lindy, Intercom and Copilot Studio. Three
+positions ARE unowned: pay-only-on-confirm (no vendor bills on explicit
+approval), the free first pass with no account or card, and permanent free
+undo. Lead with those, not with the gate.
+
+**Positioning rule:** never name the labour. The sentence that defuses it,
+said next to the offer: "You can do all of this yourself in the app - it
+takes about ten minutes. Or tap 'do it for me'." Only credible if self-serve
+really is ten minutes, which makes fixing onboarding and shipping this the
+same project.
 
 **Evidence for the approve-before-live design (2026-08-27 research):**
 The founder's instinct to gate on human approval is supported by the data,
