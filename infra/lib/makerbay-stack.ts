@@ -524,10 +524,12 @@ export class MakerbayStack extends cdk.Stack {
       // back over the module API carrying the owner's own token, so the agent
       // never holds a credential of its own.
       TABLE_PRESENCECONFIG: presenceConfig.tableName,
+      TABLE_BOOKINGSERVICES: bookingServices.tableName,
       API_BASE: `https://api.${DOMAIN}`,
     }, { timeoutSeconds: 120, memorySize: 1024 })
     setupJobs.grantReadWriteData(setupFn)
     presenceConfig.grantReadData(setupFn)
+    bookingServices.grantReadData(setupFn)
     bus.grantPutEventsTo(setupFn)
     setupFn.addToRolePolicy(new iam.PolicyStatement({
       // Extraction only. The model that reads a scraped page is invoked with

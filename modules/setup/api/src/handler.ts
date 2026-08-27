@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
-import { GetCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { apiCall } from '@makerbay/agent-kit'
 import {
   ddb,
@@ -12,7 +12,8 @@ import {
 } from '@makerbay/core'
 import { scrapePage } from '@makerbay/scrape'
 import { extractFacts, type ExtractedFacts } from './extract'
-import { getJob, listArtifacts, listJobs, putArtifact, putJob, type JobArtifact, type JobRow } from './db'
+import { KINDS, type CurrentState } from './kinds'
+import { getJob, listArtifacts, listJobs, putArtifact, putJob, type JobArtifact, type JobKind, type JobRow } from './db'
 
 /**
  * "Set it up for me" - the agent does the setup, the owner approves it, and
@@ -83,6 +84,8 @@ async function startJob(
     })
   }
 
+  const kind: JobKind = b.kind === 'booking.services' ? 'booking.services' : 'presence.page'
+  const def = KINDS[kind]
   const url = String(b.url ?? '').trim()
   if (!url) {
     return json(400, { error: 'url_required', message: 'Give us a website, Facebook page or listing to read.' })
@@ -92,18 +95,18 @@ async function startJob(
   const job: JobRow = {
     tenantId,
     jobId,
-    kind: 'presence.page',
+    kind,
     status: 'working',
     // Frozen here. A URL found inside the scraped page is never followed, and
     // a step wanting a resource outside this list fails the job rather than
     // quietly widening it.
     plan: {
-      resources: ['presence.config'],
+      resources: def.resources,
       sourceUrls: [url],
-      steps: ['Read the page', 'Draft your page', 'Show you the changes'],
+      steps: ['Read the page', `Draft ${def.label.toLowerCase()}`, 'Show you the changes'],
     },
     priceCents: 0,
-    scopes: ['presence:config:write'],
+    scopes: def.scopes,
     reviseCount: 0,
     createdBy: ctx.userId ?? 'unknown',
     createdAt: new Date().toISOString(),
@@ -134,8 +137,8 @@ async function startJob(
     })
   }
 
-  const current = await readPresence(tenantId)
-  const artifact = stageArtifact(tenantId, jobId, facts, current, url, excerpt)
+  const current = await readCurrent(tenantId)
+  const artifact = stageArtifact(tenantId, jobId, kind, facts, current, url, excerpt)
   if (artifact.diff.length === 0) {
     await putJob({ ...job, status: 'needs_you', error: 'nothing_to_change' })
     return json(200, {
@@ -148,63 +151,56 @@ async function startJob(
   return json(201, { job: { ...job, status: 'ready' }, artifact })
 }
 
-/** What the page says now, so the diff is against truth rather than a guess. */
-async function readPresence(tenantId: string): Promise<Record<string, unknown>> {
-  const r = await ddb.send(new GetCommand({
-    TableName: process.env.TABLE_PRESENCECONFIG!,
-    Key: { tenantId },
-  }))
-  return (r.Item ?? {}) as Record<string, unknown>
-}
-
-const FIELDS: Array<{ key: keyof ExtractedFacts; field: string; label: string }> = [
-  { key: 'headline', field: 'headline', label: 'Headline' },
-  { key: 'intro', field: 'intro', label: 'Intro' },
-  { key: 'phone', field: 'phone', label: 'Phone' },
-  { key: 'email', field: 'email', label: 'Email' },
-  { key: 'serviceAreas', field: 'serviceAreas', label: 'Areas you cover' },
-]
-
 const asText = (v: unknown): string => (Array.isArray(v) ? v.join(', ') : String(v ?? ''))
+
+/** What the workspace looks like now, so a diff is against truth. */
+async function readCurrent(tenantId: string): Promise<CurrentState> {
+  const [presence, services] = await Promise.all([
+    ddb.send(new GetCommand({ TableName: process.env.TABLE_PRESENCECONFIG!, Key: { tenantId } }))
+      .then((r) => (r.Item ?? {}) as Record<string, unknown>),
+    ddb.send(new QueryCommand({
+      TableName: process.env.TABLE_BOOKINGSERVICES!,
+      KeyConditionExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+    })).then((r) => (r.Items ?? []) as CurrentState['services']).catch(() => []),
+  ])
+  return { presence, services }
+}
 
 export function stageArtifact(
   tenantId: string,
   jobId: string,
+  kind: JobKind,
   facts: ExtractedFacts,
-  current: Record<string, unknown>,
+  current: CurrentState,
   url: string,
   excerpt: string,
 ): JobArtifact {
-  const proposed: Record<string, unknown> = {}
-  const diff: JobArtifact['diff'] = []
+  const { proposed, diff } = KINDS[kind].stage(facts, current)
   const provenance: JobArtifact['provenance'] = {}
-
-  for (const { key, field, label } of FIELDS) {
-    const value = facts[key]
-    if (value === undefined || (Array.isArray(value) && value.length === 0)) continue
-    // Never overwrite something the owner already wrote. A blank field is an
-    // opportunity; a filled one is a decision they made.
-    if (asText(current[field]).trim()) continue
-    proposed[field] = value
-    diff.push({ field, label, from: '(empty)', to: asText(value) })
-    // Every fact carries the URL and the sentence it came from, so a human
-    // reading the diff can check the claim against its source. That catches
-    // what a validator cannot.
-    provenance[field] = { url, excerpt }
-  }
-
+  // Every fact carries the URL and the sentence it came from, so a human
+  // reading the diff can check the claim against its source. That catches
+  // what a validator cannot.
+  for (const d of diff) provenance[d.field] = { url, excerpt }
   return {
     pk: `${tenantId}#${jobId}`,
-    sk: `ARTIFACT#presence.config#${ulid()}`,
+    sk: `ARTIFACT#${kind}#${ulid()}`,
     jobId,
-    kind: 'presence.config',
+    kind: kind === 'presence.page' ? 'presence.config' : 'booking.services',
     proposed,
-    current,
+    current: current.presence,
     diff,
     provenance,
     status: 'staged',
   }
 }
+
+/** One wording for "the workspace moved underneath this plan", both kinds. */
+const staleResponse = (label: string): APIGatewayProxyResultV2 =>
+  json(409, {
+    error: 'changed_since',
+    message: `Your ${label.toLowerCase()} changed since we built this, so we have not applied any of it. Ask for another look and we will redo it.`,
+  })
 
 async function readJob(tenantId: string, jobId: string): Promise<APIGatewayProxyResultV2> {
   const job = await getJob(tenantId, jobId)
@@ -252,17 +248,29 @@ async function confirmJob(
     // failure Genie's ten-minute card expiry existed to prevent. Here the
     // answer is to recompute rather than to expire, because an owner is meant
     // to be able to sleep on it.
-    const live = await readPresence(tenantId)
-    const moved = a.diff.find((d) => (asText(live[d.field]) || '(empty)') !== d.from)
-    if (moved) {
-      return json(409, {
-        error: 'changed_since',
-        message: `Your ${moved.label.toLowerCase()} changed since we built this, so we have not applied any of it. Ask for another look and we will redo it.`,
-      })
-    }
-    const r = await apiCall('PUT', '/v1/presence/config', auth, { ...live, ...a.proposed })
-    if (!r.ok) {
-      return json(409, { error: 'apply_failed', message: String(r.body.message ?? 'That did not save.') })
+    const live = await readCurrent(tenantId)
+
+    if (a.kind === 'presence.config') {
+      const moved = a.diff.find((d) => (asText(live.presence[d.field]) || '(empty)') !== d.from)
+      if (moved) return staleResponse(moved.label)
+      const r = await apiCall('PUT', '/v1/presence/config', auth, { ...live.presence, ...a.proposed })
+      if (!r.ok) return json(409, { error: 'apply_failed', message: String(r.body.message ?? 'That did not save.') })
+    } else {
+      // Services are created one at a time through the ordinary module API,
+      // so each one gets its own validation, its own snapshot and its own
+      // audit line, exactly as if the owner had typed it.
+      const known = new Set(live.services.map((sv) => sv.name.trim().toLowerCase()))
+      const wanted = (a.proposed.services ?? []) as CurrentState['services']
+      const already = wanted.find((sv) => known.has(sv.name.trim().toLowerCase()))
+      if (already) return staleResponse(already.name)
+      for (const sv of wanted) {
+        const r = await apiCall('POST', '/v1/booking/services', auth, {
+          name: sv.name,
+          ...(sv.priceCents != null ? { priceCents: sv.priceCents } : {}),
+          ...(sv.durationMinutes != null ? { durationMinutes: sv.durationMinutes } : {}),
+        })
+        if (!r.ok) return json(409, { error: 'apply_failed', message: String(r.body.message ?? 'That did not save.') })
+      }
     }
     await putArtifact({ ...a, status: 'applied' })
   }

@@ -18,8 +18,13 @@ export type JobStatus =
   | 'needs_person' // third revision, or the agent is out of ideas. Free
   | 'failed'
 
-/** Phase 1 ships one. The rest are in the spec's phase 2. */
-export type JobKind = 'presence.page'
+/**
+ * One kind per menu line. Every kind runs the same machine: read, extract,
+ * validate, stage a diff, wait for the owner. Adding one is a proposer and a
+ * label, never a new pipeline - if a kind needs the machine changed, the
+ * machine was wrong.
+ */
+export type JobKind = 'presence.page' | 'booking.services'
 
 export interface JobPlan {
   /** Exactly what it will touch. Frozen at `quoted`, immutable after. */
@@ -49,7 +54,7 @@ export interface JobArtifact {
   pk: string
   sk: string
   jobId: string
-  kind: 'presence.config'
+  kind: 'presence.config' | 'booking.services'
   /** What the agent wants to write. */
   proposed: Record<string, unknown>
   /** What is there now, read at propose time, so the diff is against truth. */

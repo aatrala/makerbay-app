@@ -602,7 +602,28 @@ form. The alarm email is the trigger to revisit.
 
 ## Issues 93-94 (in consultation, 2026-08-27)
 
-### 93 — Live assistant as a service ("Set it up for me") 🔶 PHASE 1 LIVE, founder test welcome
+### 93 — Live assistant as a service ("Set it up for me") 🔶 PHASES 1-2 LIVE, founder test welcome
+**Phase 2 started 2026-08-27: a second job kind, live.**
+The point of phase 2 was to find out whether the phase 1 machine actually
+generalises. It does, and the shape it took is worth keeping: `kinds.ts` is a
+registry where a kind declares what it touches, what scopes it needs, and how
+to turn validated facts into a staged diff. It supplies no pipeline. **If a
+kind ever needs the machine changed, the machine was wrong.**
+- **Services and prices** is the second kind. It proposes only services the
+  workspace does not already have, matching on a normalised name rather than
+  an id, because the owner typed theirs and the website wrote ours and neither
+  knows about the other.
+- Confirm applies per kind: page config in one write, services one at a time
+  through `POST /v1/booking/services`, so each gets its own validation, its
+  own snapshot and its own audit line, exactly as if the owner had typed it.
+- The screen gained a job picker; "not changed" is now per kind.
+- **Phase 2 adds zero CloudFormation resources** - new kinds reuse the table
+  and the `{proxy+}` route. That is why issue 111 did not block it.
+Remaining kinds (assistant knowledge, help centre, Google, reviews, quotes)
+are each a `KindDef` and a proposer against this machine.
+**Verified:** 133 tests, typecheck clean, deployed, dashboard published,
+/v1/setup/jobs still 401.
+
 **Deployed and live 2026-08-27.** app.makerbay.app -> "Set it up for me".
 Verified after deploy: both new tables ACTIVE, Usage TTL ENABLED,
 /v1/setup/jobs 401s, /v1/public/setup 404s (authenticated-only routing holds),

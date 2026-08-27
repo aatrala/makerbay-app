@@ -26,12 +26,24 @@ interface Job {
   createdAt: string
 }
 
-const EVERYTHING = [
-  'Headline', 'Intro', 'Phone', 'Email', 'Areas you cover',
+const JOBS: Array<{ kind: string; label: string; blurb: string; untouched: string[] }> = [
+  {
+    kind: 'presence.page',
+    label: 'Your page',
+    blurb: 'Headline, intro, phone, email and the areas you cover.',
+    untouched: ['Headline', 'Intro', 'Phone', 'Email', 'Areas you cover'],
+  },
+  {
+    kind: 'booking.services',
+    label: 'Services and prices',
+    blurb: 'The jobs you do and what they cost, added to your list.',
+    untouched: ['Services'],
+  },
 ]
 
 function SetupPage({ me }: { me: Me }) {
   const [url, setUrl] = useState('')
+  const [kind, setKind] = useState(JOBS[0].kind)
   const [busy, setBusy] = useState(false)
   const [job, setJob] = useState<Job | null>(null)
   const [artifact, setArtifact] = useState<Artifact | null>(null)
@@ -51,7 +63,7 @@ function SetupPage({ me }: { me: Me }) {
     e.preventDefault()
     setBusy(true); setError(null); setNote(null); setArtifact(null); setJob(null)
     try {
-      const r = await api('POST', '/v1/setup/jobs', { url: url.trim() })
+      const r = await api('POST', '/v1/setup/jobs', { url: url.trim(), kind })
       setJob(r.job)
       if (r.artifact) setArtifact(r.artifact)
       if (r.message) setNote(r.message)
@@ -95,8 +107,9 @@ function SetupPage({ me }: { me: Me }) {
     }
   }
 
+  const chosen = JOBS.find((j) => j.kind === kind) ?? JOBS[0]
   const changed = artifact?.diff.map((d) => d.label) ?? []
-  const untouched = EVERYTHING.filter((f) => !changed.includes(f))
+  const untouched = chosen.untouched.filter((f) => !changed.includes(f))
 
   return (
     <div className="stack">
@@ -111,6 +124,22 @@ function SetupPage({ me }: { me: Me }) {
           minutes. This is the same job, done for you.
         </p>
 
+        <div className="row mt" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {JOBS.map((j) => (
+            <button
+              key={j.kind}
+              type="button"
+              className={j.kind === kind ? 'chip on' : 'chip'}
+              onClick={() => setKind(j.kind)}
+              disabled={busy}
+              aria-pressed={j.kind === kind}
+            >
+              {j.label}
+            </button>
+          ))}
+        </div>
+        <p className="meta">{chosen.blurb}</p>
+
         <form onSubmit={start} className="row mt" style={{ gap: 8 }}>
           <input
             className="grow"
@@ -121,7 +150,7 @@ function SetupPage({ me }: { me: Me }) {
             aria-label="Your website, Facebook page or Google listing"
           />
           <button disabled={busy || url.trim().length < 4}>
-            {busy ? 'Reading…' : 'Build my page'}
+            {busy ? 'Reading…' : `Do ${chosen.label.toLowerCase()}`}
           </button>
         </form>
         {error && <Notice tone="err">{error}</Notice>}
