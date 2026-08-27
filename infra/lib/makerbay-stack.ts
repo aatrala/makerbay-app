@@ -28,6 +28,7 @@ import * as s3vectors from 'aws-cdk-lib/aws-s3vectors'
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers'
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
+import { authEmail } from '@makerbay/email'
 import { SetupStack } from './setup-stack'
 
 const repoRoot = path.join(__dirname, '..', '..')
@@ -400,11 +401,36 @@ export class MakerbayStack extends cdk.Stack {
     const adminAudit = table('AdminAudit', 'pk', 'sk')
 
     // ── Identity ─────────────────────────────────────────────────────────
+    // Cognito's own sender was the default until issue 104: mail arrived from
+    // no-reply@verificationemail.com, a domain we do not own and cannot
+    // authenticate, capped at 50 messages a day for the WHOLE AWS account and
+    // shared with the staff pool. The two most security-sensitive emails in
+    // the product were the two least trustworthy-looking, and a good launch
+    // day would have silently stopped signups.
+    //
+    // Routing them through SES fixes the sender and the cap together, and the
+    // templates come from packages/email at synth time, so the code email a
+    // tradesperson gets cannot drift from the one telling them a customer
+    // booked. renderEmail is pure, exactly like renderPage, which is what
+    // makes calling it from CDK safe.
+    const verifyMail = authEmail('verify')
     const userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: 'makerbay',
       selfSignUpEnabled: true,
       signInAliases: { email: true },
       autoVerify: { email: true },
+      email: cognito.UserPoolEmail.withSES({
+        fromEmail: `hello@${DOMAIN}`,
+        fromName: 'MakerBay',
+        sesRegion: this.region,
+        // The identity SES already verifies for the rest of our mail.
+        sesVerifiedDomain: DOMAIN,
+      }),
+      userVerification: {
+        emailSubject: verifyMail.subject,
+        emailBody: verifyMail.html,
+        emailStyle: cognito.VerificationEmailStyle.CODE,
+      },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
     const userPoolClient = userPool.addClient('Dashboard', {

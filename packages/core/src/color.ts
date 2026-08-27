@@ -65,3 +65,29 @@ export const readableOn = (hex: string): string => {
   if (!HEX_RE.test(String(hex).trim())) return PAPER
   return contrastRatio(hex, INK) >= contrastRatio(hex, PAPER) ? INK : PAPER
 }
+
+/**
+ * The accent, lightened only as far as it must be to read on a dark surface.
+ *
+ * `readableOn` picks a foreground FOR a brand colour. This is the other
+ * direction: the brand colour itself, used as link or button text on a dark
+ * card, where most trade accents fail contrast outright. #c2410c on #292524
+ * is about 2:1.
+ *
+ * Email needs this and the dashboard does not, because a dark background is
+ * something the mail client decides, not us. Under forced inversion in Gmail
+ * iOS or Outlook Windows there is nothing CSS can do; under the partial
+ * inversion of Gmail Android and Outlook.com the client transforms background
+ * and text independently, which is exactly where a pair computed for a light
+ * ground comes apart.
+ */
+export const accentOn = (accent: string, surface: string): string => {
+  if (!HEX_RE.test(String(accent).trim())) return PAPER
+  let out = accent
+  for (let i = 1; i <= 6 && contrastRatio(out, surface) < 4.5; i++) {
+    out = tint(accent, 0.15 * i)
+  }
+  // Nothing readable came out of the hue, so fall back to plain paper rather
+  // than shipping a link nobody can see.
+  return contrastRatio(out, surface) >= 4.5 ? out : PAPER
+}

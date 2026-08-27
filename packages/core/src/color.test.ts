@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { contrastRatio, INK, PAPER, readableOn, shade, tint } from './color'
+import { accentOn, contrastRatio, INK, PAPER, readableOn, shade, tint } from './color'
 
 /** A spread of real trade-brand accents, plus the ends of the range. */
 const PALETTE = [
@@ -67,5 +67,33 @@ describe('shade and tint', () => {
     expect(shade('#ffffff', 1)).toBe('#000000')
     expect(tint('#000000', 1)).toBe('#ffffff')
     expect(shade('#c2410c', 0)).toBe('#c2410c')
+  })
+})
+
+describe('accentOn', () => {
+  // The dark card an email lands on when a client inverts. Most trade accents
+  // fail outright against it before lightening.
+  const DARK = '#292524'
+
+  it('lifts every accent in the palette to a readable contrast', () => {
+    for (const hex of PALETTE) {
+      expect(contrastRatio(accentOn(hex, DARK), DARK), hex).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('leaves an accent that already reads well alone', () => {
+    // A pale accent needs no help; lightening it further would wash it out.
+    const pale = '#fcd34d'
+    expect(contrastRatio(pale, DARK)).toBeGreaterThanOrEqual(4.5)
+    expect(accentOn(pale, DARK)).toBe(pale)
+  })
+
+  it('actually moves the ones that fail, rather than returning them unchanged', () => {
+    // MakerBay orange is about 2:1 on this surface, so it must change.
+    expect(accentOn('#c2410c', DARK)).not.toBe('#c2410c')
+  })
+
+  it('falls back to paper on malformed input rather than emitting nonsense', () => {
+    expect(accentOn('not-a-colour', DARK)).toBe(PAPER)
   })
 })
