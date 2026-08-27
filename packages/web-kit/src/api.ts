@@ -182,8 +182,20 @@ export async function streamChat(
 
 export const CHAT_BASE = 'https://chat.makerbay.app'
 export const WIDGET_BASE = 'https://widget.makerbay.app'
+/**
+ * The browser already knows where this business is, so ask it rather than
+ * guessing. Booking hours, slot times and every "today"/"tomorrow" answer are
+ * computed in the workspace timezone, and a wrong one moves real appointments
+ * (issue 77). A hardcoded default is worse than a detected one twice over: it
+ * is wrong for most of the world, and "Australia/Sydney" looks deliberate
+ * enough that nobody questions it.
+ */
 export const createTenant = (name: string, trade?: string) =>
-  api('POST', '/v1/core/tenants', { name, trade })
+  api('POST', '/v1/core/tenants', {
+    name,
+    trade,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+  })
 export const enableModule = (id: string) => api('POST', `/v1/core/modules/${id}/enable`, {})
 
 // ── Human error messages ─────────────────────────────────────────────────

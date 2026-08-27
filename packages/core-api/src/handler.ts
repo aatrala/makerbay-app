@@ -150,6 +150,19 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
   // Optional and free-form (issue 83): seeds trade-flavoured defaults later
   // and tells us which trades actually sign up.
   const trade = String(body.trade ?? '').trim().slice(0, 40) || undefined
+  // Detected in the browser at signup. Proved before it is stored: a bad zone
+  // would silently shift every appointment this workspace ever takes, which
+  // is the failure issue 77 already cost us once.
+  let timezone: string | undefined
+  const claimed = String(body.timezone ?? '').trim()
+  if (claimed) {
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: claimed }).format(new Date())
+      timezone = claimed.slice(0, 64)
+    } catch {
+      console.warn('signup sent an unknown timezone, falling back', { claimed })
+    }
+  }
 
   const now = new Date().toISOString()
   const tenant = {
@@ -159,6 +172,7 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
     plan: 'free',
     status: 'active' as const,
     trade,
+    timezone,
     createdAt: now,
   }
   await createTenant(tenant, {

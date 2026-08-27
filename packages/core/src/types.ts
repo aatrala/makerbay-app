@@ -32,6 +32,12 @@ export interface TenantRow {
   stripeAccountId?: string
   payoutsEnabled?: boolean
   connectOnboardedAt?: string
+  /**
+   * IANA zone, detected in the browser at signup. Every module that shows a
+   * time falls back to this rather than to a constant, so a workspace outside
+   * Australia is not quietly told its bookings are in Sydney.
+   */
+  timezone?: string
 }
 
 export interface UserRow {

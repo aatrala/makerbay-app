@@ -60,12 +60,27 @@ const Tables = {
 // "today" was UTC and date filters compared raw ISO strings. Every date the
 // model sees or sends now goes through the tenant's booking timezone.
 
+/**
+ * The zone every "today" and "tomorrow" answer is computed in. Getting this
+ * wrong is what issue 77 was: Genie read the diary in UTC and told a Sydney
+ * owner nothing was booked tomorrow when something was.
+ *
+ * Booking config first, because that is where an owner sets it deliberately;
+ * then the workspace's own zone, detected in the browser at signup; then UTC.
+ * UTC last rather than a plausible city: a wrong answer that looks like a
+ * default gets questioned, and one that looks chosen does not.
+ */
 async function tenantTimezone(tenantId: string): Promise<string> {
   try {
     const r = await ddb.send(new GetCommand({ TableName: Tables.bookingConfig(), Key: { tenantId } }))
-    return String(r.Item?.timezone ?? 'Australia/Sydney')
+    if (r.Item?.timezone) return String(r.Item.timezone)
   } catch {
-    return 'Australia/Sydney'
+    // fall through to the tenant row
+  }
+  try {
+    return (await getTenant(tenantId))?.timezone ?? 'UTC'
+  } catch {
+    return 'UTC'
   }
 }
 
@@ -102,7 +117,7 @@ function localToUtc(dateISO: string, hhmm: string, timeZone: string): Date {
 }
 
 const localStamp = (iso: string, timeZone: string): string =>
-  new Intl.DateTimeFormat('en-AU', {
+  new Intl.DateTimeFormat('en-GB', {
     timeZone, weekday: 'short', day: 'numeric', month: 'short',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(iso))

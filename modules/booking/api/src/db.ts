@@ -1,5 +1,5 @@
 import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import { ddb } from '@makerbay/core'
+import { ddb, getTenant } from '@makerbay/core'
 import type { BookingHours } from './slots'
 
 const Tables = {
@@ -85,7 +85,17 @@ export const DEFAULT_BOOKING_CONFIG: Omit<BookingConfigRow, 'tenantId'> = {
 
 export async function getBookingConfig(tenantId: string): Promise<BookingConfigRow> {
   const r = await ddb.send(new GetCommand({ TableName: Tables.config(), Key: { tenantId } }))
-  return { tenantId, ...DEFAULT_BOOKING_CONFIG, ...(r.Item ?? {}) } as BookingConfigRow
+  const row = { tenantId, ...DEFAULT_BOOKING_CONFIG, ...(r.Item ?? {}) } as BookingConfigRow
+  // A workspace that has never opened the Hours screen has no timezone of its
+  // own, and falling back to a constant means a plumber in Manchester is told
+  // their diary runs on Sydney time. The tenant carries the zone detected in
+  // the browser at signup; prefer it, and keep the constant only as the last
+  // resort for workspaces that predate it.
+  if (!r.Item?.timezone) {
+    const tenant = await getTenant(tenantId)
+    if (tenant?.timezone) row.timezone = tenant.timezone
+  }
+  return row
 }
 
 export async function putBookingConfig(row: BookingConfigRow): Promise<void> {

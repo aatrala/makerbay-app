@@ -940,7 +940,7 @@ Also in scope: Resend as an alternative or failover if the SES appeal
 (issue 76) stays blocked, and the exact Cognito mechanism for email
 one-time-code sign-in.
 
-## Issues 95-113 (repo audit + item 93/94 consults, 2026-08-27)
+## Issues 95-114 (repo audit + item 93/94 consults, 2026-08-27)
 
 Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
@@ -1135,6 +1135,43 @@ typecheck clean, all 16 Lambda entry points bundle.
 above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
+
+### 114 — Australia is baked into the defaults 🔶 timezone fixed, currency open
+Founder saw the diary say "Everything booked, in Australia/Sydney" and asked
+whether the product works anywhere Stripe does. It does not, quite. Three
+layers had Australia hardcoded:
+1. **Timezone** - `DEFAULT_BOOKING_CONFIG.timezone = 'Australia/Sydney'`, and
+   Genie's `tenantTimezone` fell back to Sydney twice.
+2. **Currency** - `DEFAULT_QUOTES_CONFIG.currency = 'AUD'` plus about eight
+   `?? 'AUD'` fallbacks across assistant, genie, payments, presence and quotes.
+3. **Formatting** - `en-AU` in money and date formatters.
+**Why this is not cosmetic.** Booking hours, slot times and every
+"today"/"tomorrow" answer are computed in the workspace timezone. A wrong one
+moves real appointments, which is exactly what issue 77 cost us once. And a
+plausible-looking wrong default is worse than an obviously-neutral one:
+"Australia/Sydney" reads as deliberate, so nobody questions it.
+**Fixed 2026-08-27:**
+- The browser reports its own zone at signup
+  (`Intl.DateTimeFormat().resolvedOptions().timeZone`), and the API **proves
+  it before storing** - a zone that does not resolve is dropped with a warning
+  rather than written.
+- Stored on `TenantRow.timezone`.
+- Booking config prefers it over the constant when the owner has never opened
+  the Hours screen. Genie's chain is now booking config, then the tenant,
+  then **UTC** - deliberately UTC rather than another city, because a wrong
+  answer that looks like a default gets questioned and one that looks chosen
+  does not.
+- Genie's `en-AU` date formatter is now `en-GB`; the zone does the localising.
+- 6 tests pinning zone validation, that the same instant renders differently
+  per zone, and what the currency formatter actually does.
+**Still open: currency.** The signup does not ask, so a UK workspace still
+starts on AUD until someone changes it in Quotes settings, and `en-AU`
+renders a foreign currency as "USD 99.00" rather than "$99.00" - so a US
+business is shown something that is not their own price format. Two options
+worth deciding between: infer from the browser locale at signup the way the
+timezone now is, or ask in onboarding next to the trade picker. Inferring is
+less friction; asking is more honest, because a business can trade in a
+currency that is not its country's.
 
 ### 113 — Trade checkout showed the same name twice, and never explained the $19 ✅ FIXED
 Founder saw: "Subscribe to MakerBay Trade and 1 more", then two rows both
