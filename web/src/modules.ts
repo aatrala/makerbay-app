@@ -10,6 +10,7 @@ import { voiceDashboard } from '@makerbay/voice-web'
 import { reviewsDashboard } from '@makerbay/reviews-web'
 import { paymentsDashboard } from '@makerbay/payments-web'
 import { genieDashboard } from '@makerbay/genie-web'
+import { setupDashboard } from '@makerbay/setup-web'
 
 /**
  * The only file that knows which module dashboards exist. Adding a module is
@@ -17,6 +18,7 @@ import { genieDashboard } from '@makerbay/genie-web'
  */
 const ALL: DashboardModule[] = [
   genieDashboard,
+  setupDashboard,
   presenceDashboard,
   assistantDashboard,
   requestsDashboard,

@@ -602,7 +602,21 @@ form. The alarm email is the trigger to revisit.
 
 ## Issues 93-94 (in consultation, 2026-08-27)
 
-### 93 — Live assistant as a service ("Set it up for me") ⏳ PHASE 1 BUILT, needs deploy
+### 93 — Live assistant as a service ("Set it up for me") 🔶 PHASE 1 LIVE, founder test welcome
+**Deployed and live 2026-08-27.** app.makerbay.app -> "Set it up for me".
+Verified after deploy: both new tables ACTIVE, Usage TTL ENABLED,
+/v1/setup/jobs 401s, /v1/public/setup 404s (authenticated-only routing holds),
+genie PATCH 404s at the edge while genie GET still 401s.
+**Test:** app -> Set it up for me -> paste a real website -> read the change
+table -> "Where from?" on any row shows the page and sentence it came from ->
+Looks right, use it. Then Your page -> Version history -> put it back.
+**Deploy caught issue 111** (500-resource stack ceiling) and one mistake of
+mine: I deployed the stack before realigning db.ts to the single table, so
+the setup Lambda briefly read an env var the stack no longer set. Nothing
+could reach it - new module, 401-gated, no UI at the time - and a second
+deploy fixed it. The lesson is to land the code change and the infra change
+in the same deploy, not adjacent ones.
+
 **Phase 1 built 2026-08-27** (not deployed - AWS session expired).
 - `packages/scrape` promoted out of the assistant module. One SSRF guard for
   the whole platform, never forked.
