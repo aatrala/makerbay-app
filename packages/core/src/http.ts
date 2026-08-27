@@ -42,6 +42,7 @@ export type Scope =
   | 'assistant:help:publish'
   | 'booking:services:write'
   | 'booking:config:write'
+  | 'quotes:config:write'
   | 'payments:connect:start'
   | 'chat:invoke'
 

@@ -12,6 +12,7 @@ import {
   json,
   linkToken,
   money,
+  requireScope,
   sendEmail,
   ulid,
   upsertContact,
@@ -94,7 +95,11 @@ export const handler = async (
     if (method === 'GET' && path === '/v1/quotes/config') {
       return json(200, { config: await getQuotesConfig(tenantId) })
     }
-    if (method === 'PUT' && path === '/v1/quotes/config') return await updateConfig(tenantId, event)
+    if (method === 'PUT' && path === '/v1/quotes/config') {
+      const denied = requireScope(ctx, 'quotes:config:write')
+      if (denied) return denied
+      return await updateConfig(tenantId, event)
+    }
 
     if (method === 'GET' && path === '/v1/quotes/items') {
       return json(200, { items: await listPriceItems(tenantId) })

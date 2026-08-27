@@ -10,9 +10,9 @@ import {
   ulid,
   type CallerContext,
 } from '@makerbay/core'
-import { scrapePage } from '@makerbay/scrape'
-import { extractFacts, type ExtractedFacts } from './extract'
-import { KINDS, type CurrentState } from './kinds'
+import { discoverPages, scrapePage } from '@makerbay/scrape'
+import { EMPTY, extractFacts } from './extract'
+import { KINDS, type CurrentState, type StageInput } from './kinds'
 import { getJob, listArtifacts, listJobs, putArtifact, putJob, type JobArtifact, type JobKind, type JobRow } from './db'
 
 /**
@@ -114,21 +114,36 @@ async function startJob(
   }
   await putJob(job)
 
-  let facts: ExtractedFacts
+  let input: StageInput = { facts: EMPTY, pages: [] }
   let excerpt = ''
   try {
-    const page = await scrapePage(url)
-    if (!page.text || page.text.trim().length < 80) {
-      // Refusing is the honest answer. A made-up page is worse than no page,
-      // and inventing one would break the same rule presence/copy.ts holds.
-      await putJob({ ...job, status: 'needs_you', error: 'nothing_to_read' })
-      return json(200, {
-        job: { ...job, status: 'needs_you' },
-        message: 'There was not enough on that page to work from, and we are not going to make up a business. Paste your price list and a couple of lines about what you do, and we will build it from that.',
-      })
+    if (def.read === 'site') {
+      // A site walk needs no model at all: the pages are the proposal, and
+      // the assistant reads each one itself once the owner says yes.
+      const found = await discoverPages(url, 60)
+      if (found.urls.length === 0) {
+        await putJob({ ...job, status: 'needs_you', error: 'nothing_to_read' })
+        return json(200, {
+          job: { ...job, status: 'needs_you' },
+          message: 'We could not find any pages to read on that address. Check it opens in a browser, or add pages yourself under Assistant, Knowledge.',
+        })
+      }
+      input = { facts: EMPTY, pages: found.urls }
+      excerpt = `${found.urls.length} pages found via ${found.source}`
+    } else {
+      const page = await scrapePage(url)
+      if (!page.text || page.text.trim().length < 80) {
+        // Refusing is the honest answer. A made-up page is worse than no page,
+        // and inventing one would break the same rule presence/copy.ts holds.
+        await putJob({ ...job, status: 'needs_you', error: 'nothing_to_read' })
+        return json(200, {
+          job: { ...job, status: 'needs_you' },
+          message: 'There was not enough on that page to work from, and we are not going to make up a business. Paste your price list and a couple of lines about what you do, and we will build it from that.',
+        })
+      }
+      excerpt = page.text.slice(0, 400)
+      input = { facts: await extractFacts(page.text), pages: [] }
     }
-    excerpt = page.text.slice(0, 400)
-    facts = await extractFacts(page.text)
   } catch (err) {
     await putJob({ ...job, status: 'failed', error: String((err as Error).message ?? err).slice(0, 200) })
     return json(200, {
@@ -138,7 +153,7 @@ async function startJob(
   }
 
   const current = await readCurrent(tenantId)
-  const artifact = stageArtifact(tenantId, jobId, kind, facts, current, url, excerpt)
+  const artifact = stageArtifact(tenantId, jobId, kind, input, current, url, excerpt)
   if (artifact.diff.length === 0) {
     await putJob({ ...job, status: 'needs_you', error: 'nothing_to_change' })
     return json(200, {
@@ -155,28 +170,48 @@ const asText = (v: unknown): string => (Array.isArray(v) ? v.join(', ') : String
 
 /** What the workspace looks like now, so a diff is against truth. */
 async function readCurrent(tenantId: string): Promise<CurrentState> {
-  const [presence, services] = await Promise.all([
-    ddb.send(new GetCommand({ TableName: process.env.TABLE_PRESENCECONFIG!, Key: { tenantId } }))
-      .then((r) => (r.Item ?? {}) as Record<string, unknown>),
-    ddb.send(new QueryCommand({
-      TableName: process.env.TABLE_BOOKINGSERVICES!,
-      KeyConditionExpression: 'tenantId = :t',
-      ExpressionAttributeValues: { ':t': tenantId },
-    })).then((r) => (r.Items ?? []) as CurrentState['services']).catch(() => []),
+  const get = async (table?: string): Promise<Record<string, unknown>> => {
+    if (!table) return {}
+    try {
+      const r = await ddb.send(new GetCommand({ TableName: table, Key: { tenantId } }))
+      return (r.Item ?? {}) as Record<string, unknown>
+    } catch {
+      return {}
+    }
+  }
+  const list = async <T>(table?: string): Promise<T[]> => {
+    if (!table) return []
+    try {
+      const r = await ddb.send(new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: 'tenantId = :t',
+        ExpressionAttributeValues: { ':t': tenantId },
+      }))
+      return (r.Items ?? []) as T[]
+    } catch {
+      return []
+    }
+  }
+  const [presence, services, assistant, sources, quotes] = await Promise.all([
+    get(process.env.TABLE_PRESENCECONFIG),
+    list<CurrentState['services'][number]>(process.env.TABLE_BOOKINGSERVICES),
+    get(process.env.TABLE_ASSISTANT_CONFIG),
+    list<CurrentState['sources'][number]>(process.env.TABLE_SOURCES),
+    get(process.env.TABLE_QUOTESCONFIG),
   ])
-  return { presence, services }
+  return { presence, services, assistant, sources, quotes }
 }
 
 export function stageArtifact(
   tenantId: string,
   jobId: string,
   kind: JobKind,
-  facts: ExtractedFacts,
+  input: StageInput,
   current: CurrentState,
   url: string,
   excerpt: string,
 ): JobArtifact {
-  const { proposed, diff } = KINDS[kind].stage(facts, current)
+  const { proposed, diff } = KINDS[kind].stage(input, current)
   const provenance: JobArtifact['provenance'] = {}
   // Every fact carries the URL and the sentence it came from, so a human
   // reading the diff can check the claim against its source. That catches
@@ -186,7 +221,7 @@ export function stageArtifact(
     pk: `${tenantId}#${jobId}`,
     sk: `ARTIFACT#${kind}#${ulid()}`,
     jobId,
-    kind: kind === 'presence.page' ? 'presence.config' : 'booking.services',
+    kind,
     proposed,
     current: current.presence,
     diff,
@@ -250,14 +285,21 @@ async function confirmJob(
     // to be able to sleep on it.
     const live = await readCurrent(tenantId)
 
-    if (a.kind === 'presence.config') {
+    // Every write leaves over the ordinary module API carrying the owner's
+    // own token, so validation, entitlements, version snapshots and the audit
+    // trail all run exactly as they do for a button press. The agent holds no
+    // credential of its own.
+    const fail = (body: Record<string, unknown>) =>
+      json(409, { error: 'apply_failed', message: String(body.message ?? 'That did not save.') })
+
+    if (a.kind === 'presence.page') {
       const moved = a.diff.find((d) => (asText(live.presence[d.field]) || '(empty)') !== d.from)
       if (moved) return staleResponse(moved.label)
       const r = await apiCall('PUT', '/v1/presence/config', auth, { ...live.presence, ...a.proposed })
-      if (!r.ok) return json(409, { error: 'apply_failed', message: String(r.body.message ?? 'That did not save.') })
-    } else {
-      // Services are created one at a time through the ordinary module API,
-      // so each one gets its own validation, its own snapshot and its own
+      if (!r.ok) return fail(r.body)
+
+    } else if (a.kind === 'booking.services') {
+      // One at a time, so each service gets its own validation, snapshot and
       // audit line, exactly as if the owner had typed it.
       const known = new Set(live.services.map((sv) => sv.name.trim().toLowerCase()))
       const wanted = (a.proposed.services ?? []) as CurrentState['services']
@@ -269,8 +311,37 @@ async function confirmJob(
           ...(sv.priceCents != null ? { priceCents: sv.priceCents } : {}),
           ...(sv.durationMinutes != null ? { durationMinutes: sv.durationMinutes } : {}),
         })
-        if (!r.ok) return json(409, { error: 'apply_failed', message: String(r.body.message ?? 'That did not save.') })
+        if (!r.ok) return fail(r.body)
       }
+
+    } else if (a.kind === 'assistant.knowledge') {
+      const norm = (u: string) => u.replace(/#.*$/, '').replace(/\/+$/, '').toLowerCase()
+      const known = new Set(live.sources.map((sv) => norm(sv.url ?? sv.name)))
+      const pages = ((a.proposed.pages ?? []) as string[]).filter((u) => !known.has(norm(u)))
+      for (const url of pages) {
+        // A source cap or a plan limit refuses here the same way it would in
+        // the Knowledge screen, and that refusal is the honest answer.
+        const r = await apiCall('POST', '/v1/assistant/sources', auth, { type: 'url', url })
+        if (!r.ok) return fail(r.body)
+      }
+
+    } else if (a.kind === 'help.centre') {
+      const moved = a.diff.find((d) => {
+        const now = live.assistant[d.field]
+        const shown = d.field === 'helpEnabled' ? (now === true ? 'on' : 'off') : (asText(now) || '(empty)')
+        return shown !== d.from
+      })
+      if (moved) return staleResponse(moved.label)
+      // updateConfig rebuilds the whole row from the body, so the current
+      // values have to travel with the change or they are cleared.
+      const r = await apiCall('PUT', '/v1/assistant/config', auth, { ...live.assistant, ...a.proposed })
+      if (!r.ok) return fail(r.body)
+
+    } else {
+      const moved = a.diff.find((d) => (asText(live.quotes[d.field]) || '(none)') !== d.from.split(',')[0])
+      if (moved) return staleResponse(moved.label)
+      const r = await apiCall('PUT', '/v1/quotes/config', auth, { ...live.quotes, ...a.proposed })
+      if (!r.ok) return fail(r.body)
     }
     await putArtifact({ ...a, status: 'applied' })
   }

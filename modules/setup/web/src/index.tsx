@@ -39,6 +39,24 @@ const JOBS: Array<{ kind: string; label: string; blurb: string; untouched: strin
     blurb: 'The jobs you do and what they cost, added to your list.',
     untouched: ['Services'],
   },
+  {
+    kind: 'assistant.knowledge',
+    label: 'What your assistant knows',
+    blurb: 'Walks your whole site and adds the pages, so the assistant can answer from them.',
+    untouched: ['Pages'],
+  },
+  {
+    kind: 'help.centre',
+    label: 'Your help centre',
+    blurb: 'Switches it on and titles it, using your own words about the business.',
+    untouched: ['Help centre', 'Title', 'Intro'],
+  },
+  {
+    kind: 'quotes.documents',
+    label: 'How your quotes look',
+    blurb: 'A short prefix so your quotes read SP-Q-001 rather than Q-001.',
+    untouched: ['Document prefix'],
+  },
 ]
 
 function SetupPage({ me }: { me: Me }) {

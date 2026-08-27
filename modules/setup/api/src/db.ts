@@ -24,7 +24,12 @@ export type JobStatus =
  * label, never a new pipeline - if a kind needs the machine changed, the
  * machine was wrong.
  */
-export type JobKind = 'presence.page' | 'booking.services'
+export type JobKind =
+  | 'presence.page'
+  | 'booking.services'
+  | 'assistant.knowledge'
+  | 'help.centre'
+  | 'quotes.documents'
 
 export interface JobPlan {
   /** Exactly what it will touch. Frozen at `quoted`, immutable after. */
@@ -54,7 +59,7 @@ export interface JobArtifact {
   pk: string
   sk: string
   jobId: string
-  kind: 'presence.config' | 'booking.services'
+  kind: JobKind
   /** What the agent wants to write. */
   proposed: Record<string, unknown>
   /** What is there now, read at propose time, so the diff is against truth. */

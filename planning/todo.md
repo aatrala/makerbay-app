@@ -603,7 +603,36 @@ form. The alarm email is the trigger to revisit.
 ## Issues 93-94 (in consultation, 2026-08-27)
 
 ### 93 — Live assistant as a service ("Set it up for me") 🔶 PHASES 1-2 LIVE, founder test welcome
-**Phase 2 started 2026-08-27: a second job kind, live.**
+**Phase 2 complete 2026-08-27: five job kinds, live.**
+**All five kinds shipped.** `presence.page`, `booking.services`,
+`assistant.knowledge`, `help.centre`, `quotes.documents`. The machine took
+one generalisation to absorb them: a kind now declares how it READS
+(`'page'` for a single page, `'site'` for a walk via `discoverPages`), and
+`stage()` takes a `StageInput` of facts plus pages rather than facts alone.
+Nothing else moved, which was the test of whether phase 1 was right.
+
+**Two of the spec's menu lines are deliberately NOT kinds.** "Get found on
+Google" and "Set up reviews" both need a Google review link and a set of
+choices that exist nowhere on a business's website - `VisibilityConfigRow` is
+`reviewLink`, `autoAsk`, `askMessage`, `checklist`, and a scrape can propose
+none of them. Forcing them through this machine would ship a job that reads a
+site and then proposes almost nothing. They are guided configuration, a
+different interaction, and they need their own design. Recorded in kinds.ts
+so the next person does not try.
+
+`quotes.documents` is deliberately narrow for the same reason: a document
+footer usually carries an ABN or a licence number, and extract.ts refuses
+those from a scrape by rule, so the owner types it. The prefix is the one
+thing a business name genuinely tells us.
+
+**A test caught a real bug before it shipped:** `help.centre` would switch
+the help centre ON even when the read found nothing, publishing an empty help
+centre under a business's name. It now refuses to propose anything from an
+empty read. The generic "stages nothing from an empty read" assertion across
+every kind is what found it.
+
+**Verified:** 142 tests, typecheck clean, deployed, published, all routes 401.
+
 The point of phase 2 was to find out whether the phase 1 machine actually
 generalises. It does, and the shape it took is worth keeping: `kinds.ts` is a
 registry where a kind declares what it touches, what scopes it needs, and how

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { stageArtifact } from './handler'
 import { EMPTY, type ExtractedFacts } from './extract'
 import type { CurrentState } from './kinds'
+import type { JobKind } from './db'
 
 /**
  * The artifact envelope. What each kind proposes is covered in kinds.test.ts;
@@ -11,13 +12,13 @@ import type { CurrentState } from './kinds'
 
 const facts = (over: Partial<ExtractedFacts> = {}): ExtractedFacts => ({ ...EMPTY, ...over })
 const state = (over: Partial<CurrentState> = {}): CurrentState =>
-  ({ presence: {}, services: [], ...over })
+  ({ presence: {}, services: [], assistant: {}, sources: [], quotes: {}, ...over })
 
 const stage = (
   f: ExtractedFacts,
-  kind: 'presence.page' | 'booking.services' = 'presence.page',
+  kind: JobKind = 'presence.page',
   current: CurrentState = state(),
-) => stageArtifact('T1', '01J000000000000000000000AA', kind, f, current, 'https://example.com', 'the excerpt')
+) => stageArtifact('T1', '01J000000000000000000000AA', kind, { facts: f, pages: [] }, current, 'https://example.com', 'the excerpt')
 
 describe('stageArtifact', () => {
   it('stages rather than applies, so nothing reaches a live page here', () => {
