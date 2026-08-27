@@ -1173,6 +1173,7 @@ export class MakerbayStack extends cdk.Stack {
 
     // Explicit methods only: an ANY route would also capture the OPTIONS
     // preflight and send it through the authorizer (401), breaking CORS.
+    const M = apigwv2.HttpMethod
     const routeMethods = [
       apigwv2.HttpMethod.GET,
       apigwv2.HttpMethod.POST,
@@ -1182,7 +1183,7 @@ export class MakerbayStack extends cdk.Stack {
     ]
     httpApi.addRoutes({
       path: '/v1/core/{proxy+}',
-      methods: routeMethods,
+      methods: [M.GET, M.POST, M.DELETE, M.PATCH],
       integration: new HttpLambdaIntegration('CoreIntegration', coreFn),
       authorizer,
     })
@@ -1194,7 +1195,7 @@ export class MakerbayStack extends cdk.Stack {
     })
     httpApi.addRoutes({
       path: '/v1/contacts/{proxy+}',
-      methods: routeMethods,
+      methods: [M.GET, M.POST, M.DELETE, M.PATCH],
       integration: new HttpLambdaIntegration('ContactsProxyIntegration', contactsFn),
       authorizer,
     })
@@ -1213,6 +1214,17 @@ export class MakerbayStack extends cdk.Stack {
       authorizer,
     })
 
+    // Each handler is routed for the methods it actually serves and no more.
+    // A route for an unserved method costs an API Gateway Route AND a Lambda
+    // permission, and buys an invocation that returns 404. At 126 permissions
+    // and 112 routes this is over half the stack (issue 111).
+    const methodsFor: Record<string, apigwv2.HttpMethod[]> = {
+      requests: [M.GET, M.POST, M.PUT, M.PATCH],
+      booking: [M.GET, M.POST, M.PUT, M.DELETE, M.PATCH],
+      quotes: [M.GET, M.POST, M.PUT, M.DELETE, M.PATCH],
+      reviews: [M.GET, M.POST, M.PUT, M.PATCH],
+      payments: [M.GET, M.POST],
+    }
     for (const [name, prefix, handler] of [
       ['Requests', 'requests', requestsFn],
       ['Booking', 'booking', bookingFn],
@@ -1220,16 +1232,18 @@ export class MakerbayStack extends cdk.Stack {
       ['Reviews', 'reviews', reviewsFn],
       ['Payments', 'payments', paymentsFn],
     ] as const) {
+      const shared = new HttpLambdaIntegration(`${name}Integration`, handler)
+      const methods = methodsFor[prefix] ?? routeMethods
       httpApi.addRoutes({
         path: `/v1/${prefix}`,
-        methods: routeMethods,
-        integration: new HttpLambdaIntegration(`${name}Integration`, handler),
+        methods,
+        integration: shared,
         authorizer,
       })
       httpApi.addRoutes({
         path: `/v1/${prefix}/{proxy+}`,
-        methods: routeMethods,
-        integration: new HttpLambdaIntegration(`${name}ProxyIntegration`, handler),
+        methods,
+        integration: shared,
         authorizer,
       })
       // Public surfaces: the widget form, the booking page, the quote link.
@@ -1265,7 +1279,7 @@ export class MakerbayStack extends cdk.Stack {
     })
     httpApi.addRoutes({
       path: '/v1/presence/{proxy+}',
-      methods: routeMethods,
+      methods: [M.GET, M.POST, M.PUT, M.DELETE],
       integration: new HttpLambdaIntegration('PresenceIntegration', presenceFn),
       authorizer,
     })
@@ -1283,7 +1297,7 @@ export class MakerbayStack extends cdk.Stack {
     })
     httpApi.addRoutes({
       path: '/v1/assistant/{proxy+}',
-      methods: routeMethods,
+      methods: [M.GET, M.POST, M.PUT, M.DELETE],
       integration: new HttpLambdaIntegration('AssistantIntegration', assistantFn),
       authorizer,
     })

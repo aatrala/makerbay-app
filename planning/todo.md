@@ -1015,7 +1015,44 @@ above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
 
-### 111 — The CDK stack is at CloudFormation's 500-resource ceiling ⛔ P0
+### 111 — The CDK stack is at CloudFormation's 500-resource ceiling 🔶 headroom won, split still owed
+**2026-08-27, second pass: 486 -> 453 resources, deployed and smoke-tested.**
+Measured first rather than guessed: routes + permissions + integrations were
+**273 of 486, over half the stack**. Two changes, neither touching data:
+- Every handler is now routed only for the methods it serves. Verified each
+  removed method genuinely has no branch in its handler first. This is a
+  correctness fix as well - an unserved method cost a Route AND a permission
+  and bought an invocation that returned 404.
+- One `HttpLambdaIntegration` per Lambda, reused across its paths, rather than
+  a fresh instance per `addRoutes` call. Saved 5; permissions turned out to be
+  per-route, not per-integration, so they did not move.
+Live after deploy: every kept route still 401s, public surfaces still 404
+rather than 401 (no authorizer), **CORS preflight still 204**.
+
+**Two findings that shape how the split must be done:**
+1. **`ANY` routes are not an option.** AWS documents that API Gateway answers
+   preflight automatically "even if there isn't an OPTIONS route configured",
+   with one caveat: a `$default` route "catches requests for all methods...
+   including the preflight OPTIONS method". An `ANY` route on a path captures
+   OPTIONS the same way and sends it through the authorizer. The existing
+   comment in the stack was right; verified against the docs rather than
+   assumed.
+2. **Every table has an explicit `tableName` AND `RemovalPolicy.RETAIN`.**
+   So moving one to another stack orphans it under its name, and the new stack
+   then **fails to create a table whose name is taken** - or worse, succeeds
+   against a fresh empty table while the real data sits orphaned. A naive
+   `NestedStack` move of any data-bearing resource will not work. The correct
+   route is CloudFormation **resource import** into the new stack, which
+   adopts the existing table rather than recreating it.
+
+**Where this leaves it:** 47 resources of headroom, and **phase 2 of issue 93
+needs none of it** - new job kinds reuse the existing table and the existing
+`{proxy+}` route. The pressure returns at phase 3 (Step Functions, payments).
+So the split can be planned properly instead of done under deploy pressure.
+**Still owed**, and the shape it should take: new modules get their own
+nested stack from day one; existing data-bearing resources move only by
+import, one seam at a time, verified per table.
+
 Deploying phase 1 of issue 93 failed with **509 resources against a hard
 maximum of 500**. Not a code error - a limit that had been building and that
 one new module tipped over. The dominant categories:
