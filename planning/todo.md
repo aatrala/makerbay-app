@@ -880,7 +880,36 @@ satisfy the requirement without SES production access and would also remove
 the 50/day cap from issue 104. Stand up a throwaway pool and call
 InitiateAuth to settle it.
 
-### 95 — Metered usage can double-count and overbill ⛔ P0
+### Phase 0 shipped 2026-08-27 (issues 95, 96, 97 + audit actor)
+The prerequisites docs/spec-concierge.md is blocked on. All additive; no
+existing caller changes behaviour.
+- **95:** `addUsage` takes an optional `idempotencyKey` and claims it with a
+  conditional put before the `ADD`. Markers live under their own partition
+  (`{tenantId}#dedupe#{yyyy-mm}`) so `getMonthUsage`, which sums every item
+  under the counter partition, never sees them, and they carry a 7-day TTL.
+  The Usage table gained `timeToLiveAttribute: 'expiresAt'` (in-place update,
+  same logical id, counters unaffected). 5 tests.
+- **96:** `requireScope(ctx, scope)` and `hasScope` in
+  `packages/core/src/http.ts`, with a `Scope` union and a `NEVER_DELEGATED`
+  list. Wired into **12 mutating routes** across presence, booking and
+  assistant. `'*'` still passes everything, so every secret key and Cognito
+  session behaves exactly as before. 6 tests, including that a prefix does
+  not match and that an empty scope string fails closed.
+- **97:** `PendingAction` gains `proposedBy` and `proposedByKind`, stamped at
+  both creation sites. `confirmAction` now requires a signed-in human: a key
+  of any kind can propose and can never confirm. Plus a same-principal check
+  for machine proposals, and an owner-role check that treats a missing role
+  as owner (rows predate the field).
+- **Audit:** `'setup'` added to `AuditActor['type']` and `AuditEntry['origin']`,
+  with `onBehalfOf` so a job records who authorised it.
+**Verified:** typecheck clean, 98 tests pass (was 87), web/admin/infra
+typecheck clean, all 16 Lambda entry points bundle.
+**One thing found while wiring 96:** the first codemod put the scope check
+above the route condition rather than inside it, so it typechecked but would
+have denied GETs. Caught and corrected; every guard now sits inside its own
+`if (method === ...)`.
+
+### 95 — Metered usage can double-count and overbill ✅ FIXED
 `packages/core-api/src/usage-aggregator.ts` declares `idempotencyKey` on its
 event interface and never reads it. It calls `addUsage`, which does an
 unconditional `ADD quantity :q` (`packages/core/src/db.ts:385`). EventBridge
@@ -895,7 +924,7 @@ the whole way, then dropped at the last step.
 before the ADD; skip on ConditionalCheckFailedException.
 **Test:** deliver the same usage event twice; the daily counter moves once.
 
-### 96 — No scope enforcement anywhere in the platform ⛔ blocks 93
+### 96 — No scope enforcement anywhere in the platform ✅ FIXED
 Exactly three places read `ctx.scopes` and all three treat it as the boolean
 `=== '*'` (`modules/assistant/api/src/handler.ts:87`,
 `packages/core-api/src/handler.ts:74`, `packages/mcp-server/src/handler.ts:156`).
@@ -907,7 +936,7 @@ built until this lands.
 the top of every mutating route. Additive: `'*'` keeps every existing caller
 working unchanged.
 
-### 97 — PendingAction can confirm itself ⛔ blocks 93
+### 97 — PendingAction can confirm itself ✅ FIXED
 `PendingAction` is keyed `${tenantId}#action#${actionId}` with no record of
 who proposed it, and `confirmAction` (`modules/genie/api/src/handler.ts:415`)
 checks only tenant, status and expiry. Any valid token for the tenant can

@@ -15,17 +15,24 @@ const eb = new EventBridgeClient({})
  */
 
 export interface AuditActor {
-  type: 'user' | 'apikey' | 'genie' | 'system'
-  /** userId / keyId / 'genie' / the emitting module. */
+  type: 'user' | 'apikey' | 'genie' | 'setup' | 'system'
+  /** userId / keyId / 'genie' / a setup job id / the emitting module. */
   id: string
   /** How the feed names them: an email, a key label, 'Genie', 'MakerBay'. */
   label?: string
+  /**
+   * Set when this actor acted for someone else: the userId who authorised it.
+   * A setup job writes both, so months later "who changed my hours" answers
+   * "MakerBay setup, on your authorisation, job 01J8XQ2" rather than naming
+   * the owner for something they did not personally do.
+   */
+  onBehalfOf?: string
 }
 
 export interface AuditEntry {
   tenantId: string
   actor: AuditActor
-  origin: 'ui' | 'api' | 'genie' | 'automation'
+  origin: 'ui' | 'api' | 'genie' | 'setup' | 'automation'
   /** Dotted verb, e.g. 'quotes.sent', 'workspace.slug_changed'. */
   action: string
   moduleId: string

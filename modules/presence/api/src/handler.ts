@@ -11,6 +11,7 @@ import {
   getUser,
   type CallerContext,
   json,
+  requireScope,
 } from '@makerbay/core'
 import {
   DEFAULT_PRESENCE,
@@ -57,9 +58,15 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     // Presence is free and always on; no entitlement gate on the owner routes.
 
     if (method === 'GET' && path === '/v1/presence/config') return await readConfig(tenantId)
-    if (method === 'PUT' && path === '/v1/presence/config') return await writeConfig(tenantId, event)
+    if (method === 'PUT' && path === '/v1/presence/config') {
+      const denied = requireScope(ctx, 'presence:config:write')
+      if (denied) return denied
+      return await writeConfig(tenantId, event)
+    }
     if (method === 'GET' && path === '/v1/presence/page') return await readPage(tenantId)
     if (method === 'PUT' && path === '/v1/presence/page') {
+      const denied = requireScope(ctx, 'presence:page:write')
+      if (denied) return denied
       return await writePage(tenantId, body(event), actorOf(event))
     }
     if (method === 'POST' && path === '/v1/presence/preview') return await previewDraft(tenantId, body(event))
@@ -68,8 +75,16 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && path === '/v1/presence/versions/restore') {
       return await restoreVersion(tenantId, body(event), actorOf(event))
     }
-    if (method === 'POST' && path === '/v1/presence/photo') return await photoUpload(tenantId, event)
-    if (method === 'POST' && path === '/v1/presence/photo/confirm') return await photoConfirm(tenantId, event)
+    if (method === 'POST' && path === '/v1/presence/photo') {
+      const denied = requireScope(ctx, 'presence:photo:write')
+      if (denied) return denied
+      return await photoUpload(tenantId, event)
+    }
+    if (method === 'POST' && path === '/v1/presence/photo/confirm') {
+      const denied = requireScope(ctx, 'presence:photo:write')
+      if (denied) return denied
+      return await photoConfirm(tenantId, event)
+    }
 
     // Presence Pro: the page on the tenant's own domain.
     if (method === 'GET' && path === '/v1/presence/domain') return await getDomain(tenantId)

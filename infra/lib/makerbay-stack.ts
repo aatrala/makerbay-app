@@ -86,7 +86,19 @@ export class MakerbayStack extends cdk.Stack {
     // Grants: one item per entitlement grant, so the Stripe webhook writes a
     // single fixed sort key and can never overwrite a manually granted comp.
     const grants = table('Grants', 'tenantId', 'sk')
-    const usage = table('Usage', 'pk', 'sk')
+    // Usage carries two kinds of row: the daily counters, and short-lived
+    // idempotency markers under their own partition so a redelivered metering
+    // event cannot double-count (and so overbill through the Stripe meter).
+    // The markers expire; the counters have no expiresAt and are unaffected.
+    const usage = new dynamodb.Table(this, 'Usage', {
+      tableName: 'makerbay-usage',
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
     const sources = table('Sources', 'tenantId', 'sourceId')
     const conversations = table('Conversations', 'pk', 'sk')
     // Inbox and insights read across every session for a tenant.

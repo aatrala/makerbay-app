@@ -124,20 +124,20 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
       limits = { genieMessagesPerMonth: assistant.planTier === 'pro' ? 250 : 25 }
     }
 
-    if (method === 'POST' && path === '/v1/genie/chat') return await chat(tenantId, limits, event)
+    if (method === 'POST' && path === '/v1/genie/chat') return await chat(tenantId, limits, event, principal(ctx))
     if (method === 'GET' && path === '/v1/genie/history') return await history(tenantId, event)
 
     const act = path.match(/^\/v1\/genie\/actions\/([0-9A-Z]{26})\/(confirm|decline)$/)
     if (method === 'POST' && act) {
       return act[2] === 'confirm'
-        ? await confirmAction(tenantId, act[1], event)
+        ? await confirmAction(tenantId, act[1], event, ctx)
         : await declineAction(tenantId, act[1])
     }
     // Briefing-card buttons (issue 53B): a deterministic proposal with no
     // model in the loop - the card row knows its own id. Confirmation is
     // still the only way anything happens.
     if (method === 'POST' && path === '/v1/genie/actions/propose') {
-      return await proposeDirect(tenantId, body(event))
+      return await proposeDirect(tenantId, body(event), principal(ctx))
     }
 
     return json(404, { error: 'not_found' })
@@ -227,10 +227,22 @@ interface PendingAction {
   /** One sentence the confirmation card shows. Built server-side at propose time. */
   summary: string
   status: 'proposed' | 'executed' | 'declined'
+  /**
+   * The principal that created this proposal. Without it any valid token for
+   * the tenant can confirm any card, so the moment a second principal exists
+   * in a workspace (a concierge delegation, an API key) it can confirm its
+   * own proposals and the card stops being a control.
+   */
+  proposedBy: string
+  proposedByKind: 'user' | 'apikey'
   createdAt: string
   expiresAt: number
   receipt?: string
 }
+
+/** Who is making this request: a signed-in human, or a key. */
+const principal = (ctx: CallerContext): { id: string; kind: 'user' | 'apikey' } =>
+  ctx.userId ? { id: ctx.userId, kind: 'user' } : { id: ctx.keyId ?? 'unknown', kind: 'apikey' }
 
 async function getAction(tenantId: string, actionId: string): Promise<PendingAction | undefined> {
   const r = await ddb.send(new GetCommand({
@@ -389,7 +401,7 @@ const WRITE_TOOLS: Record<string, WriteTool> = {
   },
 }
 
-async function proposeDirect(tenantId: string, b: Record<string, unknown>): Promise<APIGatewayProxyResultV2> {
+async function proposeDirect(tenantId: string, b: Record<string, unknown>, who: { id: string; kind: 'user' | 'apikey' }): Promise<APIGatewayProxyResultV2> {
   const tool = WRITE_TOOLS[String(b.tool ?? '')]
   if (!tool) return json(400, { error: 'unknown_tool' })
   const sessionId = /^[A-Z0-9]{10,32}$/.test(String(b.sessionId ?? '')) ? String(b.sessionId) : ulid()
@@ -406,19 +418,46 @@ async function proposeDirect(tenantId: string, b: Record<string, unknown>): Prom
     params: proposed.params,
     summary: proposed.summary,
     status: 'proposed',
+    proposedBy: who.id,
+    proposedByKind: who.kind,
     createdAt: new Date().toISOString(),
     expiresAt: Math.floor(Date.now() / 1000) + 600,
   })
   return json(201, { pendingAction: { actionId, summary: proposed.summary }, sessionId })
 }
 
-async function confirmAction(tenantId: string, actionId: string, event: Event): Promise<APIGatewayProxyResultV2> {
+async function confirmAction(tenantId: string, actionId: string, event: Event, ctx: CallerContext): Promise<APIGatewayProxyResultV2> {
   const action = await getAction(tenantId, actionId)
   if (!action || action.status !== 'proposed') return json(404, { error: 'not_found' })
   if (action.expiresAt * 1000 < Date.now()) return json(410, { error: 'expired', message: 'That card has expired - ask Genie again.' })
 
   const auth = event.headers?.authorization ?? event.headers?.Authorization ?? ''
   if (!auth) return json(401, { error: 'unauthorized' })
+
+  // Only a signed-in human confirms. A key of any kind - an integration, or a
+  // concierge delegation acting for the owner - can propose all it likes and
+  // can never approve its own work. That is the whole value of the card.
+  const who = principal(ctx)
+  if (who.kind !== 'user') {
+    return json(403, {
+      error: 'confirmation_requires_a_person',
+      message: 'Only the owner can confirm this, signed in to their workspace.',
+    })
+  }
+  // Belt and braces: a machine proposal can never be confirmed by the same
+  // principal, whatever the check above concluded.
+  if (action.proposedByKind !== 'user' && action.proposedBy === who.id) {
+    return json(403, { error: 'confirmation_requires_a_person' })
+  }
+  // Rows predating `role` exist; every workspace has exactly one user, its
+  // owner, so a missing role means owner.
+  const confirmer = await getUser(who.id)
+  if (confirmer?.role && confirmer.role !== 'owner') {
+    return json(403, {
+      error: 'owner_only',
+      message: 'Only the workspace owner can confirm this.',
+    })
+  }
 
   const tool = WRITE_TOOLS[action.tool]
   if (!tool) return json(500, { error: 'unknown_action' })
@@ -604,6 +643,7 @@ async function chat(
   tenantId: string,
   limits: Record<string, number>,
   event: Event,
+  who: { id: string; kind: 'user' | 'apikey' },
 ): Promise<APIGatewayProxyResultV2> {
   const b = body(event)
   const message = String(b.message ?? '').trim().slice(0, 2000)
@@ -690,6 +730,8 @@ async function chat(
                   params: proposed.params,
                   summary: proposed.summary,
                   status: 'proposed',
+                  proposedBy: who.id,
+                  proposedByKind: who.kind,
                   createdAt: new Date().toISOString(),
                   // Cards go stale fast on purpose: a stale confirmation is
                   // worse than asking again.

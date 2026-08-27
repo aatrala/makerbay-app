@@ -19,5 +19,5 @@ export const handler = async (event: { detail: UsageDetail }): Promise<void> => 
     return
   }
   const date = (d.ts ?? new Date().toISOString()).slice(0, 10)
-  await addUsage(d.tenantId, d.moduleId, d.metric, d.quantity, date)
+  await addUsage(d.tenantId, d.moduleId, d.metric, d.quantity, date, d.idempotencyKey)
 }

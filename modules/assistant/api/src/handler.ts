@@ -15,6 +15,7 @@ import {
   isPaidWorkspace,
   json,
   listGrants,
+  requireScope,
   ulid,
   type CallerContext,
 } from '@makerbay/core'
@@ -104,8 +105,16 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     const refreshMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)\/refresh$/)
     if (method === 'POST' && refreshMatch) return await refresh(tenantId, refreshMatch[1])
     const deleteMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)$/)
-    if (method === 'DELETE' && deleteMatch) return await removeSource(tenantId, deleteMatch[1])
-    if (method === 'PUT' && deleteMatch) return await editSource(tenantId, deleteMatch[1], event)
+    if (method === 'DELETE' && deleteMatch) {
+      const denied = requireScope(ctx, 'assistant:sources:write')
+      if (denied) return denied
+      return await removeSource(tenantId, deleteMatch[1])
+    }
+    if (method === 'PUT' && deleteMatch) {
+      const denied = requireScope(ctx, 'assistant:sources:write')
+      if (denied) return denied
+      return await editSource(tenantId, deleteMatch[1], event)
+    }
 
     if (method === 'GET' && path === '/v1/assistant/config') {
       const [config, tier, rows] = await Promise.all([
@@ -120,10 +129,18 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
         sourceCount: rows.length,
       })
     }
-    if (method === 'PUT' && path === '/v1/assistant/config') return await updateConfig(tenantId, event)
+    if (method === 'PUT' && path === '/v1/assistant/config') {
+      const denied = requireScope(ctx, 'assistant:config:write')
+      if (denied) return denied
+      return await updateConfig(tenantId, event)
+    }
 
     const publishMatch = path.match(/^\/v1\/assistant\/sources\/([A-Z0-9]+)\/publish$/)
-    if (method === 'POST' && publishMatch) return await setPublished(tenantId, publishMatch[1], event)
+    if (method === 'POST' && publishMatch) {
+      const denied = requireScope(ctx, 'assistant:help:publish')
+      if (denied) return denied
+      return await setPublished(tenantId, publishMatch[1], event)
+    }
 
     if (method === 'GET' && path === '/v1/assistant/conversations')
       return await conversations(tenantId, event)

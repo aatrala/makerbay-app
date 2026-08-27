@@ -376,8 +376,36 @@ export async function addUsage(
   metric: string,
   quantity: number,
   date: string, // yyyy-mm-dd
+  idempotencyKey?: string,
 ): Promise<void> {
   const [yyyy, mm, dd] = date.split('-')
+  // EventBridge delivers at least once, so the same usage event can arrive
+  // twice. `ADD quantity` is not idempotent, and this counter is read by the
+  // plan-limit checks AND reported to Stripe as metered usage - a duplicate
+  // delivery overbills a real customer. Claim the key first; if someone
+  // already has it, this delivery is a repeat and must not count.
+  //
+  // The marker lives under its own partition so getMonthUsage, which sums
+  // every item under the counter partition, never sees it.
+  if (idempotencyKey) {
+    try {
+      await ddb.send(
+        new PutCommand({
+          TableName: Tables.usage(),
+          Item: {
+            pk: `${tenantId}#dedupe#${yyyy}-${mm}`,
+            sk: idempotencyKey,
+            // Retries land within minutes; a week is generous and bounded.
+            expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+          },
+          ConditionExpression: 'attribute_not_exists(sk)',
+        }),
+      )
+    } catch (err) {
+      if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return
+      throw err
+    }
+  }
   await ddb.send(
     new UpdateCommand({
       TableName: Tables.usage(),

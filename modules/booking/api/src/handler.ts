@@ -11,6 +11,7 @@ import {
   hashApiKey,
   json,
   linkToken,
+  requireScope,
   sendEmail,
   ulid,
   upsertContact,
@@ -95,16 +96,32 @@ export const handler = async (
       const [config, tenant] = await Promise.all([getBookingConfig(tenantId), getTenant(tenantId)])
       return json(200, { config, payoutsEnabled: tenant?.payoutsEnabled === true })
     }
-    if (method === 'PUT' && path === '/v1/booking/config') return await updateConfig(tenantId, event)
+    if (method === 'PUT' && path === '/v1/booking/config') {
+      const denied = requireScope(ctx, 'booking:config:write')
+      if (denied) return denied
+      return await updateConfig(tenantId, event)
+    }
 
     if (method === 'GET' && path === '/v1/booking/services') {
       return json(200, { services: await listServices(tenantId) })
     }
-    if (method === 'POST' && path === '/v1/booking/services') return await createService(tenantId, event)
+    if (method === 'POST' && path === '/v1/booking/services') {
+      const denied = requireScope(ctx, 'booking:services:write')
+      if (denied) return denied
+      return await createService(tenantId, event)
+    }
 
     const svc = path.match(/^\/v1\/booking\/services\/([0-9A-Z]{26})$/)
-    if (method === 'PATCH' && svc) return await patchService(tenantId, svc[1], event)
-    if (method === 'DELETE' && svc) return await removeService(tenantId, svc[1])
+    if (method === 'PATCH' && svc) {
+      const denied = requireScope(ctx, 'booking:services:write')
+      if (denied) return denied
+      return await patchService(tenantId, svc[1], event)
+    }
+    if (method === 'DELETE' && svc) {
+      const denied = requireScope(ctx, 'booking:services:write')
+      if (denied) return denied
+      return await removeService(tenantId, svc[1])
+    }
 
     if (method === 'GET' && path === '/v1/booking/bookings') return await diary(tenantId, event)
 
