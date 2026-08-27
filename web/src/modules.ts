@@ -35,7 +35,13 @@ const ALL: DashboardModule[] = [
  * Core modules ship with every workspace and are never entitlement-gated, so
  * they are not in `me.entitlements` at all. Anything else has to be switched on.
  */
-const CORE = new Set(['contacts'])
+// 'setup' is here for the same reason as contacts: its manifest carries
+// entitlementKey null, so it never appears in me.entitlements and would
+// otherwise be filtered out - taking the /setup route with it, which is
+// where a stranger's claim link lands. Being in CORE also keeps it out of
+// the landing slot, which is right: nobody should arrive at "Set it up for
+// me" as their home screen.
+const CORE = new Set(['contacts', 'setup'])
 
 /** Only modules this workspace can use, in registration order. */
 export const enabledModules = (me: Me): DashboardModule[] =>

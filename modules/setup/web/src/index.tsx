@@ -26,6 +26,15 @@ interface Job {
   createdAt: string
 }
 
+/**
+ * The $99 session is a booking in the MakerBay HQ workspace, taken through
+ * the same booking and deposit flow any tradie's customer uses. That is the
+ * whole reason it needs no payment code: MakerBay already knows how to sell a
+ * booked slot. Set the service up once in the HQ workspace (45 minutes, $99,
+ * deposit on) and this link sells it.
+ */
+const SESSION_URL = 'https://makerbay.app/p/makerbay-hq'
+
 const JOBS: Array<{ kind: string; label: string; blurb: string; untouched: string[] }> = [
   {
     kind: 'presence.page',
@@ -69,6 +78,7 @@ function SetupPage({ me }: { me: Me }) {
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<Job[] | null>(null)
   const [showSource, setShowSource] = useState<string | null>(null)
+  const [claiming, setClaiming] = useState(false)
 
   const refresh = () =>
     api('GET', '/v1/setup/jobs')
@@ -76,6 +86,27 @@ function SetupPage({ me }: { me: Me }) {
       .catch(() => setHistory([]))
 
   useEffect(() => { void refresh() }, [])
+
+  // Someone who built a draft on makerbay.app before signing up arrives here
+  // with ?claim=<token>. Claiming stages it as an ordinary job they still have
+  // to confirm - signing up is not consent to publish.
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('claim')
+    if (!token) return
+    // Take it out of the address bar immediately: it is a credential, and one
+    // sitting in a URL gets pasted into support tickets and shared screens.
+    window.history.replaceState({}, '', window.location.pathname)
+    setClaiming(true)
+    api('POST', '/v1/setup/claim', { token })
+      .then((r) => {
+        if (r.job) setJob(r.job)
+        setNote(r.message ?? 'Brought over.')
+        return api('GET', `/v1/setup/jobs/${r.job?.jobId}`)
+      })
+      .then((r) => { if (r?.artifacts?.[0]) setArtifact(r.artifacts[0]) })
+      .catch((err) => setError(explain(err)))
+      .finally(() => { setClaiming(false); void refresh() })
+  }, [])
 
   const start = async (e: FormEvent) => {
     e.preventDefault()
@@ -157,6 +188,10 @@ function SetupPage({ me }: { me: Me }) {
           ))}
         </div>
         <p className="meta">{chosen.blurb}</p>
+        <p className="meta">
+          Or <a href={SESSION_URL} target="_blank" rel="noopener">book 45 minutes with a person</a> for
+          $99 and do it together on a call.
+        </p>
 
         <form onSubmit={start} className="row mt" style={{ gap: 8 }}>
           <input
@@ -174,6 +209,16 @@ function SetupPage({ me }: { me: Me }) {
         {error && <Notice tone="err">{error}</Notice>}
         {note && <Notice tone="ok">{note}</Notice>}
       </div>
+
+      {claiming && (
+        <div className="card">
+          <h2>Bringing your draft over</h2>
+          <Skeleton rows={2} />
+          <p className="meta">
+            The page you built before signing up. Nothing goes live until you have read it and said so.
+          </p>
+        </div>
+      )}
 
       {busy && !artifact && (
         <div className="card">
@@ -238,6 +283,20 @@ function SetupPage({ me }: { me: Me }) {
           <p className="meta mt">
             If you use it and change your mind, Your page keeps every version and putting it back
             is one tap, on any plan.
+          </p>
+        </div>
+      )}
+
+      {job && (job.status === 'needs_you' || job.status === 'failed' || job.status === 'needs_person') && (
+        <div className="card">
+          <h2>Rather have someone do it with you?</h2>
+          <p className="meta">
+            Book 45 minutes and a person sets it up on your screen while you watch, including the
+            parts that are not in MakerBay at all. $99, and it is refunded if we do not finish
+            what we agreed.
+          </p>
+          <p>
+            <a className="btn" href={SESSION_URL} target="_blank" rel="noopener">Book a time</a>
           </p>
         </div>
       )}

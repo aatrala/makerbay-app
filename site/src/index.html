@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/assets/mb.css" />
 <link rel="preconnect" href="https://chat.makerbay.app" />
 <script src="/assets/hero-demo.js" defer></script>
+<script src="/assets/hero-setup.js" defer></script>
 </head>
 <body>
 
@@ -32,17 +33,24 @@
   <div class="wrap hero-flex">
     <div class="hero-copy">
       <span class="offer-pill">First 100 workspaces: Trade $19/mo USD — for as long as you stay</span>
-      <h1>Be found, answered and booked — without lifting a finger</h1>
+      <h1>Show us your business. Get a page back.</h1>
       <p class="lead">
-        MakerBay answers while your hands are full — a real page, an assistant
-        that knows your prices, a diary customers book themselves into.
-        Watch it happen →
+        Paste your website, your Facebook page or your Google listing. We will
+        build you a working business page in about a minute, with your
+        services, your prices and your hours on it.
       </p>
-      <div class="cta">
-        <a class="btn lg" href="https://app.makerbay.app">Start free</a>
-        <a class="btn lg ghost" href="https://demo.makerbay.app" rel="noopener">Explore the demo workspace</a>
-      </div>
-      <small>Free plan · No card to start · Month to month</small>
+      <form class="hero-setup" id="hero-setup" novalidate>
+        <label class="sr-only" for="hero-url">Your website, Facebook page or Google listing</label>
+        <input id="hero-url" name="url" type="text" inputmode="url" autocomplete="url"
+               placeholder="yourbusiness.com.au" />
+        <button class="btn lg" type="submit">Build my page</button>
+      </form>
+      <small>Free · No account · Nothing published without your say so</small>
+      <div class="hero-result" id="hero-result" hidden></div>
+      <p class="hero-alt">
+        No website yet? <a href="https://app.makerbay.app">Start free</a>, or
+        <a href="https://demo.makerbay.app" rel="noopener">explore the demo workspace</a>.
+      </p>
     </div>
     <div class="hero-demo">
       <div class="phone" data-live="https://chat.makerbay.app/makerbay-demo">
@@ -57,7 +65,7 @@
           </div>
           <div class="hb msg-a">Booked for Tuesday 2:30 pm — confirmation sent ✓</div>
         </div>
-        <button class="phone-live" type="button">It's real — tap to ask your own question</button>
+        <button class="phone-live" type="button">This is what your page does once it's live — tap it</button>
       </div>
     </div>
   </div>

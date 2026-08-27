@@ -602,7 +602,47 @@ form. The alarm email is the trigger to revisit.
 
 ## Issues 93-94 (in consultation, 2026-08-27)
 
-### 93 — Live assistant as a service ("Set it up for me") 🔶 PHASES 1, 2, 4 LIVE; phase 3 awaiting your call
+### 93 — Live assistant as a service ("Set it up for me") 🔶 ALL PHASES LIVE, founder test welcome
+**Hero field, claim screen and phase 3 shipped 2026-08-27.**
+- **The hero on makerbay.app is now one field and one button.** "Show us your
+  business. Get a page back." The two competing CTAs are gone; "Start free"
+  and the demo workspace are small print underneath. The phone mock stays but
+  its caption changed from selling the demo to showing what the page does
+  once it is live.
+- **The wait is the demo.** The twenty to sixty seconds while the page is read
+  narrates what is happening rather than spinning, because a grounded,
+  honest assistant is easier to show than to describe.
+- **The claim link points at `/setup?claim=<token>`, not `/`.** That matters:
+  `<Login>` and `<Onboarding>` render in place without changing the URL, so
+  the token survives both, but the `/` route is a `<Navigate>` that would
+  drop the query string. Landing straight on `/setup` is what makes the flow
+  work for a brand-new signup.
+- **`setup` had to join CORE in web/src/modules.ts.** Its manifest carries
+  `entitlementKey: null`, so it never appears in `me.entitlements` and
+  `enabledModules` would have filtered it out - taking the `/setup` route
+  with it, and 404ing every claim link. Being in CORE also keeps it out of
+  the landing slot, which is right: nobody should arrive at "Set it up for
+  me" as their home screen.
+- **The token is stripped from the address bar on arrival.** It is a
+  credential, and one sitting in a URL gets pasted into support tickets and
+  shared screens.
+
+**Phase 3, the founder-approved shape: the $99 session is a BOOKING in the
+MakerBay HQ workspace** (`01M0T3STMAKERBAYHQ00000001`, slug `makerbay-hq`),
+sold through the same booking and deposit flow any tradie's customer uses.
+That is the whole reason it needs no payment code: MakerBay already knows how
+to sell a booked slot. The setup screen offers it as a standing line under
+the picker, and prominently whenever a job ends `needs_you`, `failed` or
+`needs_person`.
+**One founder step to finish it:** create the service in the HQ workspace -
+45 minutes, $99, deposit on. Until that exists the link goes to a page with
+nothing bookable on it.
+**Deliberately still not built:** one-off Stripe charges. Nothing on the menu
+needs them yet, and the market consult's verdict was that this layer is an
+activation instrument rather than a revenue line. The free-tier $10 and the
+$49 custom job are what would force the till, and neither has a customer
+waiting.
+
 **Phase 4 (strangers) shipped 2026-08-27, ahead of phase 3.** Founder chose
 "build it behind caps, no email", so the claim link comes back on screen
 rather than by mail and the whole flow works while SES is sandboxed.
