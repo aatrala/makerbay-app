@@ -61,23 +61,37 @@ export interface JobArtifact {
   status: 'staged' | 'applied' | 'rejected'
 }
 
-const JOBS = () => process.env.TABLE_SETUPJOBS!
-const ARTIFACTS = () => process.env.TABLE_SETUPARTIFACTS!
+/**
+ * Jobs and their artifacts share one table, keyed pk/sk. Two tables would be
+ * tidier on paper; this stack sits close to CloudFormation's 500-resource
+ * ceiling (issue 111), and a job and its artifacts are always read together
+ * anyway.
+ *
+ *   job       pk = <tenantId>            sk = JOB#<jobId>
+ *   artifact  pk = <tenantId>#<jobId>    sk = ARTIFACT#<kind>#<ulid>
+ */
+const TABLE = () => process.env.TABLE_SETUPJOBS!
 
 export async function putJob(row: JobRow): Promise<void> {
-  await ddb.send(new PutCommand({ TableName: JOBS(), Item: { ...row, updatedAt: new Date().toISOString() } }))
+  await ddb.send(new PutCommand({
+    TableName: TABLE(),
+    Item: { ...row, pk: row.tenantId, sk: `JOB#${row.jobId}`, updatedAt: new Date().toISOString() },
+  }))
 }
 
 export async function getJob(tenantId: string, jobId: string): Promise<JobRow | undefined> {
-  const r = await ddb.send(new GetCommand({ TableName: JOBS(), Key: { tenantId, jobId } }))
+  const r = await ddb.send(new GetCommand({
+    TableName: TABLE(),
+    Key: { pk: tenantId, sk: `JOB#${jobId}` },
+  }))
   return r.Item as JobRow | undefined
 }
 
 export async function listJobs(tenantId: string): Promise<JobRow[]> {
   const r = await ddb.send(new QueryCommand({
-    TableName: JOBS(),
-    KeyConditionExpression: 'tenantId = :t',
-    ExpressionAttributeValues: { ':t': tenantId },
+    TableName: TABLE(),
+    KeyConditionExpression: 'pk = :p AND begins_with(sk, :s)',
+    ExpressionAttributeValues: { ':p': tenantId, ':s': 'JOB#' },
     ScanIndexForward: false,
     Limit: 20,
   }))
@@ -85,12 +99,12 @@ export async function listJobs(tenantId: string): Promise<JobRow[]> {
 }
 
 export async function putArtifact(a: JobArtifact): Promise<void> {
-  await ddb.send(new PutCommand({ TableName: ARTIFACTS(), Item: a }))
+  await ddb.send(new PutCommand({ TableName: TABLE(), Item: a }))
 }
 
 export async function listArtifacts(tenantId: string, jobId: string): Promise<JobArtifact[]> {
   const r = await ddb.send(new QueryCommand({
-    TableName: ARTIFACTS(),
+    TableName: TABLE(),
     KeyConditionExpression: 'pk = :p',
     ExpressionAttributeValues: { ':p': `${tenantId}#${jobId}` },
   }))

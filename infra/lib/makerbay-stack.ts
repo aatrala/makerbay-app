@@ -72,8 +72,7 @@ export class MakerbayStack extends cdk.Stack {
     // "Set it up for me" (docs/spec-concierge.md): the agent stages every
     // change as an artifact and the owner approves it. Nothing reaches a live
     // surface from these tables directly.
-    const setupJobs = table('SetupJobs', 'tenantId', 'jobId')
-    const setupArtifacts = table('SetupArtifacts', 'pk', 'sk')
+    const setupJobs = table('SetupJobs', 'pk', 'sk')
     // Support tickets (issue 49): customers write in-app, staff answer in
     // the console, email carries the notifications both ways.
     const tickets = table('Tickets', 'tenantId', 'ticketId')
@@ -521,7 +520,6 @@ export class MakerbayStack extends cdk.Stack {
     const setupFn = fn('SetupApiFn', 'modules/setup/api/src/handler.ts', {
       ...tableEnv,
       TABLE_SETUPJOBS: setupJobs.tableName,
-      TABLE_SETUPARTIFACTS: setupArtifacts.tableName,
       // Read only, to diff against what the page says now. Every WRITE goes
       // back over the module API carrying the owner's own token, so the agent
       // never holds a credential of its own.
@@ -529,7 +527,6 @@ export class MakerbayStack extends cdk.Stack {
       API_BASE: `https://api.${DOMAIN}`,
     }, { timeoutSeconds: 120, memorySize: 1024 })
     setupJobs.grantReadWriteData(setupFn)
-    setupArtifacts.grantReadWriteData(setupFn)
     presenceConfig.grantReadData(setupFn)
     bus.grantPutEventsTo(setupFn)
     setupFn.addToRolePolicy(new iam.PolicyStatement({
@@ -1208,7 +1205,10 @@ export class MakerbayStack extends cdk.Stack {
     // per-email caps before it exists at all (docs/spec-concierge.md).
     httpApi.addRoutes({
       path: '/v1/setup/{proxy+}',
-      methods: routeMethods,
+      // Only what the handler serves. Every method is a separate Route and a
+      // separate Lambda permission, and this stack is close to
+      // CloudFormation's 500-resource ceiling.
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration('SetupProxyIntegration', setupFn),
       authorizer,
     })
@@ -1247,15 +1247,19 @@ export class MakerbayStack extends cdk.Stack {
       })
     }
 
+    // Only the methods each handler actually serves. A route for a method the
+    // Lambda does not implement still costs an API Gateway Route AND a Lambda
+    // permission, and buys an invocation that returns 404. This stack sits
+    // close to CloudFormation's 500-resource ceiling (see issue 111).
     httpApi.addRoutes({
       path: '/v1/visibility/{proxy+}',
-      methods: routeMethods,
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST, apigwv2.HttpMethod.PUT],
       integration: new HttpLambdaIntegration('VisibilityIntegration', visibilityFn),
       authorizer,
     })
     httpApi.addRoutes({
       path: '/v1/voice/{proxy+}',
-      methods: routeMethods,
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT],
       integration: new HttpLambdaIntegration('RescueIntegration', rescueApiFn),
       authorizer,
     })
@@ -1273,7 +1277,7 @@ export class MakerbayStack extends cdk.Stack {
     })
     httpApi.addRoutes({
       path: '/v1/genie/{proxy+}',
-      methods: routeMethods,
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration('GenieIntegration', genieFn),
       authorizer,
     })

@@ -805,7 +805,7 @@ Also in scope: Resend as an alternative or failover if the SES appeal
 (issue 76) stays blocked, and the exact Cognito mechanism for email
 one-time-code sign-in.
 
-## Issues 95-110 (repo audit + item 93/94 consults, 2026-08-27)
+## Issues 95-111 (repo audit + item 93/94 consults, 2026-08-27)
 
 Found while auditing the repo for item 93. Numbers 95-100 are defects that
 exist TODAY; 101-102 are the cleanup that shipped alongside. Every one was
@@ -1000,6 +1000,33 @@ typecheck clean, all 16 Lambda entry points bundle.
 above the route condition rather than inside it, so it typechecked but would
 have denied GETs. Caught and corrected; every guard now sits inside its own
 `if (method === ...)`.
+
+### 111 — The CDK stack is at CloudFormation's 500-resource ceiling ⛔ P0
+Deploying phase 1 of issue 93 failed with **509 resources against a hard
+maximum of 500**. Not a code error - a limit that had been building and that
+one new module tipped over. The dominant categories:
+`AWS::Lambda::Permission (137)`, `AWS::ApiGatewayV2::Route (123)`,
+`AWS::ApiGatewayV2::Integration (35)`, `AWS::DynamoDB::Table (38)`.
+The arithmetic: every path is registered against five HTTP methods, and each
+method is a separate Route AND a separate Lambda permission. So one
+`{proxy+}` path costs ten resources.
+**Unblocked for now (2026-08-27) by trimming, not by fixing:**
+- setup uses one table rather than two, and registers GET+POST only
+- visibility, voice and genie now register only the methods their handlers
+  actually serve. This is a correctness improvement as well: a route for a
+  method the Lambda does not implement still costs both resources and buys an
+  invocation that returns 404. Verified live afterwards - genie PATCH now
+  404s at the edge, genie GET still 401s.
+That bought about 20 resources of headroom. **It is not a fix.** The next two
+or three modules will hit the ceiling again, and phases 2-4 of issue 93 add a
+state machine, more tables and more routes.
+**The real fix is issue 12, splitting the stack**, which was filed as
+reviewability and is now a blocker. Candidate seams: data, identity, api,
+static sites, telephony. Moving a resource between stacks needs care -
+RETAIN plus import rather than delete and recreate, or tenant data goes.
+**Also worth doing:** audit the remaining modules for methods they never
+serve. contacts, presence, reviews, requests, assistant and core-api each
+register five and serve four.
 
 ### 95 — Metered usage can double-count and overbill ✅ FIXED
 `packages/core-api/src/usage-aggregator.ts` declares `idempotencyKey` on its
