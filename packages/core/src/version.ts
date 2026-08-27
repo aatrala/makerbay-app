@@ -8,6 +8,7 @@ import reviewsManifest from '../../../modules/reviews/module.json'
 import paymentsManifest from '../../../modules/payments/module.json'
 import genieManifest from '../../../modules/genie/module.json'
 import visibilityManifest from '../../../modules/visibility/module.json'
+import setupManifest from '../../../modules/setup/module.json'
 import voiceManifest from '../../../modules/voice/module.json'
 
 /**
@@ -60,7 +61,7 @@ export interface ModuleManifest {
 }
 
 /** Platform version: the core (tenancy, auth, entitlements, billing) itself. */
-export const PLATFORM_VERSION = '1.35.0'
+export const PLATFORM_VERSION = '1.36.0'
 
 export const MODULES: ModuleManifest[] = [
   contactsManifest,
@@ -74,6 +75,7 @@ export const MODULES: ModuleManifest[] = [
   reviewsManifest,
   paymentsManifest,
   genieManifest,
+  setupManifest,
 ] as ModuleManifest[]
 
 export const moduleManifest = (id: string): ModuleManifest | undefined =>

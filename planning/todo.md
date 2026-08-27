@@ -602,7 +602,37 @@ form. The alarm email is the trigger to revisit.
 
 ## Issues 93-94 (in consultation, 2026-08-27)
 
-### 93 — Live assistant as a service ("Set it up for me") 💬 SPEC WRITTEN, awaiting sign-off
+### 93 — Live assistant as a service ("Set it up for me") ⏳ PHASE 1 BUILT, needs deploy
+**Phase 1 built 2026-08-27** (not deployed - AWS session expired).
+- `packages/scrape` promoted out of the assistant module. One SSRF guard for
+  the whole platform, never forked.
+- `packages/agent-kit` extracted from Genie: the WriteTool propose/execute
+  split, `apiCall`, and a `mayConfirm` gate with issue 97's fix built in
+  rather than bolted on. **Genie now uses it**, so there is one
+  implementation, not two. 8 tests.
+- `modules/setup`: job model, Tier B extraction (a Bedrock call made with NO
+  toolConfig, so a scraped page is talking to something that cannot act) and
+  Tier C validation, artifact staging, and confirm-applies-with-the-owner's-
+  own-token. 17 tests.
+- Registered in `version.ts`; platform 1.36.0.
+**Two decisions worth recording:**
+- **Phase 1 needs no payment code at all.** Jobs are free on any paid plan,
+  so scoping phase 1 to signed-in owners on paid plans defers every Stripe
+  concern to the phase that actually needs it. Free tier gets an honest 402
+  that points at the self-serve path and says it takes ten minutes.
+- **Setup is routed authenticated-only, deliberately outside the shared route
+  loop**, which also creates `/v1/public/<prefix>/*` with no authorizer. That
+  is right for a booking page and wrong for a job driving headless Chromium
+  and Bedrock. The stranger flow is phase 4 and needs per-IP and per-email
+  caps before it exists.
+**Rules enforced in code, not just prose:** a field the owner already filled
+in is never overwritten; licence numbers, insurance, certifications,
+guarantees and years-in-business are unimportable from a scrape; every fact
+carries the URL and sentence it came from; the diff is recomputed at confirm
+time and refuses if the page moved underneath it.
+**Verified:** typecheck clean, 128 tests (was 103), web/admin/infra
+typecheck, site builds 12 modules, all Lambda entry points bundle.
+
 A concierge layer where the assistant does setup and configuration work FOR
 the customer. Founder principle: every task must ALSO be doable by the
 customer themselves in the UI. The concierge is a "do it for me" option

@@ -1,0 +1,62 @@
+{
+  "id": "setup",
+  "name": "Set it up for me",
+  "tagline": "Show us your business. Get a page back.",
+  "status": "in-development",
+  "version": {
+    "api": "1.0.0",
+    "web": "0.1.0"
+  },
+  "routes": [
+    "/v1/setup/*"
+  ],
+  "meteredMetrics": [
+    "setup.job_started",
+    "setup.job_confirmed"
+  ],
+  "entitlementKey": null,
+  "pricing": "free",
+  "dependsOn": [
+    "presence"
+  ],
+  "roadmap": {
+    "order": 12,
+    "note": "Phase 1: one job, signed-in owners on paid plans, no payment code. Free on any paid plan is a founder decision, so the money only arrives with the free tier and the stranger flow."
+  },
+  "marketing": {
+    "summary": "Paste your website, your Facebook page or your Google listing, and we build your page from it. You look at it before anyone else does, and you keep it or bin it. You can do all of this yourself in the app in about ten minutes. This is for when you would rather not.",
+    "audience": "Anyone who has a business already described somewhere online and no evening free to retype it.",
+    "features": [
+      {
+        "title": "You see it before you own it",
+        "body": "Nothing is published, and nothing on your page is overwritten, until you have read the changes and said yes. A field you already filled in is never touched."
+      },
+      {
+        "title": "Every fact says where it came from",
+        "body": "Each line we propose shows the page it came off and the sentence that said it, so you can check it rather than trust it."
+      },
+      {
+        "title": "We will not make up a business",
+        "body": "If there is nothing useful to read, we say so. Licence numbers, insurance, certifications and years in business are never taken off a website: you type those or they do not appear."
+      },
+      {
+        "title": "Undo, forever, free",
+        "body": "Every save keeps a version. If you do not like what we did, put it back in one tap, on any plan."
+      }
+    ],
+    "faq": [
+      {
+        "q": "Can I just do it myself?",
+        "a": "Yes, and it takes about ten minutes. Everything here is a screen you already have. This is the same job done for you."
+      },
+      {
+        "q": "Will it change things I have already written?",
+        "a": "No. We only fill in what is empty. Anything you wrote yourself stays exactly as it is."
+      },
+      {
+        "q": "What if it gets something wrong?",
+        "a": "You see every change before it goes live, and you can reject the lot. If something slips through, undo is one tap and it is free on every plan."
+      }
+    ]
+  }
+}

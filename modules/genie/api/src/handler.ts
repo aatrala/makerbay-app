@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { mayConfirm, principal, type PendingAction } from '@makerbay/agent-kit'
 import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import {
   BedrockRuntimeClient,
@@ -216,34 +217,6 @@ async function history(tenantId: string, event: Event): Promise<APIGatewayProxyR
 
 const API = 'https://api.makerbay.app'
 
-interface PendingAction {
-  pk: string
-  sk: 'action'
-  tenantId: string
-  sessionId: string
-  actionId: string
-  tool: string
-  params: Record<string, string>
-  /** One sentence the confirmation card shows. Built server-side at propose time. */
-  summary: string
-  status: 'proposed' | 'executed' | 'declined'
-  /**
-   * The principal that created this proposal. Without it any valid token for
-   * the tenant can confirm any card, so the moment a second principal exists
-   * in a workspace (a concierge delegation, an API key) it can confirm its
-   * own proposals and the card stops being a control.
-   */
-  proposedBy: string
-  proposedByKind: 'user' | 'apikey'
-  createdAt: string
-  expiresAt: number
-  receipt?: string
-}
-
-/** Who is making this request: a signed-in human, or a key. */
-const principal = (ctx: CallerContext): { id: string; kind: 'user' | 'apikey' } =>
-  ctx.userId ? { id: ctx.userId, kind: 'user' } : { id: ctx.keyId ?? 'unknown', kind: 'apikey' }
-
 async function getAction(tenantId: string, actionId: string): Promise<PendingAction | undefined> {
   const r = await ddb.send(new GetCommand({
     TableName: Tables.sessions(),
@@ -437,18 +410,16 @@ async function confirmAction(tenantId: string, actionId: string, event: Event, c
   // Only a signed-in human confirms. A key of any kind - an integration, or a
   // concierge delegation acting for the owner - can propose all it likes and
   // can never approve its own work. That is the whole value of the card.
-  const who = principal(ctx)
-  if (who.kind !== 'user') {
-    return json(403, {
-      error: 'confirmation_requires_a_person',
-      message: 'Only the owner can confirm this, signed in to their workspace.',
-    })
+  const gate = mayConfirm(action, ctx)
+  if (!gate.ok) {
+    return gate.reason === 'requires_a_person'
+      ? json(403, {
+          error: 'confirmation_requires_a_person',
+          message: 'Only the owner can confirm this, signed in to their workspace.',
+        })
+      : json(404, { error: 'not_found' })
   }
-  // Belt and braces: a machine proposal can never be confirmed by the same
-  // principal, whatever the check above concluded.
-  if (action.proposedByKind !== 'user' && action.proposedBy === who.id) {
-    return json(403, { error: 'confirmation_requires_a_person' })
-  }
+  const who = gate.who
   // Rows predating `role` exist; every workspace has exactly one user, its
   // owner, so a missing role means owner.
   const confirmer = await getUser(who.id)

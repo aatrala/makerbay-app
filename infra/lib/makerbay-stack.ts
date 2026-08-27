@@ -69,6 +69,11 @@ export class MakerbayStack extends cdk.Stack {
     // prices, assistant settings. Presence has had snapshots since issue 45;
     // these had neither a trail nor a way back (issue 99).
     const configVersions = table('ConfigVersions', 'pk', 'sk')
+    // "Set it up for me" (docs/spec-concierge.md): the agent stages every
+    // change as an artifact and the owner approves it. Nothing reaches a live
+    // surface from these tables directly.
+    const setupJobs = table('SetupJobs', 'tenantId', 'jobId')
+    const setupArtifacts = table('SetupArtifacts', 'pk', 'sk')
     // Support tickets (issue 49): customers write in-app, staff answer in
     // the console, email carries the notifications both ways.
     const tickets = table('Tickets', 'tenantId', 'ticketId')
@@ -513,6 +518,27 @@ export class MakerbayStack extends cdk.Stack {
     })
     // Genie: the owner's read-everything copilot. Same chat model as the
     // assistant; its own session table; read-only views over the business.
+    const setupFn = fn('SetupApiFn', 'modules/setup/api/src/handler.ts', {
+      ...tableEnv,
+      TABLE_SETUPJOBS: setupJobs.tableName,
+      TABLE_SETUPARTIFACTS: setupArtifacts.tableName,
+      // Read only, to diff against what the page says now. Every WRITE goes
+      // back over the module API carrying the owner's own token, so the agent
+      // never holds a credential of its own.
+      TABLE_PRESENCECONFIG: presenceConfig.tableName,
+      API_BASE: `https://api.${DOMAIN}`,
+    }, { timeoutSeconds: 120, memorySize: 1024 })
+    setupJobs.grantReadWriteData(setupFn)
+    setupArtifacts.grantReadWriteData(setupFn)
+    presenceConfig.grantReadData(setupFn)
+    bus.grantPutEventsTo(setupFn)
+    setupFn.addToRolePolicy(new iam.PolicyStatement({
+      // Extraction only. The model that reads a scraped page is invoked with
+      // no tools at all, so this grant cannot reach anything but text.
+      actions: ['bedrock:InvokeModel'],
+      resources: ['*'],
+    }))
+
     const genieFn = fn('GenieApiFn', 'modules/genie/api/src/handler.ts', {
       ...tableEnv,
       TABLE_GENIESESSIONS: genieSessions.tableName,
@@ -1175,6 +1201,18 @@ export class MakerbayStack extends cdk.Stack {
       integration: new HttpLambdaIntegration('ContactsProxyIntegration', contactsFn),
       authorizer,
     })
+    // Setup is registered on its own, authenticated only. The shared loop
+    // below also creates /v1/public/<prefix>/* with no authorizer, which is
+    // right for a booking page and wrong for a job that drives headless
+    // Chromium and Bedrock. The stranger flow is phase 4 and needs per-IP and
+    // per-email caps before it exists at all (docs/spec-concierge.md).
+    httpApi.addRoutes({
+      path: '/v1/setup/{proxy+}',
+      methods: routeMethods,
+      integration: new HttpLambdaIntegration('SetupProxyIntegration', setupFn),
+      authorizer,
+    })
+
     for (const [name, prefix, handler] of [
       ['Requests', 'requests', requestsFn],
       ['Booking', 'booking', bookingFn],

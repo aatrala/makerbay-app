@@ -1,0 +1,15 @@
+{
+  "name": "@makerbay/setup-api",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@makerbay/agent-kit": "1.0.0",
+    "@makerbay/core": "0.1.0",
+    "@makerbay/scrape": "1.0.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145"
+  }
+}

@@ -62,7 +62,7 @@ import {
   type HelpRenderOpts,
   type HelpTheme,
 } from './help'
-import { discoverPages, scrapePage } from './scrape'
+import { discoverPages, scrapePage } from '@makerbay/scrape'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 

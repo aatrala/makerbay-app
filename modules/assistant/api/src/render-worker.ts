@@ -1,6 +1,6 @@
 import chromium from '@sparticuz/chromium'
 import puppeteer from 'puppeteer-core'
-import { assertPublicUrl } from './scrape'
+import { assertPublicUrl } from '@makerbay/scrape'
 
 /**
  * Headless-browser rescue for JavaScript-drawn pages. A separate Lambda on
