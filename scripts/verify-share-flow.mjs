@@ -25,6 +25,23 @@ const SLUG = process.argv[2] ?? 'harbour-test-plumbing'
 const lambda = new LambdaClient({ region: REGION })
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }))
 
+/**
+ * Pull the token out of a document link.
+ *
+ * The address changed shape in phase 2, from
+ *   chat.makerbay.app/quote?slug=…&token=…
+ * to
+ *   quote.makerbay.app/{slug}/{label}/{token}
+ * so the token is the last path segment, not a query parameter.
+ */
+const tokenOf = (url) => {
+  const u = new URL(url)
+  const fromQuery = u.searchParams.get('token')
+  if (fromQuery) return fromQuery
+  const seg = u.pathname.split('/').filter(Boolean)
+  return seg.length ? decodeURIComponent(seg[seg.length - 1]) : ''
+}
+
 const results = []
 const check = (label, ok, detail = '') => {
   results.push({ label, ok })
@@ -124,8 +141,13 @@ const shared = await invoke(authed('POST', `/v1/quotes/${quoteId}/share`, {}, ct
 check('shares without sending anything', shared.status === 200, `HTTP ${shared.status} ${shared.data?.error ?? ''}`)
 check('leaves draft on share', shared.data?.quote?.status === 'sent', `status=${shared.data?.quote?.status}`)
 check('did not email', shared.data?.emailed === false)
-const token = new URL(shared.data?.publicUrl ?? 'https://x/').searchParams.get('token')
+const token = tokenOf(shared.data?.publicUrl ?? 'https://x/')
 check('hands back a link carrying the token', Boolean(token))
+check('uses the readable document host', shared.data?.publicUrl?.startsWith('https://quote.makerbay.app/'),
+  shared.data?.publicUrl)
+check('has no query string for SMS to mangle', !String(shared.data?.publicUrl ?? '?').includes('?'))
+check('is shorter than the query-string form it replaced',
+  String(shared.data?.publicUrl ?? '').length < 90, `${String(shared.data?.publicUrl ?? '').length} chars`)
 
 // 3. Open it as the customer: no sign-in of any kind.
 const view = await invoke(publicCall('GET', `/v1/public/quotes/${token}`, { slug: SLUG }))
@@ -177,13 +199,13 @@ const second = await invoke(authed('POST', '/v1/quotes', {
 }, ctx))
 const secondId = second.data?.quote?.quoteId
 const secondShare = await invoke(authed('POST', `/v1/quotes/${secondId}/share`, {}, ctx))
-const oldToken = new URL(secondShare.data.publicUrl).searchParams.get('token')
+const oldToken = tokenOf(secondShare.data.publicUrl)
 check('the second link works before revoking',
   (await invoke(publicCall('GET', `/v1/public/quotes/${oldToken}`, { slug: SLUG }))).status === 200)
 
 const revoked = await invoke(authed('POST', `/v1/quotes/${secondId}/revoke`, {}, ctx))
 check('revoking succeeds', revoked.status === 200, `HTTP ${revoked.status} ${revoked.data?.error ?? ''}`)
-const newToken = new URL(revoked.data.publicUrl).searchParams.get('token')
+const newToken = tokenOf(revoked.data.publicUrl)
 check('revoking mints a different token', newToken !== oldToken)
 check('the OLD link stops working',
   (await invoke(publicCall('GET', `/v1/public/quotes/${oldToken}`, { slug: SLUG }))).status === 404)

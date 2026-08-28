@@ -1644,7 +1644,7 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
   deposit 20%, Genie grant.
 - Support runbook: docs/runbook-support.md (staff bootstrap is CLI-only).
 
-### 118 — Quotes and invoices without email ✅ phase 1 live / 🔶 phase 2 built, awaiting deploy
+### 118 — Quotes and invoices without email ✅ phases 1 and 2 live
 A tradesperson with only a phone number could build a quote and never obtain
 its link. Not a missing feature: a circular dependency. `sendQuote` refused
 without an email, emailing was the ONLY transition out of draft, and the link
@@ -1747,6 +1747,24 @@ out months later.
   and HSTS.
 - **The URL was built in four places, two unencoded**, under a comment saying
   "one definition, so it cannot drift". Now genuinely one definition.
+
+**Deployed and verified live 2026-08-28.** 28/28 on
+`scripts/verify-share-flow.mjs`, plus a real browser run: a quote opened at
+`quote.makerbay.app/harbour-test-plumbing/Q-008/<token>`, the empty-name gate
+refused, a typed name accepted, and the acceptance row carried the name, a real
+caller IP, the check used, a sha-256 hash and the frozen figures. The card
+renders "Quote from Harbour Test Plumbing" with no amount, and does so when
+handed a FAKE token - which is the proof that the renderer never reads the row.
+Headers verified on the live host: X-Frame-Options DENY, referrer-policy
+no-referrer, nosniff, HSTS.
+
+**Process gap this exposed:** `cdk deploy` does not publish the embed assets -
+there is no BucketDeployment in the stack. The shell shipped correct while
+pages.js in the bucket was two days stale, so the customer page would have said
+"This link is not valid." Fixed by `scripts/publish-embed.mjs` (uploads what
+differs, sets cache-control, invalidates; `--check` gates a release) and a note
+in CLAUDE.md. The assets also had NO cache-control at all, the same class of
+bug as issue 92 on the marketing site.
 
 **Superseded note:** the original phase-2 plan below.
  `chat.makerbay.app` serves one static

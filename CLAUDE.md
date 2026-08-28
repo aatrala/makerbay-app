@@ -20,6 +20,14 @@
   it generates the marketing pages, the roadmap and the version endpoint.
 - Run `npm run typecheck` before any deploy. CDK bundles Lambda code with
   esbuild, which does NOT typecheck, so without it a type error ships silently.
+- **`cdk deploy` does NOT publish the customer-facing pages.** There is no
+  BucketDeployment in the stack, so `modules/assistant/embed/src/*` (chat.css,
+  pages.js, chat.js, widget.js, index.html) stays as-is however many times you
+  deploy. After changing any of them run
+  `node scripts/publish-embed.mjs`, which uploads what actually differs, sets
+  cache-control and invalidates. `--check` reports drift and exits non-zero.
+  This bit issue 118 phase 2: the server-rendered shell shipped correct while
+  the script it loads was two days stale.
 - Contacts is core: always on, `entitlementKey: null`. Other modules attach
   customers with `upsertContact` and `appendContactEvent` from `packages/core`
   rather than keeping their own list.
