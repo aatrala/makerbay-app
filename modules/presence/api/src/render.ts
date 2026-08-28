@@ -350,9 +350,15 @@ const styles = (brand: string, theme: ThemeStyle, config: PresenceConfigRow) => 
 `
 }
 
+const CASH_LOCALE: Record<string, string> = {
+  AUD: 'en-AU', NZD: 'en-NZ', GBP: 'en-GB', USD: 'en-US', CAD: 'en-CA',
+  EUR: 'en-IE', INR: 'en-IN', SGD: 'en-SG', ZAR: 'en-ZA', AED: 'en-AE',
+}
+// Plain 'en' rendered every non-US currency with a disambiguating prefix on
+// the page customers actually read (issue 114).
 const cash = (cents: number, currency = 'AUD') => {
   try {
-    return new Intl.NumberFormat('en', {
+    return new Intl.NumberFormat(CASH_LOCALE[String(currency).toUpperCase()] ?? 'en', {
       style: 'currency', currency,
       minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
     }).format(cents / 100)

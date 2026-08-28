@@ -195,6 +195,10 @@ export const createTenant = (name: string, trade?: string) =>
     name,
     trade,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+    // Same reasoning as the timezone: the browser knows the region, and
+    // "AUD" on a Manchester electrician's first quote looks deliberate
+    // enough that nobody questions it until a customer does (issue 114).
+    locale: (typeof navigator !== 'undefined' && navigator.language) || undefined,
   })
 export const enableModule = (id: string) => api('POST', `/v1/core/modules/${id}/enable`, {})
 

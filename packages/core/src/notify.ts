@@ -202,14 +202,9 @@ export const tokenMatches = (a?: string, b?: string): boolean => {
 }
 
 // ── Money ────────────────────────────────────────────────────────────────
-// Integer minor units everywhere. No float ever touches a price.
-
-export const money = (cents: number, currency = 'AUD'): string =>
-  new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(cents / 100)
-
-/** Line total, rounded once, so a hand-added column matches the invoice. */
-export const lineTotalCents = (quantity: number, unitCents: number): number =>
-  Math.round(quantity * unitCents)
+// Moved to ./money when the en-AU hardcoding turned out to render every
+// foreign currency wrong (issue 114). Re-exported so the many callers that
+// import it from here keep working.
 
 // ── SMS ──────────────────────────────────────────────────────────────────
 // Same contract as sendEmail: never throws, failures are recorded on the row

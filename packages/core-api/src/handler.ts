@@ -27,6 +27,7 @@ import {
   SCOPES_BY_KEY_TYPE,
   setModuleEntitlement,
   slugCandidates,
+  currencyForLocale,
   ulid,
   updateTenantName,
   updateTenantSlug,
@@ -164,6 +165,11 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
     }
   }
 
+  // Validated the same way as the timezone: an unrecognised region leaves it
+  // unset rather than guessing, because a wrong currency that looks
+  // deliberate gets quoted in (issue 114).
+  const currency = currencyForLocale(String(body.locale ?? '').trim() || undefined)
+
   const now = new Date().toISOString()
   const tenant = {
     tenantId: ulid(),
@@ -173,6 +179,7 @@ async function createWorkspace(ctx: CallerContext, event: Event): Promise<APIGat
     status: 'active' as const,
     trade,
     timezone,
+    currency,
     createdAt: now,
   }
   await createTenant(tenant, {

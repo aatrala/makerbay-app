@@ -1104,7 +1104,7 @@ real bounce.
 day a SINGLE complaint is 1%, ten times the review threshold. Alarm on
 absolute counts, not rates, until volume is in the thousands.
 
-### 108 — No DMARC record 🔶 P1
+### 108 — No DMARC record ✅ shipped
 SPF, DKIM and a custom MAIL FROM are all correctly written by CDK
 (`makerbay-stack.ts:206`, `ses.Identity.publicHostedZone` plus
 `mailFromDomain`). `_dmarc` appears nowhere in the stack. Without it the
@@ -1117,6 +1117,27 @@ verificationemail.com, so DMARC does not apply. The moment issue 104 sets a
 custom makerbay.app FROM, that stream must DKIM-align or p=reject silently
 kills every signup. Verify alignment before tightening past p=none, and do
 not make both changes in the same week.
+
+**Done 2026-08-28.** `_dmarc.makerbay.app` is live at `p=none` with aggregate
+and forensic reporting. Alignment was verified against live AWS BEFORE
+publishing, not assumed: DKIM status SUCCESS with signing enabled and
+d=makerbay.app, and custom MAIL FROM `mail.makerbay.app` SUCCESS with the
+right `feedback-smtp.us-east-1.amazonses.com` MX. Relaxed alignment therefore
+passes on both SPF and DKIM.
+
+The trap above is now resolved rather than pending: Cognito moved onto SES in
+issue 104 and onto the shared configuration set in 107, so its mail is
+DKIM-signed by the same identity and aligns like everything else.
+
+Note the apex SPF is Microsoft 365 (`include:spf.protection.outlook.com -all`)
+for human mail. It does not conflict: SPF is evaluated against the envelope
+domain, which for SES is `mail.makerbay.app`.
+
+**ACTION NEEDED (founder):** `dmarc@makerbay.app` must exist as a mailbox or
+alias, or a DMARC processor must be pointed at. Reports are the entire point
+of `p=none` - without them there is no evidence on which to tighten.
+**Next step, not before ~2 weeks of clean reports:** quarantine at 25/50/100%,
+then reject. Do not tighten in the same week as any other mail change.
 
 ### 109 — Header injection through the business name ✅ FIXED
 `TenantRow.name` reaches `subject:` unescaped at eight call sites (e.g.
@@ -1452,7 +1473,7 @@ proposals and the confirmation card becomes decoration.
 **Fix:** add `proposedBy`, and require the confirmer to be a different
 principal and an owner.
 
-### 98 — Scraped content enters the system prompt unframed 🔶 P1
+### 98 — Scraped content enters the system prompt unframed ✅ shipped
 `modules/assistant/api/src/rag.ts` `buildPrompt` puts retrieved chunk text
 into the SYSTEM prompt with no untrusted-data framing. Genie
 (`genie/handler.ts:631`) and `presence/api/src/copy.ts` both carry the right
@@ -1461,6 +1482,16 @@ the assistant, the one component that ingests arbitrary scraped web pages,
 does not. Fix regardless of 93.
 **Fix:** move retrieved context to a user-role message inside delimiters,
 labelled with provenance, plus the standing data-not-instructions rule.
+
+**Done 2026-08-28.** Exactly that. Retrieved chunks now leave the system
+prompt entirely and ride the user turn, each fenced in a `<document>` tag
+labelled with its source, ahead of the question. The system prompt carries the
+same standing rule Genie and the page writer already had.
+
+Two escapes closed that the plan did not name: a chunk containing
+`</document>` could have ended its own fence and continued as our prose, and
+`sourceName` is tenant-supplied and lands in an attribute, so it is stripped of
+quotes, angle brackets and newlines. 13 tests, including breakout attempts.
 
 ### Issues 99 + 100 shipped 2026-08-27, pulled forward ahead of phase 1
 An agent writing prices with no trail and no rollback is the liability the

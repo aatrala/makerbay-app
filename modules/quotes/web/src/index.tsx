@@ -84,8 +84,27 @@ const aging = (i: Pick<Invoice, 'status' | 'dueAt'>) => {
   return <span className="meta">due {when(i.dueAt)}</span>
 }
 
-const cash = (cents: number, currency = 'AUD') =>
-  new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(cents / 100)
+/**
+ * Rendered in the locale that treats this currency as local, so a London
+ * electrician sees "£99.00" rather than "GBP 99.00" on their own quote
+ * (issue 114). Duplicated from packages/core/money rather than imported
+ * because this bundle must not pull in the AWS SDK that the core barrel
+ * carries; the table below is the same one.
+ */
+const CASH_LOCALE: Record<string, string> = {
+  AUD: 'en-AU', NZD: 'en-NZ', GBP: 'en-GB', USD: 'en-US', CAD: 'en-CA',
+  EUR: 'en-IE', INR: 'en-IN', SGD: 'en-SG', ZAR: 'en-ZA', AED: 'en-AE',
+}
+const cash = (cents: number, currency = 'AUD') => {
+  const code = String(currency ?? 'AUD').toUpperCase()
+  try {
+    return new Intl.NumberFormat(CASH_LOCALE[code] ?? 'en', {
+      style: 'currency', currency: code,
+    }).format(cents / 100)
+  } catch {
+    return `${code} ${(cents / 100).toFixed(2)}`
+  }
+}
 
 /** The server expires lazily on read; lists apply the same rule client-side. */
 const quoteStatus = (q: Pick<Quote, 'status' | 'validUntil'>): Quote['status'] =>

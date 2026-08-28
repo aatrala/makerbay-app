@@ -11,6 +11,12 @@ export interface Entitlements {
 export interface TenantRow {
   tenantId: string
   name: string
+  /**
+   * ISO 4217, detected from the browser's region at signup the same way the
+   * timezone is (issue 114). Optional: an unset currency can be asked about,
+   * but a wrong one that looks deliberate gets quoted in.
+   */
+  currency?: string
   slug: string
   plan: string
   status: 'active' | 'suspended'

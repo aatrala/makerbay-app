@@ -268,6 +268,46 @@ export class MakerbayStack extends cdk.Stack {
         `arn:aws:ses:${this.region}:${this.account}:configuration-set/${emailConfigSet.configurationSetName}`,
       ],
     })
+    /**
+     * DMARC (issue 108).
+     *
+     * Without this record the anti-phishing promise the code emails make
+     * ("nobody from MakerBay will ever ask you for this code") has no
+     * technical substance: anyone could spoof makerbay.app and no receiver
+     * would reject it. The claim and the enforcement have to ship together.
+     *
+     * Starting at p=none on purpose. It changes no delivery decision anywhere;
+     * it only asks receivers to report what they see, which is the evidence
+     * needed before tightening. Going straight to reject with an unproven
+     * alignment story is how a launch loses every signup email silently.
+     *
+     * Alignment was verified before publishing this, not assumed:
+     * DKIM signing is enabled and d=makerbay.app, and the custom MAIL FROM
+     * mail.makerbay.app is SUCCESS with the right MX, so the envelope domain
+     * shares an organisational domain with the From header. Relaxed alignment
+     * on both (adkim/aspf default to r) therefore passes for SES mail,
+     * including Cognito's, which now sends through this same identity.
+     *
+     * The separate Microsoft 365 SPF record on the apex covers human mail and
+     * is unaffected: SPF is evaluated against the envelope domain, which for
+     * SES is mail.makerbay.app.
+     *
+     * NOTE: aggregate reports go to dmarc@ on this domain. That mailbox or
+     * alias has to exist for the reports to be readable. Reports are the whole
+     * point of this stage, so without it there is no evidence to tighten on.
+     */
+    new route53.TxtRecord(this, 'DmarcRecord', {
+      zone: publicZone,
+      recordName: `_dmarc.${DOMAIN}`,
+      values: [
+        // One string. Route 53 splits at 255 characters on its own, and a
+        // DMARC record broken across strings is read as two policies.
+        `v=DMARC1; p=none; rua=mailto:dmarc@${DOMAIN}; ruf=mailto:dmarc@${DOMAIN}; fo=1; pct=100`,
+      ],
+      ttl: cdk.Duration.hours(1),
+      comment: 'DMARC monitoring for issue 108. Ramp to quarantine then reject once reports are clean.',
+    })
+
     new cdk.CfnOutput(this, 'EmailIdentityName', { value: emailIdentity.emailIdentityName })
     new cdk.CfnOutput(this, 'EmailConfigSetName', { value: emailConfigSet.configurationSetName })
     new cdk.CfnOutput(this, 'EmailFromAddress', { value: `hello@${DOMAIN}` })

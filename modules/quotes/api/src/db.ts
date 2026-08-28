@@ -77,6 +77,18 @@ export interface QuotesConfigRow {
   showLogoOnDocs?: boolean
 }
 
+/**
+ * The tax a customer expects to see named on an invoice. Getting this wrong is
+ * not cosmetic: a UK invoice that says "GST" instead of "VAT" looks like it
+ * came from someone who does not know the rules (issue 114).
+ */
+const TAX_LABEL: Record<string, string> = {
+  GBP: 'VAT', EUR: 'VAT',
+  USD: 'Sales tax', CAD: 'Sales tax',
+  AUD: 'GST', NZD: 'GST', SGD: 'GST', INR: 'GST',
+  ZAR: 'VAT', AED: 'VAT',
+}
+
 export const DEFAULT_QUOTES_CONFIG: Omit<QuotesConfigRow, 'tenantId'> = {
   taxRate: 0,
   taxLabel: 'GST',
@@ -90,7 +102,21 @@ export const DEFAULT_QUOTES_CONFIG: Omit<QuotesConfigRow, 'tenantId'> = {
 
 export async function getQuotesConfig(tenantId: string): Promise<QuotesConfigRow> {
   const r = await ddb.send(new GetCommand({ TableName: Tables.config(), Key: { tenantId } }))
-  return { tenantId, ...DEFAULT_QUOTES_CONFIG, ...(r.Item ?? {}) } as QuotesConfigRow
+  // A workspace that has never opened the quotes settings inherits the
+  // currency detected at signup, rather than being handed Australia's. Only
+  // when the row itself is silent - once the owner saves, their choice wins
+  // even if it happens to match the default.
+  const stored = (r.Item ?? {}) as Partial<QuotesConfigRow>
+  const fallback = { ...DEFAULT_QUOTES_CONFIG }
+  if (stored.currency === undefined) {
+    const { getTenant } = await import('@makerbay/core')
+    const currency = (await getTenant(tenantId))?.currency
+    if (currency) {
+      fallback.currency = currency
+      fallback.taxLabel = TAX_LABEL[currency] ?? fallback.taxLabel
+    }
+  }
+  return { tenantId, ...fallback, ...stored } as QuotesConfigRow
 }
 
 export async function putQuotesConfig(row: QuotesConfigRow): Promise<void> {
