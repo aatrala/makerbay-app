@@ -83,8 +83,28 @@ export async function listInvoices(tenantId: string): Promise<InvoiceRow[]> {
   return (r.Items ?? []) as InvoiceRow[]
 }
 
+/**
+ * An invoice by its public token.
+ *
+ * Was `listInvoices(tenantId).find(...)`, which reads at most 200 rows with
+ * `ScanIndexForward: false` - so once a tenant passed 200 invoices, it was the
+ * OLDER ones whose links silently stopped resolving. Now an exact lookup on
+ * the byPublicToken index, with the tenant checked on the row so a token
+ * cannot be replayed under another tenant's slug.
+ */
 export async function findInvoiceByToken(tenantId: string, token: string): Promise<InvoiceRow | undefined> {
-  return (await listInvoices(tenantId)).find((i) => i.publicToken === token)
+  if (!token) return undefined
+  const r = await ddb.send(
+    new QueryCommand({
+      TableName: Tables.invoices(),
+      IndexName: 'byPublicToken',
+      KeyConditionExpression: 'publicToken = :tok',
+      ExpressionAttributeValues: { ':tok': token },
+      Limit: 1,
+    }),
+  )
+  const invoice = (r.Items ?? [])[0] as InvoiceRow | undefined
+  return invoice?.tenantId === tenantId ? invoice : undefined
 }
 
 /**

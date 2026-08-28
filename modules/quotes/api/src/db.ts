@@ -56,6 +56,16 @@ export interface QuoteRow {
   sentAt?: string
   acceptedAt?: string
   declinedAt?: string
+  /**
+   * The replacement's public token, so the customer holding an old link can be
+   * pointed at the current version. Written by revise.
+   *
+   * Was previously written and read through three separate inline casts, which
+   * is how the type stayed silent while the field was load-bearing.
+   */
+  supersededByToken?: string
+  /** The quote this one replaces. Written by revise. */
+  revisionOf?: string
 }
 
 export interface QuotesConfigRow {
@@ -192,18 +202,32 @@ export async function listQuotes(tenantId: string, status?: QuoteStatus): Promis
   return (r.Items ?? []) as QuoteRow[]
 }
 
-/** A quote by its public token. Scoped to the tenant the link resolved to. */
+/**
+ * A quote by its public token. Scoped to the tenant the link resolved to.
+ *
+ * Queries the byPublicToken index rather than scanning the tenant's quotes.
+ * The old version used a FilterExpression with `Limit: 200`, and DynamoDB
+ * applies Limit BEFORE the filter - so it read the first 200 quotes by id and
+ * searched only inside those. Past 200 quotes, newly issued links 404 for a
+ * customer holding a link that was sent to them.
+ *
+ * The tenant check stays, and moves from the query to the row: the token is
+ * globally unique, so the index finds it without a tenant, but a token must
+ * never resolve under a DIFFERENT tenant's slug.
+ */
 export async function findByToken(tenantId: string, token: string): Promise<QuoteRow | undefined> {
+  if (!token) return undefined
   const r = await ddb.send(
     new QueryCommand({
       TableName: Tables.quotes(),
-      KeyConditionExpression: 'tenantId = :t',
-      FilterExpression: 'publicToken = :tok',
-      ExpressionAttributeValues: { ':t': tenantId, ':tok': token },
-      Limit: 200,
+      IndexName: 'byPublicToken',
+      KeyConditionExpression: 'publicToken = :tok',
+      ExpressionAttributeValues: { ':tok': token },
+      Limit: 1,
     }),
   )
-  return (r.Items ?? [])[0] as QuoteRow | undefined
+  const quote = (r.Items ?? [])[0] as QuoteRow | undefined
+  return quote?.tenantId === tenantId ? quote : undefined
 }
 
 // ── Money ────────────────────────────────────────────────────────────────

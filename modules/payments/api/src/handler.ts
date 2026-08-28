@@ -343,16 +343,22 @@ async function tenantDocPrefix(tenantId: string): Promise<string> {
 type TargetError = { error: string; message: string; status: number }
 
 async function invoiceTarget(tenantId: string, token: string): Promise<Target | TargetError> {
+  // Exact lookup on the index. The previous FilterExpression with Limit: 200
+  // searched only the first 200 rows, because DynamoDB applies Limit first -
+  // so a paying customer's link stopped working once the tenant grew.
   const r = await ddb.send(
     new QueryCommand({
       TableName: Tables.invoices(),
-      KeyConditionExpression: 'tenantId = :t',
-      FilterExpression: 'publicToken = :tok',
-      ExpressionAttributeValues: { ':t': tenantId, ':tok': token },
-      Limit: 200,
+      IndexName: 'byPublicToken',
+      KeyConditionExpression: 'publicToken = :tok',
+      ExpressionAttributeValues: { ':tok': token },
+      Limit: 1,
     }),
   )
-  const invoice = (r.Items ?? [])[0]
+  const found = (r.Items ?? [])[0]
+  // The token is globally unique, so the tenant is checked on the row: a token
+  // must never resolve under a different tenant's slug.
+  const invoice = found?.tenantId === tenantId ? found : undefined
   if (!invoice || invoice.status === 'draft') return { error: 'not_found', message: 'Invoice not found.', status: 404 }
   if (invoice.status === 'paid') return { error: 'already_paid', message: 'This invoice is already paid.', status: 409 }
   if (invoice.status === 'void') return { error: 'invoice_void', message: 'This invoice was voided.', status: 409 }
@@ -405,13 +411,14 @@ async function quoteDepositTarget(tenantId: string, token: string): Promise<Targ
   const r = await ddb.send(
     new QueryCommand({
       TableName: Tables.quotes(),
-      KeyConditionExpression: 'tenantId = :t',
-      FilterExpression: 'publicToken = :tok',
-      ExpressionAttributeValues: { ':t': tenantId, ':tok': token },
-      Limit: 200,
+      IndexName: 'byPublicToken',
+      KeyConditionExpression: 'publicToken = :tok',
+      ExpressionAttributeValues: { ':tok': token },
+      Limit: 1,
     }),
   )
-  const quote = (r.Items ?? [])[0]
+  const candidate = (r.Items ?? [])[0]
+  const quote = candidate?.tenantId === tenantId ? candidate : undefined
   if (!quote) return { error: 'not_found', message: 'Quote not found.', status: 404 }
   if (quote.status !== 'accepted') {
     return { error: 'quote_not_accepted', message: 'A deposit follows acceptance - accept the quote first.', status: 409 }

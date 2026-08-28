@@ -148,10 +148,33 @@ export class MakerbayStack extends cdk.Stack {
     const bookingConfig = table('BookingConfig', 'tenantId')
     const priceItems = table('PriceItems', 'tenantId', 'itemId')
     const quotes = table('Quotes', 'tenantId', 'quoteId')
+    /**
+     * Look a quote up by the token in a customer's link.
+     *
+     * Before this, the lookup queried by tenant with a FilterExpression and
+     * Limit: 200. DynamoDB applies Limit BEFORE the filter, so it read the
+     * first 200 quotes by id and searched inside them. Past 200 quotes a
+     * tenant's newly issued links simply 404 - in production, on a link they
+     * had already sent. An index makes it an exact lookup at any size.
+     *
+     * The token is the partition key, and it is 192 bits of randomness, so it
+     * is globally unique without a tenant prefix. Callers still check the row's
+     * tenantId matches, so a token cannot be replayed against another tenant.
+     */
+    quotes.addGlobalSecondaryIndex({
+      indexName: 'byPublicToken',
+      partitionKey: { name: 'publicToken', type: dynamodb.AttributeType.STRING },
+    })
     const quotesConfig = table('QuotesConfig', 'tenantId')
     // Invoices are their own table with their own number series - INV-7 must
     // never repeat, and an invoice outlives the quote it came from.
     const invoices = table('Invoices', 'tenantId', 'invoiceId')
+    // Same defect, same fix. The invoice list was ScanIndexForward: false, so
+    // there it was the OLDER invoices that became unreachable.
+    invoices.addGlobalSecondaryIndex({
+      indexName: 'byPublicToken',
+      partitionKey: { name: 'publicToken', type: dynamodb.AttributeType.STRING },
+    })
     const reviews = table('Reviews', 'tenantId', 'reviewId')
     const reviewsConfig = table('ReviewsConfig', 'tenantId')
     // One row per Stripe Checkout attempt. The webhook flips pending to paid;

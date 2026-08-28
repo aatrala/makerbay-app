@@ -145,7 +145,11 @@ export const handler = async (
 
     return json(404, { error: 'not_found' })
   } catch (err) {
-    console.error('quotes error', { path, method, err })
+    // The path carries the public token on every customer-facing route, and a
+    // token is a bearer credential: anyone holding it can read the quote and
+    // accept it. Logging the raw path put those in CloudWatch on every error.
+    // The shape is enough to find the route; the secret segment is not.
+    console.error('quotes error', { path: redactPath(path), method, err })
     return json(500, { error: 'internal_error' })
   }
 }
@@ -155,6 +159,20 @@ async function resolveTenantId(ctx: CallerContext): Promise<string> {
   if (!ctx.userId) return ''
   return (await getUser(ctx.userId))?.tenantId ?? ''
 }
+
+/**
+ * A path safe to log. Public routes carry the quote or invoice token as a path
+ * segment, and that token is a bearer credential - it is the only thing
+ * standing between a stranger and the customer's price. Keep the route shape,
+ * drop the secret.
+ */
+export const redactPath = (path: string): string =>
+  String(path ?? '').replace(
+    // Only a segment shaped like a token, so the literal route names on this
+    // prefix (/v1/public/quotes/invoice) stay readable in the log.
+    /\/v1\/public\/quotes\/[A-Za-z0-9_-]{20,}/g,
+    '/v1/public/quotes/{token}',
+  )
 
 const body = (event: Event): Record<string, unknown> => {
   try {
@@ -247,7 +265,7 @@ async function publicRoute(
 }
 
 const publicView = (q: QuoteRow, status: QuoteStatus, taxLabel: string, docPrefix = '') => ({
-  supersededBy: (q as { supersededByToken?: string }).supersededByToken ?? null,
+  supersededBy: q.supersededByToken ?? null,
   number: q.number,
   label: quoteLabel(q.number, docPrefix),
   status,
@@ -263,17 +281,37 @@ const publicView = (q: QuoteRow, status: QuoteStatus, taxLabel: string, docPrefi
   customerName: q.customerName,
 })
 
-async function respond(
-  tenantId: string,
-  businessName: string,
-  quote: QuoteRow,
+/**
+ * Whether this quote may be answered at all, and why not.
+ *
+ * Pure and exported so the rules can be tested without a database: an
+ * acceptance is a contract, and every branch here decides whether one gets
+ * recorded. Returns the response to send, or undefined to carry on.
+ */
+export function respondGuard(
+  quote: Pick<QuoteRow, 'status' | 'supersededByToken'>,
   status: QuoteStatus,
   decision: string,
-): Promise<APIGatewayProxyResultV2> {
+): APIGatewayProxyResultV2 | undefined {
   // Customers double-tap. A second accept returns the same answer rather than
   // recording a second acceptance.
   if (quote.status === 'accepted' || quote.status === 'declined') {
     return json(200, { status: quote.status, already: true })
+  }
+  // A superseded quote must not be acceptable. Revising sends the customer a
+  // new link, but the OLD one is still sitting in their messages, and without
+  // this a tap on it recorded a binding acceptance AT THE OLD PRICE. They keep
+  // read access to what they were sent; they just cannot agree to a version
+  // the business has withdrawn.
+  //
+  // Checked before expiry, because "this was replaced, here is the new one" is
+  // a more useful answer than "this expired" when both are true.
+  if (quote.status === 'superseded' || status === 'superseded') {
+    return json(409, {
+      error: 'superseded',
+      message: 'This quote was replaced by a newer one. Open the latest version to accept it.',
+      ...(quote.supersededByToken ? { supersededByToken: quote.supersededByToken } : {}),
+    })
   }
   if (status === 'expired') {
     return json(409, {
@@ -282,6 +320,18 @@ async function respond(
     })
   }
   if (decision !== 'accept' && decision !== 'decline') return json(400, { error: 'bad_decision' })
+  return undefined
+}
+
+async function respond(
+  tenantId: string,
+  businessName: string,
+  quote: QuoteRow,
+  status: QuoteStatus,
+  decision: string,
+): Promise<APIGatewayProxyResultV2> {
+  const denied = respondGuard(quote, status, decision)
+  if (denied) return denied
 
   const now = new Date().toISOString()
   const accepted = decision === 'accept'
@@ -466,6 +516,24 @@ async function patch(tenantId: string, quoteId: string, event: Event): Promise<A
       message: `Quote ${quoteLabel(existing.number)} has already been ${existing.status}. Create a new one instead.`,
     })
   }
+  /**
+   * Once a quote has left the building, editing it in place is a silent
+   * re-price of a document the customer is already looking at. They could be
+   * shown one total, accept it, and the row afterwards read another, with
+   * nothing recording the difference.
+   *
+   * `revise` is the honest path: it writes a new numbered quote with its own
+   * token and marks this one superseded, so both versions survive and the
+   * customer is told which one is current.
+   */
+  if (existing.sentAt) {
+    return json(409, {
+      error: 'quote_already_sent',
+      message:
+        `Quote ${quoteLabel(existing.number)} is already with the customer, so it cannot be edited. `
+        + 'Revise it instead - they get the new version and the old one stops being acceptable.',
+    })
+  }
 
   const config = await getQuotesConfig(tenantId)
   const lines = b.lines === undefined ? existing.lines : normaliseLines(b.lines)
@@ -576,7 +644,7 @@ async function reviseQuote(tenantId: string, quoteId: string): Promise<APIGatewa
     declinedAt: undefined,
     notifyError: undefined,
   }
-  ;(fresh as { revisionOf?: string }).revisionOf = old.quoteId
+  fresh.revisionOf = old.quoteId
   await putQuote(fresh)
 
   // A sent-but-unanswered quote is replaced; its page will say so. Settled
@@ -586,10 +654,10 @@ async function reviseQuote(tenantId: string, quoteId: string): Promise<APIGatewa
       ...old,
       status: 'superseded' as QuoteStatus,
       updatedAt: now,
-      ...( { supersededByToken: fresh.publicToken } as Partial<QuoteRow>),
+      supersededByToken: fresh.publicToken,
     })
   } else {
-    await putQuote({ ...old, updatedAt: now, ...({ supersededByToken: fresh.publicToken } as Partial<QuoteRow>) })
+    await putQuote({ ...old, updatedAt: now, supersededByToken: fresh.publicToken })
   }
   return json(201, { quote: fresh })
 }
