@@ -6,7 +6,7 @@ import {
   getContact,
   getEffectiveEntitlement,
   getTenant,
-  getTenantBySlug,
+  getTenantBySlugOrAlias,
   getUser,
   hashApiKey,
   json,
@@ -27,11 +27,13 @@ import {
   quoteLabel,
   listInvoices,
   patchInvoice,
+  invoiceUrl,
   publicInvoiceView,
   revokeInvoiceLink,
   sendInvoice,
   shareInvoice,
 } from './invoices'
+import { docUrl } from './links'
 import {
   affirmationFor,
   callerIp,
@@ -77,7 +79,6 @@ interface PaymentReceivedEvent {
   }
 }
 
-const CHAT = 'https://chat.makerbay.app'
 const APP = 'https://app.makerbay.app'
 const STATUSES: QuoteStatus[] = ['draft', 'sent', 'accepted', 'declined', 'expired', 'superseded']
 
@@ -223,13 +224,24 @@ async function resolvePublicTenant(key?: string, slug?: string) {
       : undefined
   }
   if (slug) {
-    const tenant = await getTenantBySlug(slug)
+    /**
+     * The alias fallback quotes never had (issue 118).
+     *
+     * Presence has honoured aliases since it shipped; quotes and invoices
+     * looked up the primary slug only, so a workspace rename 404d every link
+     * already in a customer's messages. Presence 301s to the primary because
+     * it is canonicalising an indexed page - here we SERVE, because a
+     * redirect is one more hop inside a link-preview crawler's short timeout,
+     * and there is nothing to canonicalise on a noindex document.
+     */
+    const tenant = await getTenantBySlugOrAlias(slug)
     return tenant
       ? { tenantId: tenant.tenantId, name: tenant.name, payoutsEnabled: Boolean(tenant.payoutsEnabled) }
       : undefined
   }
   return undefined
 }
+
 
 async function publicRoute(
   method: string,
@@ -615,10 +627,16 @@ async function detail(tenantId: string, quoteId: string): Promise<APIGatewayProx
   if (!quote) return json(404, { error: 'not_found' })
   const config = await getQuotesConfig(tenantId)
   const tenant = await getTenant(tenantId)
+  const label = quoteLabel(quote.number, config.docPrefix)
   return json(200, {
     quote: { ...quote, status: effectiveStatus(quote) },
-    label: quoteLabel(quote.number, config.docPrefix),
-    publicUrl: `${CHAT}/quote?slug=${tenant?.slug ?? ''}&token=${quote.publicToken}`,
+    label,
+    // A draft has no working link: the public page 404s on one. Offering it
+    // anyway let a tradesperson copy a dead link and paste it in front of a
+    // customer, which is exactly what sharing makes the normal path.
+    publicUrl: quote.status === 'draft'
+      ? undefined
+      : quoteUrl(tenant?.slug ?? '', label, quote.publicToken),
     config: { currency: config.currency, taxLabel: config.taxLabel, docPrefix: config.docPrefix },
   })
 }
@@ -676,9 +694,9 @@ async function patch(tenantId: string, quoteId: string, event: Event): Promise<A
   return json(200, { quote })
 }
 
-/** The customer's link for a quote. One definition, so it cannot drift. */
-const quoteUrl = (slug: string, token: string): string =>
-  `${CHAT}/quote?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`
+/** The customer's link for a quote. Built in exactly one place (./links). */
+const quoteUrl = (slug: string, label: string, token: string): string =>
+  docUrl('quote', slug, label, token)
 
 /**
  * Mark a quote as out with the customer.
@@ -743,7 +761,7 @@ async function shareQuote(tenantId: string, quoteId: string): Promise<APIGateway
   const updated = await markShared(tenantId, quote, 'link', label)
   return json(200, {
     quote: updated,
-    publicUrl: quoteUrl(tenant?.slug ?? '', quote.publicToken),
+    publicUrl: quoteUrl(tenant?.slug ?? '', label, quote.publicToken),
     label,
     emailed: false,
   })
@@ -791,7 +809,7 @@ async function revokeQuoteLink(tenantId: string, quoteId: string): Promise<APIGa
   })
   return json(200, {
     quote: updated,
-    publicUrl: quoteUrl(tenant?.slug ?? '', updated.publicToken),
+    publicUrl: quoteUrl(tenant?.slug ?? '', label, updated.publicToken),
     label,
   })
 }
@@ -810,7 +828,7 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
   const tenant = await getTenant(tenantId)
   const config = await getQuotesConfig(tenantId)
   const qLabel = quoteLabel(quote.number, config.docPrefix)
-  const url = quoteUrl(tenant?.slug ?? '', quote.publicToken)
+  const url = quoteUrl(tenant?.slug ?? '', qLabel, quote.publicToken)
 
   const notice = await sendEmail({
     to: quote.customerEmail,
@@ -920,10 +938,15 @@ async function invoiceDetail(tenantId: string, invoiceId: string): Promise<APIGa
   if (!invoice) return json(404, { error: 'not_found' })
   const tenant = await getTenant(tenantId)
   const config = await getQuotesConfig(tenantId)
+  const label = invoiceLabel(invoice, config.docPrefix)
   return json(200, {
     invoice,
-    label: invoiceLabel(invoice, config.docPrefix),
-    publicUrl: `${CHAT}/invoice?slug=${tenant?.slug ?? ''}&token=${invoice.publicToken}`,
+    label,
+    // Same draft trap as quotes: the public invoice view 404s on a draft, and
+    // the screen offered the link unconditionally.
+    publicUrl: invoice.status === 'draft'
+      ? undefined
+      : invoiceUrl(tenant?.slug ?? '', label, invoice.publicToken),
   })
 }
 

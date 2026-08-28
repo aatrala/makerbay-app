@@ -371,6 +371,30 @@ async function patchWorkspace(ctx: CallerContext, event: Event): Promise<APIGate
       if (alias && alias.tenantId === tenantId) {
         await releaseSlugAlias(slug, tenantId)
       }
+      /**
+       * Keep the old address alive (issue 118).
+       *
+       * Renaming used to break every quote and invoice link already sitting in
+       * a customer's messages - the audit line here said so verbatim, as if it
+       * were a fact of life rather than a bug. An invoice link is a payment
+       * instrument people dig out months later; there is no point at which
+       * silently 404ing one is acceptable.
+       *
+       * Claimed automatically and NOT charged against aliasAllowance: this is
+       * not the owner buying a second address, it is us not breaking the first
+       * one. A failure here must not fail the rename itself, so it is caught -
+       * the worst case is the old behaviour, which is what we had anyway.
+       */
+      const previous = current?.slug
+      let aliasKept = false
+      if (previous && previous !== slug) {
+        try {
+          await claimSlugAlias(previous, tenantId)
+          aliasKept = true
+        } catch (err) {
+          console.warn('could not keep the old address alive', { tenantId, previous, err: String(err) })
+        }
+      }
       await updateTenantSlug(tenantId, slug)
       await recordAudit({
         tenantId,
@@ -378,7 +402,9 @@ async function patchWorkspace(ctx: CallerContext, event: Event): Promise<APIGate
         origin: 'ui',
         action: 'workspace.slug_changed',
         moduleId: 'platform',
-        summary: `Public address changed from ${current?.slug ?? '?'} to ${slug} - old links stopped working`,
+        summary: aliasKept
+          ? `Public address changed from ${previous} to ${slug} - links already sent keep working`
+          : `Public address changed from ${previous ?? '?'} to ${slug} - the old address could NOT be kept, so links already sent may not work`,
       })
     }
   }

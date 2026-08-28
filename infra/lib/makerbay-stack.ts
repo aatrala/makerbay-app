@@ -1028,6 +1028,46 @@ export class MakerbayStack extends cdk.Stack {
     // message, because the dashboard's "email failed" chip reads that row and
     // not the log. Without this the pipeline records a bounce nobody sees.
     for (const t of [quotes, invoices, bookings, requests]) t.grantWriteData(mailEventsFn)
+
+    /**
+     * Every module that resolves a customer link by slug now goes through
+     * getTenantBySlugOrAlias, so a workspace rename stops silently 404ing
+     * links already in customers' messages (issue 118). That helper reads the
+     * alias table, so each of these needs the name and the permission - a
+     * missing one turns an unknown slug from a clean 404 into a 500.
+     */
+    for (const f of [quotesFn, bookingFn, requestsFn, assistantFn, reviewsFn]) {
+      f.addEnvironment('TABLE_SLUGALIASES', slugAliases.tableName)
+      slugAliases.grantReadData(f)
+    }
+
+    /**
+     * Renders the HTML shell behind a quote or invoice link (issue 118).
+     *
+     * A SEPARATE function, not a route on quotesFn, and that is the whole
+     * point. quotesFn holds read/write on the quotes and invoices tables;
+     * putting the link-preview path inside it would mean every card render ran
+     * in a role that can read any customer's price. This role can read the
+     * tenant's name and nothing else, so the amount is unreachable at the AWS
+     * authorization layer rather than by convention.
+     *
+     * The CloudFront function has already discarded the token by the time a
+     * request arrives here, so this function is never even given the
+     * credential that would identify a document.
+     */
+    const docShellFn = fn('DocShellFn', 'packages/core-api/src/doc-shell.ts', {
+      TABLE_TENANTS: tenants.tableName,
+      TABLE_SLUGALIASES: slugAliases.tableName,
+    })
+    tenants.grantReadData(docShellFn)
+    slugAliases.grantReadData(docShellFn)
+    // An explicit Deny, so a future blanket grant cannot quietly reopen what
+    // the design promises is closed. Deny always wins in IAM evaluation.
+    docShellFn.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.DENY,
+      actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:BatchGetItem'],
+      resources: [quotes.tableArn, `${quotes.tableArn}/index/*`, invoices.tableArn, `${invoices.tableArn}/index/*`],
+    }))
     for (const t of [tenants, users]) t.grantReadData(mailEventsFn)
     mailEventsFn.addToRolePolicy(sesSendPolicy)
     new events.Rule(this, 'MailEventsRule', {
@@ -1443,6 +1483,16 @@ export class MakerbayStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration('SetupPublicIntegration', setupFn),
     })
+    /**
+     * The document shell. Its own exact path, NOT under /v1/public/quotes,
+     * because that whole prefix routes into the quotes handler - which would
+     * put the preview back inside the function that can read prices.
+     */
+    httpApi.addRoutes({
+      path: '/v1/public/doc/shell',
+      methods: [apigwv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration('DocShellIntegration', docShellFn),
+    })
     httpApi.addRoutes({
       path: '/v1/setup/{proxy+}',
       // Only what the handler serves. Every method is a separate Route and a
@@ -1765,6 +1815,110 @@ function handler(event) {
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
     })
+    /**
+     * The document host (issue 118 phase 2).
+     *
+     *   https://quote.makerbay.app/dunn-plumbing/Q-014/<token>
+     *   https://invoice.makerbay.app/dunn-plumbing/INV-042/<token>
+     *
+     * Its own subdomains, deliberately:
+     * - NOT app.makerbay.app, which holds the tradesperson's dashboard
+     *   session. A page strangers open must not share an origin with it.
+     * - NOT chat.makerbay.app, which is shared with the widget embedded in
+     *   arbitrary third-party sites, and whose root namespace is already the
+     *   chat page's.
+     *
+     * The kind lives in the host so it is the first thing a homeowner reads.
+     */
+    const docHeaders = new cloudfront.ResponseHeadersPolicy(this, 'DocHeaders', {
+      responseHeadersPolicyName: `makerbay-doc-${this.account}`,
+      securityHeadersBehavior: {
+        // The accept button on this page records a contract. Without frame
+        // protection the page can be iframed and that click stolen.
+        frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
+        contentTypeOptions: { override: true },
+        // Belt and braces on the token in the path: browsers already default
+        // to strict-origin-when-cross-origin, but an explicit no-referrer
+        // settles the question rather than relying on a default.
+        referrerPolicy: {
+          referrerPolicy: cloudfront.HeadersReferrerPolicy.NO_REFERRER,
+          override: true,
+        },
+        strictTransportSecurity: {
+          accessControlMaxAge: cdk.Duration.days(365),
+          includeSubdomains: true,
+          override: true,
+        },
+      },
+    })
+
+    /**
+     * Strips the token before the cache lookup.
+     *
+     * This is what makes the shell renderer structurally unable to leak a
+     * price: it is never handed the credential, so no future edit to it can
+     * read the document. It also keeps the token out of the cache key, so the
+     * fiftieth link a tradesperson sends is a cache hit rather than a
+     * guaranteed miss.
+     *
+     * The browser still has the token in location.pathname and sends it only
+     * to api.makerbay.app, exactly as before.
+     */
+    const docRewrite = new cloudfront.Function(this, 'DocRewrite', {
+      functionName: `makerbay-doc-rewrite-${this.account}`,
+      comment: 'Maps a document link onto the shell API, discarding the token',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request
+  var host = request.headers.host ? request.headers.host.value : ''
+  var kind = host.indexOf('invoice') === 0 ? 'invoice' : 'quote'
+  var parts = request.uri.split('/').filter(function (p) { return p.length > 0 })
+  // /{slug}/{label}/{token} - only the slug survives into the origin request.
+  request.uri = '/v1/public/doc/shell'
+  request.querystring = {
+    slug: { value: parts.length > 0 ? parts[0] : '' },
+    kind: { value: kind },
+  }
+  return request
+}
+`),
+    })
+    const docCachePolicy = new cloudfront.CachePolicy(this, 'DocCachePolicy', {
+      cachePolicyName: `makerbay-doc-${this.account}`,
+      defaultTtl: cdk.Duration.minutes(5),
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.hours(24),
+      // Only what survives the rewrite, so the cache key is per business and
+      // per kind - never per token.
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList('slug', 'kind'),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    })
+    const docDistribution = new cloudfront.Distribution(this, 'DocDistribution', {
+      defaultBehavior: {
+        origin: new origins.HttpOrigin(`api.${DOMAIN}`),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: docCachePolicy,
+        responseHeadersPolicy: docHeaders,
+        functionAssociations: [
+          { function: docRewrite, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
+        ],
+      },
+      domainNames: [`quote.${DOMAIN}`, `invoice.${DOMAIN}`],
+      certificate,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      comment: 'MakerBay quote and invoice links',
+    })
+    for (const [id, name] of [['QuoteAlias', 'quote'], ['InvoiceAlias', 'invoice']] as const) {
+      new route53.ARecord(this, id, {
+        zone: publicZone,
+        recordName: `${name}.${DOMAIN}`,
+        target: route53.RecordTarget.fromAlias(new route53Targets.CloudFrontTarget(docDistribution)),
+      })
+    }
+    new cdk.CfnOutput(this, 'DocQuoteUrl', { value: `https://quote.${DOMAIN}` })
+
     const siteDistribution = new cloudfront.Distribution(this, 'SiteDistribution', {
       additionalBehaviors: {
         '/p/*': {

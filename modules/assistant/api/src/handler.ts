@@ -11,7 +11,7 @@ import {
   getEffectiveEntitlement,
   getMonthUsage,
   getTenant,
-  getTenantBySlug,
+  getTenantBySlugOrAlias,
   getUser,
   hashApiKey,
   isPaidWorkspace,
@@ -187,7 +187,7 @@ async function resolvePublicTenant(
     return { tenantId: row.tenantId, slug: tenant?.slug ?? '' }
   }
   if (slug) {
-    const tenant = await getTenantBySlug(slug)
+    const tenant = await getTenantBySlugOrAlias(slug)
     if (!tenant || tenant.status !== 'active') return undefined
     return { tenantId: tenant.tenantId, slug: tenant.slug }
   }
@@ -248,7 +248,7 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
   if (wantsRobots && !slug) return renderRobots()
   if (!slug) return renderNotFound()
 
-  const tenant = await getTenantBySlug(slug)
+  const tenant = await getTenantBySlugOrAlias(slug)
   if (!tenant) return renderNotFound()
 
   const entitlement = await getEffectiveEntitlement(tenant.tenantId, 'assistant')

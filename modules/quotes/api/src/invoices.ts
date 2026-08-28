@@ -2,6 +2,7 @@ import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { appendContactEvent, ddb, emitUsage, getTenant, json, linkToken, money, sendEmail, ulid } from '@makerbay/core'
 import { getQuotesConfig, type QuoteLine, type QuoteRow } from './db'
+import { docUrl } from './links'
 
 /**
  * Simple invoices, deliberately bounded. An invoice here is a document a
@@ -15,7 +16,6 @@ const Tables = {
   invoices: () => process.env.TABLE_INVOICES!,
   config: () => process.env.TABLE_QUOTESCONFIG!,
 }
-const CHAT = 'https://chat.makerbay.app'
 
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void'
 export const INVOICE_THEMES = ['classic', 'compact', 'bold'] as const
@@ -148,9 +148,9 @@ export async function invoiceFromQuote(tenantId: string, quote: QuoteRow): Promi
   return invoice
 }
 
-/** The customer's link for an invoice. One definition, so it cannot drift. */
-export const invoiceUrl = (slug: string, token: string): string =>
-  `${CHAT}/invoice?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`
+/** The customer's link for an invoice. Built in exactly one place (./links). */
+export const invoiceUrl = (slug: string, label: string, token: string): string =>
+  docUrl('invoice', slug, label, token)
 
 /**
  * Hand back the customer link without sending anything (issue 118).
@@ -184,7 +184,7 @@ export async function shareInvoice(tenantId: string, invoiceId: string): Promise
   await emitUsage({ tenantId, moduleId: 'quotes', metric: 'invoice.sent', quantity: 1 })
   return json(200, {
     invoice: updated,
-    publicUrl: invoiceUrl(tenant?.slug ?? '', invoice.publicToken),
+    publicUrl: invoiceUrl(tenant?.slug ?? '', label, invoice.publicToken),
     label,
     emailed: false,
   })
@@ -221,7 +221,7 @@ export async function revokeInvoiceLink(tenantId: string, invoiceId: string): Pr
   }
   return json(200, {
     invoice: updated,
-    publicUrl: invoiceUrl(tenant?.slug ?? '', updated.publicToken),
+    publicUrl: invoiceUrl(tenant?.slug ?? '', label, updated.publicToken),
     label,
   })
 }
@@ -240,7 +240,7 @@ export async function sendInvoice(tenantId: string, invoiceId: string): Promise<
   const tenant = await getTenant(tenantId)
   const config = await getQuotesConfig(tenantId)
   const label = invoiceLabel(invoice, config.docPrefix)
-  const url = invoiceUrl(tenant?.slug ?? '', invoice.publicToken)
+  const url = invoiceUrl(tenant?.slug ?? '', label, invoice.publicToken)
   const due = new Date(invoice.dueAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const notice = await sendEmail({
     to: invoice.customerEmail,

@@ -68,6 +68,32 @@ export interface SlugAliasRow {
 
 const aliasTable = () => process.env.TABLE_SLUGALIASES!
 
+/**
+ * A tenant by any address it has ever had (issue 118).
+ *
+ * Every public surface that resolves a customer link must use this rather than
+ * getTenantBySlug. Renaming a workspace changes the primary slug, and five
+ * modules independently looked up the primary only - so a rename silently 404d
+ * every quote, invoice, booking-cancel and review link already sitting in a
+ * customer's messages. An invoice link is a payment instrument people dig out
+ * months later; there is no date at which breaking one is acceptable.
+ *
+ * Serves under the old address rather than redirecting. Presence 301s because
+ * it is canonicalising a page it wants indexed; a document link is noindex,
+ * has nothing to canonicalise, and a redirect is one more hop inside a
+ * link-preview crawler's short timeout.
+ */
+export async function getTenantBySlugOrAlias(slug: string): Promise<TenantRow | undefined> {
+  const direct = await getTenantBySlug(slug)
+  if (direct) return direct
+  const alias = await getSlugAlias(slug)
+  if (!alias) return undefined
+  const tenant = await getTenant(alias.tenantId)
+  // The suspension check getTenantBySlug applies has to apply here too, or an
+  // alias becomes a way around it.
+  return tenant?.status === 'suspended' ? undefined : tenant
+}
+
 export async function getSlugAlias(slug: string): Promise<SlugAliasRow | undefined> {
   const r = await ddb.send(new GetCommand({ TableName: aliasTable(), Key: { slug } }))
   return r.Item as SlugAliasRow | undefined

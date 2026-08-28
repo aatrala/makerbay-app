@@ -7,7 +7,7 @@ import {
   getContact,
   getEffectiveEntitlement,
   getTenant,
-  getTenantBySlug,
+  getTenantBySlugOrAlias,
   getUser,
   json,
   linkToken,
@@ -337,7 +337,7 @@ async function publicRoute(method: string, path: string, event: Event): Promise<
   const q = event.queryStringParameters ?? {}
   const b = method === 'POST' ? body(event) : {}
   const slug = String(q.slug ?? b.slug ?? '')
-  const tenant = slug ? await getTenantBySlug(slug) : undefined
+  const tenant = slug ? await getTenantBySlugOrAlias(slug) : undefined
   if (!tenant) return json(404, { error: 'not_found' })
 
   // The published wall, for the presence page and the hosted list.

@@ -292,13 +292,13 @@ shadow), larger message type, and bubbles bottom-anchored so any void
 sits above the conversation, chat-style. Verified live at 1920px and
 375px - no horizontal overflow, mobile nav intact.
 
-### 90 — Marketing identity consults ⏳ (four agents running)
+### 90 — Marketing identity consults 📋 not started (the 2026-08-24 agent run was lost with its session)
 Founder-requested proposals to evaluate: (a) 3 site design directions
 (visual system + structure), (b) 15 tagline candidates in three
 groups, (c) 6 logo concepts as production SVGs, (d) a written
 rationale + critique of the current content structure and style.
 
-### 91 — Product-flow review per module ⏳ (two agents running)
+### 91 — Product-flow review per module 📋 not started (the 2026-08-24 agent run was lost with its session)
 Owner-side flows (dashboard, phone-first solo tradie) and
 customer-side flows (public page, chat, booking incl. deposits, quote
 accept, invoice pay, reviews) each audited for concrete improvements,
@@ -989,7 +989,7 @@ degrades delivery for every other tenant on the domain.
 owner's address as Reply-To. One verified SES domain identity covers every
 tenant, so SPF and DKIM still pass and no per-tenant DNS is needed.
 
-### 104 — Cognito auth emails are unconfigured: wrong sender, 50/day cap ⛔ P0
+### 104 — Cognito auth emails are unconfigured: wrong sender, 50/day cap ✅ shipped
 The user pool (`infra/lib/makerbay-stack.ts:386`) has no `email:` property
 and no `userVerification:` block - grep for `UserPoolEmail`, `withSES` or
 `userVerification` across the stack returns zero. Two consequences:
@@ -1238,7 +1238,7 @@ end of Grow because it was unlisted. Things you do once do not belong beside
 the diary you open every morning, and it also gave the module an icon, which
 it had been rendering without while every neighbour had one.
 
-### 114 — Australia is baked into the defaults 🔶 timezone fixed, currency open
+### 114 — Australia is baked into the defaults ✅ shipped
 Founder saw the diary say "Everything booked, in Australia/Sydney" and asked
 whether the product works anywhere Stripe does. It does not, quite. Three
 layers had Australia hardcoded:
@@ -1266,14 +1266,22 @@ plausible-looking wrong default is worse than an obviously-neutral one:
 - Genie's `en-AU` date formatter is now `en-GB`; the zone does the localising.
 - 6 tests pinning zone validation, that the same instant renders differently
   per zone, and what the currency formatter actually does.
-**Still open: currency.** The signup does not ask, so a UK workspace still
-starts on AUD until someone changes it in Quotes settings, and `en-AU`
-renders a foreign currency as "USD 99.00" rather than "$99.00" - so a US
-business is shown something that is not their own price format. Two options
-worth deciding between: infer from the browser locale at signup the way the
-timezone now is, or ask in onboarding next to the trade picker. Inferring is
-less friction; asking is more honest, because a business can trade in a
-currency that is not its country's.
+**Currency done 2026-08-28.** Inferred from the browser's region at signup,
+the same way the timezone already was - the option chosen over asking in
+onboarding, because one more question at signup costs more than it buys and an
+unrecognised region simply leaves it unset rather than guessing wrong.
+
+- `packages/core/money.ts` renders each currency in the locale that treats it
+  as local, so a London electrician sees "£99.00" instead of "GBP 99.00" on
+  their own invoice. Fixed in three places: the server formatter, the
+  tradesperson's own quotes screen, and the public business page.
+- The quotes config inherits the detected currency only while the owner has
+  not chosen; once they save, their choice wins even if it matches the default.
+- The tax label follows the currency. A UK invoice saying "GST" instead of
+  "VAT" looks like it came from someone who does not know the rules.
+- Two Intl results are pinned as CORRECT rather than "fixed": AED has no Latin
+  symbol, so "AED 99.00" is right, and ZAR uses a comma decimal separator.
+  Both would look like bugs to an en-AU reader and must not be "corrected".
 
 ### 113 — Trade checkout showed the same name twice, and never explained the $19 ✅ FIXED
 Founder saw: "Subscribe to MakerBay Trade and 1 more", then two rows both
@@ -1636,7 +1644,7 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
   deposit 20%, Genie grant.
 - Support runbook: docs/runbook-support.md (staff bootstrap is CLI-only).
 
-### 118 — Quotes and invoices without email ✅ phase 1 shipped
+### 118 — Quotes and invoices without email ✅ phase 1 live / 🔶 phase 2 built, awaiting deploy
 A tradesperson with only a phone number could build a quote and never obtain
 its link. Not a missing feature: a circular dependency. `sendQuote` refused
 without an email, emailing was the ONLY transition out of draft, and the link
@@ -1676,7 +1684,72 @@ synthetic API Gateway events):
 - A phone field on the quote form. Its absence meant the customers most likely
   to be reached by text could not be quoted at all.
 
-**Phase 2, not built:** the link preview. `chat.makerbay.app` serves one static
+**Phase 2 built and tested 2026-08-28, NOT YET DEPLOYED** (the AWS session
+expired mid-deploy; nothing is live until it is re-run).
+
+Readable addresses on their own hosts:
+
+    https://quote.makerbay.app/dunn-plumbing/Q-014/<token>
+    https://invoice.makerbay.app/dunn-plumbing/INV-042/<token>
+
+Shorter than the query-string form it replaces despite being far more
+readable, and with no `?` or `&`, which is what makes SMS and older mail
+clients truncate a URL. The kind is in the host so it is the first thing read.
+
+Deliberately NOT on `app.makerbay.app` (holds the dashboard session; a page
+strangers open must not share that origin) and not on `chat.makerbay.app`
+(shared with the widget embedded in third-party sites).
+
+Two things the founder asked for were dropped, with reasons:
+- **Timestamp.** Authenticates nothing, cannot expire anything at the edge
+  because it is attacker-controlled, and leaks when the quote was raised.
+- **Internal quote id.** `quote.number` is a per-tenant sequential counter, so
+  it would tell anyone the link reaches how many quotes this tradesperson has
+  ever raised. The human-readable label (Q-014) is kept instead: it is already
+  printed on the document the customer opens, so it leaks nothing.
+
+**The card is name-only.** "Quote from Dunn Plumbing", no image. The only image
+available is the presence hero photo, which has no size or dimension cap - a
+4 MB phone photo is silently dropped by WhatsApp and produces no card at all.
+A text card that always renders beats an image card that sometimes vanishes.
+Revisit with a real logo upload and a bounded derivative.
+
+**"Structurally incapable of reading the quote"** is enforced three ways rather
+than by convention:
+1. ROUTING. A CloudFront function discards the token before the cache lookup
+   and before the origin request, so the renderer is never handed the
+   credential. No later edit to it can read a document.
+2. IAM. A separate `docShellFn` whose role reads tenants and slug aliases and
+   nothing else, with an explicit Deny on the quotes and invoices tables so a
+   future blanket grant cannot quietly reopen it.
+3. ROUTE. Its own path, not under `/v1/public/quotes/*`, which routes into the
+   handler that CAN read prices.
+
+Chosen over Lambda@Edge, which supports neither environment variables nor
+arm64 - both of which this stack depends on everywhere.
+
+Old `chat.makerbay.app/quote?slug=&token=` links keep working indefinitely,
+not on a deprecation timer: an invoice link is a payment instrument people dig
+out months later.
+
+**Four live bugs fixed in the same batch** (all founder-approved):
+- **Rename broke every live link.** Five modules each had their own slug
+  resolver and none consulted `slugAliases`, and renaming did not create one -
+  the audit line said "old links stopped working" as though it were a fact of
+  life. Now one `getTenantBySlugOrAlias` in `packages/core`, used by quotes,
+  booking, requests, assistant and reviews, and a rename keeps the old address
+  alive automatically. Serves under the old address rather than 301ing, because
+  a redirect is one more hop inside a link-preview crawler's short timeout.
+- **The dashboard offered a link that 404s.** Both quote and invoice detail
+  handed out a `publicUrl` for a draft, whose public page 404s.
+- **No clickjacking protection.** The accept button records a contract and the
+  page could be framed. The new host sets frame-deny, no-referrer, nosniff
+  and HSTS.
+- **The URL was built in four places, two unencoded**, under a comment saying
+  "one definition, so it cannot drift". Now genuinely one definition.
+
+**Superseded note:** the original phase-2 plan below.
+ `chat.makerbay.app` serves one static
 shell with `<title>Chat</title>` and no Open Graph tags, so a quote pasted into
 WhatsApp shows an unlabelled link on an unfamiliar domain - a conversion
 problem today, not a privacy one. Needs a CloudFront Function or Lambda@Edge,

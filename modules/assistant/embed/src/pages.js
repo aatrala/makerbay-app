@@ -1,5 +1,14 @@
 /**
- * Customer-facing pages on the chat surface, beyond the chat itself:
+ * Customer-facing pages, served two ways.
+ *
+ * The readable addresses (issue 118 phase 2), on their own hosts:
+ *   quote.makerbay.app/{business}/{label}/{token}
+ *   invoice.makerbay.app/{business}/{label}/{token}
+ *
+ * And the original query-string forms on the chat host, which are still live
+ * in customers' messages and must keep working indefinitely - an invoice link
+ * is a payment instrument people dig out months later, so there is no date at
+ * which breaking one is acceptable:
  *   /booking?slug=...             pick a service, a day and a real free slot
  *   /booking/cancel?slug=&token=  view or cancel a booking, no account needed
  *   /quote?slug=&token=           view a quote and accept or decline it
@@ -16,6 +25,24 @@
   var slug = params.get('slug') || ''
   var token = params.get('token') || ''
   var path = location.pathname.replace(/\/+$/, '')
+
+  /**
+   * On the document hosts the whole address is the route: there is no query
+   * string, and the shell that served this page was never told which document
+   * it is - only which business. The token lives here in the browser and goes
+   * only to the API, exactly as it did when it was a query parameter.
+   */
+  var docKind = ''
+  if (/^(quote|invoice)\./.test(location.hostname)) {
+    docKind = location.hostname.split('.')[0]
+    var seg = path.split('/').filter(function (p) { return p.length > 0 })
+    if (seg.length >= 3) {
+      slug = decodeURIComponent(seg[0])
+      // seg[1] is the human-readable label (Q-014). It identifies nothing on
+      // its own and is not sent anywhere; the token is the credential.
+      token = decodeURIComponent(seg[seg.length - 1])
+    }
+  }
 
   document.body.classList.add('hosted', 'page')
 
@@ -72,6 +99,10 @@
     })
     .catch(function () { /* default colour is fine */ })
 
+  // The host decides on the document surfaces; the path decides on the chat
+  // host, where several page kinds share one origin.
+  if (docKind === 'quote') return quotePage()
+  if (docKind === 'invoice') return invoicePage()
   if (path === '/booking') return bookingPage()
   if (path === '/booking/cancel') return cancelPage()
   if (path === '/quote') return quotePage()

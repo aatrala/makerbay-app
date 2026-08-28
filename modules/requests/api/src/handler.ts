@@ -5,7 +5,7 @@ import {
   findApiKeyByHash,
   getEffectiveEntitlement,
   getTenant,
-  getTenantBySlug,
+  getTenantBySlugOrAlias,
   getUser,
   hashApiKey,
   isPaidWorkspace as isPaidTenant,
@@ -105,7 +105,7 @@ async function resolvePublicTenant(key?: string, slug?: string) {
     return tenant ? { tenantId: tenant.tenantId, slug: tenant.slug, name: tenant.name } : undefined
   }
   if (slug) {
-    const tenant = await getTenantBySlug(slug)
+    const tenant = await getTenantBySlugOrAlias(slug)
     return tenant ? { tenantId: tenant.tenantId, slug: tenant.slug, name: tenant.name } : undefined
   }
   return undefined
