@@ -16,7 +16,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.check.json",
+    "typecheck": "npm run typecheck:api && npm run typecheck:ui",
+    "typecheck:api": "tsc --noEmit -p tsconfig.check.json",
+    "typecheck:ui": "tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },

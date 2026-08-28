@@ -796,9 +796,7 @@ function InvoiceDetail() {
   const revoke = () =>
     void (async () => {
       if (!window.confirm(
-        'Stop this link working?
-
-Anyone you already sent it to will not be able to open it. '
+        'Stop this link working?\n\nAnyone you already sent it to will not be able to open it. '
         + 'You get a new link to send instead.',
       )) return
       setBusy(true); setError(''); setNote(''); setCopied(false)

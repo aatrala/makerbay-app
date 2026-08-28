@@ -20,6 +20,10 @@
   it generates the marketing pages, the roadmap and the version endpoint.
 - Run `npm run typecheck` before any deploy. CDK bundles Lambda code with
   esbuild, which does NOT typecheck, so without it a type error ships silently.
+  It runs two projects: `typecheck:api` (Lambdas and packages) and
+  `typecheck:ui` (the dashboard, the admin console and every module's screens).
+  Until 2026-08-28 it ran only the first, so a syntax error in a module UI
+  passed a green typecheck and failed at build time.
 - **`cdk deploy` does NOT publish the customer-facing pages.** There is no
   BucketDeployment in the stack, so `modules/assistant/embed/src/*` (chat.css,
   pages.js, chat.js, widget.js, index.html) stays as-is however many times you

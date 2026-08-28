@@ -1601,7 +1601,7 @@ change. Indefensible once MakerBay is the party that made the change and
 charged for it (issue 93).
 **Fix:** undo is always free for a change MakerBay made.
 
-### 101 — react-router advisories: assessed, not upgraded 📋
+### 101 — react-router advisories ✅ upgraded to v7
 `npm audit` reports two moderate advisories against react-router 6.30.6,
 which is the latest 6.x - there is no patch, the fix is a v7 major across
 admin plus ten module web packages. Assessed 2026-08-27 and deliberately NOT
@@ -1616,8 +1616,29 @@ taken:
   the module registry, the checklist). No user-controlled string reaches
   `to=` or `navigate()`; contact-event `href` values are all server-built
   templates with a validated ULID interpolated.
-**Revisit when:** any SSR is introduced, or any user-supplied value is ever
-routed into a navigation target. Then the v7 migration becomes mandatory.
+**Upgraded 2026-08-28** on the founder's call, rather than waiting for the
+trigger below. `npm audit` now reports zero vulnerabilities.
+
+The migration was clean because of what the assessment found: every import
+across the codebase is the component and hook API - BrowserRouter, Routes,
+Route, Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams,
+useSearchParams - all of which exist unchanged in v7. No data routers, no
+loaders, no SSR, so none of the v7 breaking changes apply. 15 package.json
+files, React 18.3.1 already satisfying the peer requirement.
+
+Verified beyond the type checker, because types and unit tests do not exercise
+a router: both apps build, the dashboard runs, it renders, a deep route
+(`/quotes/invoices/{id}`) resolves and correctly gates to sign-in, and the
+console is clean.
+
+**Found while verifying:** `npm run typecheck` covered only
+`modules/*/api/src` and `packages/*/src`. The dashboard, the admin console and
+every module's screens were outside it - so a broken string literal I had
+introduced in the quotes UI passed a green typecheck and only failed at
+`vite build`. CLAUDE.md tells everyone to run typecheck before deploying, and
+it was silently skipping every screen. Split into `typecheck:api` and
+`typecheck:ui`, with `typecheck` running both; confirmed the new one fails on a
+deliberately broken UI file.
 
 ### 102 — Repo cleanup ✅ shipped (commit 6d37448)
 `readableOn` existed three times with two different formulas that disagreed:

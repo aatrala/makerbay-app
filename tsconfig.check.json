@@ -1,5 +1,5 @@
 {
-  "//": "Lambda code is bundled by CDK's esbuild, which does not typecheck. Without this, a type error ships and is only found at runtime. Run: npm run typecheck",
+  "//": "Lambda code ONLY. CDK's esbuild does not typecheck, so without this a type error ships and is found at runtime. This deliberately excludes the front end, which needs different lib and jsx settings - `npm run typecheck` runs this AND the two UI projects, because a check that silently skips every screen is worse than no check.",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "module": "ESNext",
