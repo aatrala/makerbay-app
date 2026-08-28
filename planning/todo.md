@@ -1775,3 +1775,29 @@ since a static bucket cannot vary meta tags per token. Decided: business name
 and logo ONLY, never the amount or the customer name, on the tenant's own
 domain where one is configured, and built so the generator structurally cannot
 read the quote row.
+
+### 119 — QR on the quote and invoice page 💬 consulting, awaiting founder sign-off
+Founder: "keep a QR in quote and invoice page for others to be able to open
+the page."
+
+The scenario this is really for is the one issue 118 could not close: a
+tradesperson standing in a kitchen with a phone in their hand, and a customer
+who wants the quote on their OWN phone. Copying a link needs a channel; holding
+out a screen to be scanned does not.
+
+**Known before the consults report:**
+- A QR IS the bearer token rendered machine-readable. Anyone who can see the
+  screen can capture it from across a room, which is not true of a 32-character
+  token in an address bar. That is the question the security consult has to
+  answer, not a detail.
+- `QrBlock` (`modules/presence/web/src/Qr.tsx`) already exists and generates
+  client-side, but it is React inside the presence bundle. The CUSTOMER page
+  (`modules/assistant/embed/src/pages.js`) is hand-written vanilla JS served
+  raw from S3 with no bundler, so it cannot simply import it. Three surfaces
+  are in play and they do not share a rendering stack: the customer page
+  (vanilla), the dashboard (React), and the printed invoice (server-rendered).
+- Revoke rotates the token, so a QR must not become a second credential that
+  outlives it.
+
+Two agents consulted (security; product/UX + implementation), same pattern as
+118. Discuss, agree, then build.

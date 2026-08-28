@@ -269,6 +269,32 @@ export async function putQuote(row: QuoteRow): Promise<void> {
   await ddb.send(new PutCommand({ TableName: Tables.quotes(), Item: row }))
 }
 
+/**
+ * Count a view without touching anything else on the row.
+ *
+ * The first version of this read the whole quote, incremented a counter and
+ * wrote the whole row back. Two requests reading before either wrote meant the
+ * second Put restored every field the first had changed - so a view landing
+ * just after an acceptance reverted `status` to `sent` and ERASED the signed
+ * acceptance record. A counter is never worth a read-modify-write of a row
+ * that carries a contract.
+ *
+ * ADD is atomic and touches only the three attributes named here.
+ * `if_not_exists` keeps the first view's timestamp as the first, whichever
+ * request happens to arrive first.
+ */
+export async function countQuoteView(tenantId: string, quoteId: string, at: string): Promise<void> {
+  await ddb.send(new UpdateCommand({
+    TableName: Tables.quotes(),
+    Key: { tenantId, quoteId },
+    UpdateExpression:
+      'ADD viewCount :one SET lastViewedAt = :at, firstViewedAt = if_not_exists(firstViewedAt, :at)',
+    // Never resurrect a deleted quote as a stub containing only view counts.
+    ConditionExpression: 'attribute_exists(quoteId)',
+    ExpressionAttributeValues: { ':one': 1, ':at': at },
+  }))
+}
+
 export async function getQuote(tenantId: string, quoteId: string): Promise<QuoteRow | undefined> {
   const r = await ddb.send(new GetCommand({ TableName: Tables.quotes(), Key: { tenantId, quoteId } }))
   return r.Item as QuoteRow | undefined

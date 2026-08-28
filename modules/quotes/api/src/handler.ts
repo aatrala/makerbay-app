@@ -46,6 +46,7 @@ import {
 import {
   DEFAULT_QUOTES_CONFIG,
   computeTotals,
+  countQuoteView,
   deletePriceItem,
   effectiveStatus,
   findByToken,
@@ -334,14 +335,9 @@ const phoneHintOf = (phone?: string): string | undefined => {
  */
 async function recordView(tenantId: string, quote: QuoteRow): Promise<void> {
   try {
-    const now = new Date().toISOString()
-    await putQuote({
-      ...quote,
-      firstViewedAt: quote.firstViewedAt ?? now,
-      lastViewedAt: now,
-      viewCount: (quote.viewCount ?? 0) + 1,
-    })
+    await countQuoteView(tenantId, quote.quoteId, new Date().toISOString())
   } catch (err) {
+    if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return
     console.warn('view count failed', { tenantId, quoteId: quote.quoteId, err: String(err) })
   }
 }
