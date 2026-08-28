@@ -415,6 +415,7 @@ async function confirmSideEffects(
     : ''
   const customerMail = await sendEmail({
     to: row.email ?? '',
+    ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: row.bookingId },
     audience: 'customer' as const,
     fromName: businessName,
     replyTo: notifyEmail,
@@ -443,6 +444,7 @@ async function confirmSideEffects(
 
   await sendEmail({
     to: notifyEmail || '',
+    ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: row.bookingId },
     audience: 'owner' as const,
     replyTo: row.email,
     subject: `New booking: ${row.serviceName}, ${view.date} ${view.time}`,
@@ -480,6 +482,7 @@ async function onDepositPaid(detail: PaymentReceivedEvent['detail']): Promise<vo
     await sendEmail({
       to: config.notifyEmail || '',
       audience: 'owner' as const,
+      ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: bookingId },
       subject: 'A deposit arrived for a booking that lapsed',
       text: `A $${(detail.amountCents / 100).toFixed(2)} deposit was paid for a ${row.serviceName} booking whose hold had expired. Refund it from ${APP}/payments if the time no longer works.`,
     })
@@ -596,6 +599,7 @@ async function cancelByToken(
   await sendEmail({
     to: config.notifyEmail || '',
     audience: 'owner' as const,
+    ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: booking.bookingId },
     subject: `Cancelled: ${booking.serviceName}, ${displayTime(booking.startsAt, config.timezone)}`,
     text: `${booking.name || booking.email} cancelled their ${booking.serviceName} booking.\n\n${businessName}`,
   })
@@ -808,6 +812,7 @@ async function patchBooking(tenantId: string, bookingId: string, event: Event): 
     await sendEmail({
       to: existing.email ?? '',
       audience: 'customer' as const,
+      ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: bookingId },
       fromName: tenant?.name ?? 'MakerBay',
       replyTo: config.notifyEmail,
       subject: `Your ${existing.serviceName} booking has been cancelled`,

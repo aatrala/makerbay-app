@@ -92,6 +92,12 @@ export interface ContactRow {
   status: ContactStatus
   note?: string
   tags?: string[]
+  /**
+   * Set when mail to this contact bounced or was reported as spam, so the
+   * owner sees it next to the customer rather than only in a staff console -
+   * and can clear it themselves by correcting the address (issue 107).
+   */
+  emailStatus?: 'ok' | 'bounced' | 'complained'
   /** Which module first created this contact. */
   source?: string
   createdAt: string

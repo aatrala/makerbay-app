@@ -143,6 +143,7 @@ async function rescue(tenantId: string, rescueId: string, caller: string): Promi
   await sendEmail({
     to: notifyEmail,
     audience: 'owner' as const,
+    ref: { tenantId, moduleId: 'voice', refType: 'request', refId: rescueId },
     subject: `Missed call from ${anonymous ? 'a withheld number' : caller}`,
     text: [
       `Someone called ${tenant.name} and nobody could answer.`,

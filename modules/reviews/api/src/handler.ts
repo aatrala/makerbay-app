@@ -229,6 +229,8 @@ export async function createInvite(
   const url = `${CHAT}/review?slug=${encodeURIComponent(tenant?.slug ?? '')}&token=${inviteToken}`
   const notice = await sendEmail({
     to: who.email,
+    ref: { tenantId, moduleId: 'reviews', refType: 'review', refId: who.contactId },
+    optional: true,
     audience: 'customer' as const,
     fromName: tenant?.name ?? 'MakerBay',
     replyTo: await ownerReplyTo(tenantId),
@@ -283,6 +285,8 @@ async function onBookingCompleted(detail: BookingCompletedEvent['detail']): Prom
     const tenant = await getTenant(tenantId)
     const notice = await sendEmail({
       to: email,
+      ref: { tenantId, moduleId: 'reviews', refType: 'review', refId: contactId },
+      optional: true,
       audience: 'customer' as const,
       fromName: tenant?.name ?? 'MakerBay',
       replyTo: await ownerReplyTo(tenantId),

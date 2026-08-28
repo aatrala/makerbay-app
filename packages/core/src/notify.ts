@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
+import { emailBlocked, type MailRef } from './maillog'
 
 /**
  * One email sender for every module.
@@ -45,6 +46,19 @@ interface EmailBase {
    * arrives as MakerBay.
    */
   fromName?: string
+  /**
+   * What this email is about, so a bounce three seconds later can be traced
+   * back to the quote that caused it (issue 107). SES EmailTags values allow
+   * only alphanumerics, hyphens and underscores - ULIDs are Crockford base32
+   * uppercase, so they pass unmodified.
+   */
+  ref?: MailRef
+  /**
+   * True for mail a recipient can reasonably object to: a review ask, a
+   * digest. Someone who reported one of those as spam is still owed their
+   * invoice, so only optional mail is stopped by a complaint.
+   */
+  optional?: boolean
 }
 
 /**
@@ -83,6 +97,14 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
   const to = input.to?.trim()
   if (!to || !to.includes('@')) return { sent: false, error: 'no_recipient' }
 
+  // Refuse before spending anything on an address we already know is dead.
+  // Per-tenant, not the provider's account-wide list: one tenant's bounce
+  // must not silence that address for every other tenant (issue 107).
+  if (input.ref) {
+    const blocked = await emailBlocked(input.ref.tenantId, to, input.optional === true)
+    if (blocked) return { sent: false, error: `address_${blocked}` }
+  }
+
   try {
     const envelope = input.audience === 'customer' ? (FROM_CUSTOMER() ?? FROM()) : FROM()
     await ses.send(
@@ -91,6 +113,19 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
         Destination: { ToAddresses: [to] },
         ...(input.replyTo ? { ReplyToAddresses: [input.replyTo] } : {}),
         ConfigurationSetName: CONFIG_SET(),
+        // Carried back on every delivery, bounce and complaint event, so the
+        // handler can find the row that caused the message without keeping a
+        // second index of its own.
+        ...(input.ref
+          ? {
+              EmailTags: [
+                { Name: 'tenantId', Value: input.ref.tenantId },
+                { Name: 'refType', Value: input.ref.refType },
+                { Name: 'refId', Value: input.ref.refId },
+                { Name: 'audience', Value: input.audience },
+              ],
+            }
+          : {}),
         Content: {
           Simple: {
             Subject: { Data: headerSafe(input.subject).slice(0, 200) },
@@ -127,6 +162,24 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
 export function explainEmailError(error?: string): string | undefined {
   if (!error) return undefined
   if (error === 'no_recipient') return 'No email address was given, so nothing was sent.'
+  // Written back onto the row by the SES event consumer, after the send
+  // itself succeeded. These are the ones that answer "she says she never got
+  // it" - the whole point of issue 107.
+  if (error === 'bounced') {
+    return 'This did not reach them: their email address rejected it permanently. Check the address, or ring them.'
+  }
+  if (error === 'bounce_transient') {
+    return 'Not delivered yet: their mail server turned it away, often a full mailbox. It may still arrive.'
+  }
+  if (error === 'complained') {
+    return 'They marked this as spam. Nothing further will be sent to them automatically.'
+  }
+  if (error === 'address_bounced') {
+    return 'That address bounced last time, so nothing was sent. Check it on the contact and try again.'
+  }
+  if (error === 'address_complained') {
+    return 'This customer has asked not to receive email, so nothing was sent.'
+  }
   if (error === 'sandbox_or_rejected') {
     return 'Email is not switched on for this account yet, so nothing was sent. Send the link yourself for now.'
   }

@@ -142,6 +142,8 @@ async function ask(tenantId: string, event: Event): Promise<APIGatewayProxyResul
   const tenant = await getTenant(tenantId)
   const notice = await sendEmail({
     to: contact.email,
+    ref: { tenantId, moduleId: 'visibility', refType: 'review', refId: contactId },
+    optional: true,
     audience: 'customer' as const,
     fromName: tenant?.name ?? 'MakerBay',
     replyTo: await ownerReplyTo(tenantId),

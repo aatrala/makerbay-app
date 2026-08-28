@@ -30,6 +30,12 @@ export const handler = async (event: { tenantId: string; bookingId: string }): P
 
   const notice = await sendEmail({
     to: String(booking.email),
+    ref: {
+      tenantId: event.tenantId,
+      moduleId: 'booking',
+      refType: 'booking',
+      refId: String(booking.bookingId),
+    },
     audience: 'customer' as const,
     fromName: tenant?.name ?? 'MakerBay',
     replyTo: String(cfg.Item?.notifyEmail ?? ''),

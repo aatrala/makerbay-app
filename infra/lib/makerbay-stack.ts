@@ -71,6 +71,16 @@ export class MakerbayStack extends cdk.Stack {
     // prices, assistant settings. Presence has had snapshots since issue 45;
     // these had neither a trail nor a way back (issue 99).
     const configVersions = table('ConfigVersions', 'pk', 'sk')
+    // What happened to each email after SES took it, plus a per-tenant
+    // address status (issue 107). Per-tenant on purpose: provider suppression
+    // is account-wide, so one tenant's bounce would otherwise silence that
+    // address for every other tenant.
+    const mailLog = table('MailLog', 'tenantId', 'messageId')
+    mailLog.addGlobalSecondaryIndex({
+      indexName: 'byRef',
+      partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'refKey', type: dynamodb.AttributeType.STRING },
+    })
     // Support tickets (issue 49): customers write in-app, staff answer in
     // the console, email carries the notifications both ways.
     const tickets = table('Tickets', 'tenantId', 'ticketId')
@@ -221,6 +231,27 @@ export class MakerbayStack extends cdk.Stack {
       tlsPolicy: ses.ConfigurationSetTlsPolicy.REQUIRE,
       reputationMetrics: true,
     })
+    // Without this, SES raised bounce and complaint events and nothing
+    // consumed them: notifyError caught only synchronous API failure, so a
+    // message SES accepted and then hard-bounced left the row reading "sent"
+    // and the dashboard's "email failed" chip could never fire (issue 107).
+    // The DEFAULT bus, not `makerbay`: SES refuses any other. Our own bus
+    // carries the usage-metering contract and this would have been a tidier
+    // home, but the service does not allow it, so the rule below lives on the
+    // default bus and filters on source instead.
+    const defaultBus = events.EventBus.fromEventBusName(this, 'DefaultEventBus', 'default')
+    emailConfigSet.addEventDestination('MailEvents', {
+      destination: ses.EventDestination.eventBus(defaultBus),
+      events: [
+        ses.EmailSendingEvent.BOUNCE,
+        ses.EmailSendingEvent.COMPLAINT,
+        ses.EmailSendingEvent.DELIVERY,
+        ses.EmailSendingEvent.REJECT,
+        ses.EmailSendingEvent.RENDERING_FAILURE,
+        ses.EmailSendingEvent.DELIVERY_DELAY,
+      ],
+    })
+
     const emailIdentity = new ses.EmailIdentity(this, 'EmailIdentity', {
       identity: ses.Identity.publicHostedZone(publicZone),
       mailFromDomain: `mail.${DOMAIN}`,
@@ -425,6 +456,10 @@ export class MakerbayStack extends cdk.Stack {
         sesRegion: this.region,
         // The identity SES already verifies for the rest of our mail.
         sesVerifiedDomain: DOMAIN,
+        // Same config set as everything else, so a bounced signup code shows
+        // up in the same event stream and the same alarms rather than being
+        // the one category of mail we are blind to (issue 107).
+        configurationSetName: emailConfigSet.configurationSetName,
       }),
       userVerification: {
         emailSubject: verifyMail.subject,
@@ -473,6 +508,14 @@ export class MakerbayStack extends cdk.Stack {
       USER_POOL_ID: userPool.userPoolId,
       USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
     })
+    // Cognito's `userVerification` above covers sign-up and nothing else.
+    // Password reset, resend and the MFA code all ignore it, so the email
+    // carrying a credential that can take over a workspace was arriving as
+    // Cognito's unstyled default. This trigger routes every one of them
+    // through the same templates (issue 107).
+    const cognitoMessageFn = fn('CognitoMessageFn', 'packages/core-api/src/cognito-message.ts', {})
+    userPool.addTrigger(cognito.UserPoolOperation.CUSTOM_MESSAGE, cognitoMessageFn)
+
     const coreFn = fn('CoreApiFn', 'packages/core-api/src/handler.ts', {
       ...tableEnv,
       TABLE_TICKETS: tickets.tableName,
@@ -901,6 +944,50 @@ export class MakerbayStack extends cdk.Stack {
     coreFn.addEnvironment('TABLE_AUDIT', audit.tableName)
     audit.grantReadData(coreFn)
 
+    // SES delivery events (issue 107). It reads contacts to mirror a bounce
+    // onto the customer's record, and sends one email of its own: a bounce on
+    // the OWNER's notification address is a silent product failure, because
+    // they simply think no work is coming in.
+    const mailEventsFn = fn('MailEventsFn', 'packages/core-api/src/mail-events.ts', {
+      ...tableEnv,
+      TABLE_MAILLOG: mailLog.tableName,
+      // The module tables it writes the delivery outcome back onto. Named
+      // explicitly rather than via tableEnv, because a missing one here is a
+      // silent no-op in the registry, not a crash.
+      TABLE_QUOTES: quotes.tableName,
+      TABLE_INVOICES: invoices.tableName,
+      TABLE_BOOKINGS: bookings.tableName,
+      TABLE_REQUESTS: requests.tableName,
+    })
+    mailLog.grantReadWriteData(mailEventsFn)
+    for (const t of [contacts, contactEvents]) t.grantReadWriteData(mailEventsFn)
+    // It writes the delivery outcome back onto the row that caused the
+    // message, because the dashboard's "email failed" chip reads that row and
+    // not the log. Without this the pipeline records a bounce nobody sees.
+    for (const t of [quotes, invoices, bookings, requests]) t.grantWriteData(mailEventsFn)
+    for (const t of [tenants, users]) t.grantReadData(mailEventsFn)
+    mailEventsFn.addToRolePolicy(sesSendPolicy)
+    new events.Rule(this, 'MailEventsRule', {
+      // Default bus, because that is the only one SES will publish to. The
+      // source filter is what keeps this rule from seeing every other AWS
+      // event that lands there.
+      eventBus: defaultBus,
+      eventPattern: { source: ['aws.ses'] },
+      targets: [new eventsTargets.LambdaFunction(mailEventsFn)],
+    })
+    // Every module that sends mail needs the pre-send check, which reads the
+    // per-tenant address status out of this table.
+    // Every function that calls sendEmail, including the scheduled ones: a
+    // missing table here fails OPEN, so the reminder would keep writing to a
+    // dead address and nothing would say why.
+    for (const f of [
+      bookingFn, quotesFn, requestsFn, reviewsFn, visibilityFn, coreFn,
+      requestsDigestFn, reminderFn, rescueProcessorFn,
+    ]) {
+      f.addEnvironment('TABLE_MAILLOG', mailLog.tableName)
+      mailLog.grantReadWriteData(f)
+    }
+
     // ── Grants ───────────────────────────────────────────────────────────
     // tenants: the authorizer refuses suspended workspaces (the kill switch).
     for (const t of [tenants, users, apiKeys, entitlements, grants]) t.grantReadData(authorizerFn)
@@ -1189,6 +1276,58 @@ export class MakerbayStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     })
     apiSpike.addAlarmAction(alarmEmail)
+
+    // Mail health (issue 107). Deliberately absolute counts, NOT the rate
+    // metrics AWS suggests: at our volume a rate is noise. Ten sends and one
+    // bounce is 10%, which would page every week for nothing; a hundred sends
+    // and one complaint is 1%, ten times the 0.1% level at which SES starts a
+    // review, and a rate alarm set to catch that would fire constantly. A count
+    // answers the only question worth waking up for - is something systematic
+    // happening - and it stays meaningful as volume grows.
+    const bounceCount = new cloudwatch.Alarm(this, 'MailBounceCount', {
+      alarmName: 'makerbay-mail-bounces',
+      alarmDescription: 'More bounces in an hour than a normal day produces. Check for a bad import or a broken template before SES notices.',
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/SES',
+        metricName: 'Bounce',
+        statistic: 'Sum',
+        period: cdk.Duration.hours(1),
+      }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    })
+    bounceCount.addAlarmAction(alarmEmail)
+
+    // Lower, because complaints are what actually cost an account its sending.
+    // Two in an hour is not a misclick.
+    const complaintCount = new cloudwatch.Alarm(this, 'MailComplaintCount', {
+      alarmName: 'makerbay-mail-complaints',
+      alarmDescription: 'Two or more spam complaints in an hour. This is the metric that gets sending suspended - look at what went out.',
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/SES',
+        metricName: 'Complaint',
+        statistic: 'Sum',
+        period: cdk.Duration.hours(1),
+      }),
+      threshold: 2,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    })
+    complaintCount.addAlarmAction(alarmEmail)
+
+    // The consumer failing is worse than any single bounce: bounces keep
+    // arriving and are silently dropped, which is exactly the state issue 107
+    // was filed to end.
+    const mailEventsBroken = new cloudwatch.Alarm(this, 'MailEventsErrors', {
+      alarmName: 'makerbay-mail-events-errors',
+      alarmDescription: 'The SES event consumer is failing, so bounces are being discarded again. Check its logs.',
+      metric: mailEventsFn.metricErrors({ period: cdk.Duration.hours(1), statistic: 'Sum' }),
+      threshold: 3,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    })
+    mailEventsBroken.addAlarmAction(alarmEmail)
 
     const authorizer = new HttpLambdaAuthorizer('TenantAuthorizer', authorizerFn, {
       responseTypes: [HttpLambdaResponseType.SIMPLE],

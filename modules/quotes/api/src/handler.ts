@@ -306,6 +306,7 @@ async function respond(
   await sendEmail({
     to: config.notifyEmail || '',
     audience: 'owner' as const,
+    ref: { tenantId, moduleId: 'quotes', refType: 'quote', refId: quote.quoteId },
     subject: `Quote ${qLabel} ${accepted ? 'accepted' : 'declined'}`,
     text: [
       `${quote.customerName ?? 'Your customer'} ${accepted ? 'accepted' : 'declined'} quote ${qLabel}.`,
@@ -502,6 +503,7 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
 
   const notice = await sendEmail({
     to: quote.customerEmail,
+    ref: { tenantId, moduleId: 'quotes', refType: 'quote', refId: quote.quoteId },
     audience: 'customer' as const,
     fromName: tenant?.name ?? 'MakerBay',
     replyTo: config.notifyEmail ?? '',
@@ -660,6 +662,7 @@ async function onPaymentReceived(detail: PaymentReceivedEvent['detail']): Promis
       await sendEmail({
         to: config.notifyEmail || '',
         audience: 'owner' as const,
+        ref: { tenantId, moduleId: 'quotes', refType: 'quote', refId: quote.quoteId },
         subject: `Deposit paid on quote ${qLabel}`,
         text: [
           `${quote.customerName ?? 'Your customer'} paid the ${money(detail.amountCents, detail.currency)} deposit on quote ${qLabel}.`,

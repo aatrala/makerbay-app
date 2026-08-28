@@ -1029,7 +1029,7 @@ whole email review and it is hard to disagree.
 a customer, pointing at `config.notifyEmail`. Type error to omit it. That
 alone fixes it without needing inbound mail at all.
 
-### 107 — Bounces and complaints are generated and discarded ⛔ P0
+### 107 — Bounces and complaints are generated and discarded ✅ shipped
 `EmailConfigSet` (`makerbay-stack.ts:200`) sets `tlsPolicy` and
 `reputationMetrics` and nothing else - zero event destinations in the whole
 stack. SES is raising BOUNCE and COMPLAINT events right now and nothing
@@ -1041,13 +1041,65 @@ consumes them. Consequences:
 - A tradesperson has no way to learn their customer never got the quote.
 - Account-level suppression is cross-tenant: one tenant's bounce suppresses
   that address for every other tenant.
-**Fix:** EventBridge event destination on the config set (the `makerbay` bus
-already exists and is a stable contract) into a `MailLog` table keyed
-tenantId/messageId, plus a per-tenant `emailStatus` on the Contact and a
-pre-send check.
 **Not blocked by the sandbox:** the SES mailbox simulator works while
 sandboxed (`bounce@`, `complaint@`, `ooto@simulator.amazonses.com`), so this
 entire pipeline can be built and end-to-end tested today.
+
+**Done (2026-08-28).** Shipped:
+- `packages/core/src/maillog.ts`: the MailLog table plus a per-tenant address
+  status. Deliberately NOT the provider's account-wide suppression list, which
+  would let one tenant's bounce silence that address for every other tenant.
+- `packages/core-api/src/mail-events.ts` on an EventBridge rule. It suppresses
+  only on a `Permanent` bounce - a full mailbox is emptied on Monday, and
+  suppressing on that would cost a customer every message thereafter.
+- A complaint blocks only `optional: true` mail (review asks, digests).
+  Someone who reported a review request as spam has still asked for a quote.
+- The owner is emailed when their OWN notification address bounces, because
+  otherwise they just see no work coming in. Never to the address that
+  bounced. Complaints are recorded silently: telling an owner their customer
+  reported them is a support conversation and a grudge over a misclick.
+- `ref` wired into all 20 `sendEmail` call sites. Without it the pre-send
+  check never runs, so the suppression was dead code until this landed.
+- Absolute-count alarms (5 bounces/hr, 2 complaints/hr), not the rate metrics
+  AWS suggests, for the reason in the alarm note above.
+
+**Corrections found while building it:**
+- SES will not publish to a custom EventBridge bus. The plan named the
+  `makerbay` bus; only the DEFAULT bus is accepted, so the rule lives there
+  and filters on `source: aws.ses`.
+- Cognito's `userVerification` covers sign-up ONLY. Password reset, resend,
+  attribute verification and the MFA code all ignored it, so the most
+  security-sensitive email in the product was still arriving as Cognito's
+  unstyled default. Fixed with a `CustomMessage` Lambda trigger
+  (`packages/core-api/src/cognito-message.ts`) covering all six code-bearing
+  trigger sources. It substitutes `request.codeParameter` rather than a
+  hardcoded `{####}`, per AWS guidance - hardcoding would break silently and
+  lock people out. `AdminCreateUser` is left on Cognito's default on purpose:
+  it needs the username as well as the code.
+- Cognito mail now flows through the same configuration set, so a bounced
+  signup code is no longer the one category of mail we are blind to.
+
+**Verified live 2026-08-28** with `scripts/verify-mail-events.mjs` against the
+SES mailbox simulator (works while sandboxed). All six checks pass: bounce
+recorded + suppressed, complaint recorded + suppressed, delivery recorded and
+NOT suppressed. Zero consumer errors afterwards, and zero stub rows created.
+
+**Two bugs the live run caught that no unit test could have:**
+1. `at` is a DynamoDB reserved keyword, so `setEmailStatus` threw
+   ValidationException on every bounce and complaint. A mocked client accepts
+   any expression, so the whole suite passed while the feature was dead. Now
+   every attribute name is aliased, with a regression test that asserts the
+   expression shape (confirmed to fail against the old version).
+2. The log is one row per messageId, and SES sends Delivery AND THEN Complaint
+   for the same message. EventBridge does not promise order, so a late
+   delivery erased the complaint. Writes are now monotonic on a RANK, with
+   `delivered` above `delayed` so a slow message that arrives reads as
+   arrived, and everything meaning "it did not get there" above both.
+
+**Not proven live:** the row write-back itself. The synthetic refIds match no
+real quote, so the conditional correctly rejected them - which proves the
+guard, not the update. Covered by 7 unit tests; will be confirmed by the first
+real bounce.
 **Alarm note:** SES reviews at 5% bounce / 0.1% complaint. At 100 sends a
 day a SINGLE complaint is 1%, ten times the review threshold. Alarm on
 absolute counts, not rates, until volume is in the thousands.

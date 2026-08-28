@@ -235,6 +235,7 @@ async function create(
     const notice = await sendEmail({
       to: notifyTo,
       audience: 'owner' as const,
+      ref: { tenantId, moduleId: 'requests', refType: 'request', refId: row.requestId },
       replyTo: contact.email,
       subject: `New ${kind} from ${name || contact.email || contact.phone}`,
       text: [
@@ -342,6 +343,7 @@ async function addReply(
     ? await sendEmail({
         to: request.email,
         audience: 'customer' as const,
+        ref: { tenantId, moduleId: 'requests', refType: 'request', refId: request.requestId },
         fromName: tenant?.name ?? 'MakerBay',
         replyTo: await ownerReplyTo(tenantId),
         subject: `Re: ${request.subject}`,
