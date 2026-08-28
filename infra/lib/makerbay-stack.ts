@@ -87,6 +87,22 @@ export class MakerbayStack extends cdk.Stack {
     // Extra public addresses that 301 to the primary slug. Redirect, never
     // serve: two URLs carrying the same page would read as duplicate content
     // to Google and hurt the local SEO the page exists for.
+    /**
+     * Counters for public endpoints that need a ceiling (issue 119 review).
+     *
+     * Bespoke rather than the shared `table()` helper because these rows are
+     * pure ephemera: they must expire on their own, and none of them is worth
+     * a point-in-time backup or surviving a stack teardown.
+     */
+    const rateLimit = new dynamodb.Table(this, 'RateLimit', {
+      tableName: 'makerbay-ratelimit',
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    })
+
     const slugAliases = table('SlugAliases', 'slug')
     slugAliases.addGlobalSecondaryIndex({
       indexName: 'byTenant',
@@ -1041,6 +1057,12 @@ export class MakerbayStack extends cdk.Stack {
       slugAliases.grantReadData(f)
     }
 
+    // The public document routes are the ones a stranger can reach.
+    for (const f of [quotesFn]) {
+      f.addEnvironment('TABLE_RATELIMIT', rateLimit.tableName)
+      rateLimit.grantReadWriteData(f)
+    }
+
     /**
      * Renders the HTML shell behind a quote or invoice link (issue 118).
      *
@@ -1847,6 +1869,36 @@ function handler(event) {
         strictTransportSecurity: {
           accessControlMaxAge: cdk.Duration.days(365),
           includeSubdomains: true,
+          override: true,
+        },
+        /**
+         * The page builds its own HTML by concatenation and assigns innerHTML
+         * in a dozen places (issue 119 review). Every value goes through an
+         * escape helper, but CSP is the layer that survives one missed call -
+         * and on this page a missed call reaches a document carrying a price,
+         * a customer's name and a tradesperson's bank details.
+         *
+         * The allowances are exactly what the page uses and nothing more:
+         * - script and style from chat.makerbay.app, where pages.js and
+         *   chat.css are served. 'unsafe-inline' for style only, because the
+         *   invoice themes are injected as a <style> block at render time.
+         * - connect to api.makerbay.app, which is where the token goes.
+         * - images from chat.makerbay.app (the business photo) and data: for
+         *   anything inlined.
+         * - frame-ancestors 'none' repeats the X-Frame-Options above, because
+         *   modern browsers honour CSP and ignore the older header.
+         */
+        contentSecurityPolicy: {
+          contentSecurityPolicy: [
+            "default-src 'none'",
+            "script-src https://chat.makerbay.app",
+            "style-src https://chat.makerbay.app 'unsafe-inline'",
+            "img-src https://chat.makerbay.app data:",
+            "connect-src https://api.makerbay.app",
+            "form-action 'none'",
+            "base-uri 'none'",
+            "frame-ancestors 'none'",
+          ].join('; '),
           override: true,
         },
       },

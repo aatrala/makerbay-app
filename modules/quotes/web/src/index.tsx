@@ -1115,6 +1115,19 @@ function PriceList({ me }: { me?: Me }) {
                 <p className="meta">Used on every new quote and invoice. Existing documents keep the currency they were made in.</p>
               </div>
               <div className="grow">
+                <label htmlFor="q-accept">Before a customer can accept</label>
+                <select id="q-accept" value={config.acceptCheck ?? 'name'}
+                  onChange={(e) => setConfig({ ...config, acceptCheck: e.target.value })}>
+                  <option value="name">Type their name</option>
+                  <option value="phone4">Type their name and the last 4 digits of their phone</option>
+                  <option value="none">Just tap the button</option>
+                </select>
+                <p className="meta">
+                  Anyone with the link can always read the quote - this is only about agreeing to it.
+                  A typed name is what makes an acceptance stand up if it is ever questioned.
+                </p>
+              </div>
+              <div className="grow">
                 <label htmlFor="q-notify">Send quote notifications to</label>
                 <input id="q-notify" type="email" value={config.notifyEmail ?? ''}
                   placeholder="you@yourbusiness.com.au"

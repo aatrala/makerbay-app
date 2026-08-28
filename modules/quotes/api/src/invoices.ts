@@ -47,6 +47,18 @@ export interface InvoiceRow {
   sentAt?: string
   paidAt?: string
   notifyError?: string
+  /**
+   * Whether the customer has opened it (issue 119 review).
+   *
+   * Quotes have counted views since issue 118; invoices counted nothing at
+   * all - so unauthorised access to the page carrying the customer's name and
+   * the tradesperson's bank details left no trace whatsoever, and the owner
+   * could not tell an unpaid invoice that was never opened from one that was
+   * read and ignored. Those need opposite responses.
+   */
+  firstViewedAt?: string
+  lastViewedAt?: string
+  viewCount?: number
   /** Set when the owner kills a shared link. The old token stops resolving. */
   tokenRotatedAt?: string
   /** The number the link went to, when there is no email (issue 118). */
@@ -110,6 +122,24 @@ export async function findInvoiceByToken(tenantId: string, token: string): Promi
   )
   const invoice = (r.Items ?? [])[0] as InvoiceRow | undefined
   return invoice?.tenantId === tenantId ? invoice : undefined
+}
+
+/**
+ * Note that the customer opened an invoice.
+ *
+ * Atomic, for the same reason as the quote counter: a read-modify-write of the
+ * whole row would let a view landing after a payment revert `status` and erase
+ * `paidAt`. A counter is never worth rewriting a row that records money.
+ */
+export async function countInvoiceView(tenantId: string, invoiceId: string, at: string): Promise<void> {
+  await ddb.send(new UpdateCommand({
+    TableName: Tables.invoices(),
+    Key: { tenantId, invoiceId },
+    UpdateExpression:
+      'ADD viewCount :one SET lastViewedAt = :at, firstViewedAt = if_not_exists(firstViewedAt, :at)',
+    ConditionExpression: 'attribute_exists(invoiceId)',
+    ExpressionAttributeValues: { ':one': 1, ':at': at },
+  }))
 }
 
 /**
@@ -397,6 +427,16 @@ export async function publicInvoiceView(
   const qr = invoice.status !== 'void'
     ? await docQr(invoiceUrl(slug, label, invoice.publicToken))
     : undefined
+  // Counted here, in the API the page's own JavaScript calls - never at the
+  // CDN, where a link-preview bot would fire it the instant the message is
+  // sent and the owner would be told "opened" before anyone had looked.
+  try {
+    await countInvoiceView(tenantId, invoice.invoiceId, new Date().toISOString())
+  } catch (err) {
+    if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') {
+      console.warn('invoice view count failed', { tenantId, err: String(err) })
+    }
+  }
   return json(200, {
     business: businessName,
     footer: config.docFooter || undefined,

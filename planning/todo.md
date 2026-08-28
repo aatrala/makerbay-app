@@ -1869,3 +1869,55 @@ print identity block carries the name and phone, and the toggle works.
 limit on `/respond` (phone4 is 10,000 possibilities, so the STRONGER accept
 setting is the brute-forceable one - which makes it falsely reassuring); no
 CSP on the document host; invoices record no views at all.
+
+### 120 — Rate limit, CSP, invoice views, and a document analytics view ✅ shipped
+The three items the issue 119 security review left open, plus the analytics
+view the founder asked for on top.
+
+**Rate limit on accepting.** `phone4` is 10,000 possibilities with no ceiling,
+so the STRONGER accept setting was the brute-forceable one - falsely
+reassuring, and a success would have been recorded as a binding contract with
+a name, an IP and a document hash. Now `packages/core/ratelimit.ts`, a shared
+conditional-write counter for any public endpoint.
+
+Two deliberate choices:
+- It counts FAILURES, not attempts. Counting every attempt would spend a
+  customer's allowance on their own successful acceptance.
+- Keyed on the TOKEN, not the caller's address. Someone who can hold the link
+  can also change address, so per-IP alone would be theatre against exactly
+  this attack.
+It is a slowdown, not a lockout: a correct answer always works, and 10 wrong
+answers an hour turns 10,000 possibilities into 42 days.
+Verified live: 10 guesses allowed, 15 blocked with 429, none wrongly accepted,
+and the real customer with the right digits still got through afterwards.
+
+**CSP on the document host.** The page builds HTML by concatenation and
+assigns innerHTML in a dozen places; every value is escaped, but CSP is the
+layer that survives one missed call - and a missed call here reaches a
+document carrying a price, a customer's name and bank details. `default-src
+'none'` with exactly what the page uses. Verified live with no console errors.
+
+**Invoice views.** Quotes counted views from issue 118; invoices counted
+nothing, so unauthorised access to the page with the bank details left no
+trace, and the owner could not tell an unpaid invoice nobody opened from one
+read and ignored. Atomic, like the quote counter, so a view landing after a
+payment cannot revert `status` or erase `paidAt`.
+
+**The analytics view**, on the existing Usage page. Usage counts what the
+PLATFORM did; this counts what CUSTOMERS did. Sent / opened / accepted for
+quotes and invoices, plus a "worth a phone call" list, oldest first.
+
+The distinction the view exists for: a quote nobody opened is a DELIVERY
+problem - the link never arrived - and a quote opened three times with no
+answer is a PRICE problem. Opposite responses, and the list showed the same
+"sent" chip for both. Deliberately not a chart: a solo tradesperson between
+jobs wants three numbers and a list of who to ring.
+
+It says when view counting started, so anything older reads as "no record
+either way" rather than reporting a zero as fact.
+
+**One more of mine found while testing:** `acceptCheck` was added to the type
+and the defaults in the 118 batch and never to `updateConfig`, so the setting
+existed and could not be changed - `phone4` was unreachable from anywhere. The
+first brute-force test passed 25 "guesses" because the gate was never on.
+Persisted now, validated against the union, and surfaced in Quotes settings.

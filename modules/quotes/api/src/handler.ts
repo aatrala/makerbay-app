@@ -35,7 +35,9 @@ import {
   shareInvoice,
 } from './invoices'
 import { docUrl } from './links'
+import { documentInsights } from './insights'
 import { docQr } from './qr'
+import { claimAcceptFailure } from '@makerbay/core'
 import {
   affirmationFor,
   callerIp,
@@ -115,6 +117,11 @@ export const handler = async (
       const denied = requireScope(ctx, 'quotes:config:write')
       if (denied) return denied
       return await updateConfig(tenantId, event)
+    }
+
+    // How the documents are doing, for the Usage screen (issue 119).
+    if (method === 'GET' && path === '/v1/quotes/insights') {
+      return await documentInsights(tenantId)
     }
 
     if (method === 'GET' && path === '/v1/quotes/items') {
@@ -469,7 +476,30 @@ async function respond(
       name: String(b.name ?? ''),
       phone4: String(b.phone4 ?? ''),
     })
-    if (failed) return json(400, failed)
+    if (failed) {
+      /**
+       * Wrong answers are counted, and after ten in an hour this document
+       * stops listening (issue 119 review).
+       *
+       * The check being protected is the last four digits of a phone number:
+       * 10,000 possibilities, which one script works through in minutes. Until
+       * this, the STRONGER accept setting was the brute-forceable one, which
+       * made it falsely reassuring. Success would have been recorded as a
+       * binding contract with a name, an IP and a document hash.
+       *
+       * Keyed on the token rather than the caller's address, because someone
+       * who can hold the link can also change address - a per-IP cap alone
+       * would be theatre against exactly this attack.
+       */
+      const allowed = await claimAcceptFailure(quote.publicToken)
+      if (!allowed.ok) {
+        return json(429, {
+          error: 'too_many_attempts',
+          message: 'Too many tries. Wait an hour, or ask them to send the quote again.',
+        })
+      }
+      return json(400, failed)
+    }
 
     const snapshot = snapshotOf(quote)
     acceptance = {
@@ -1041,6 +1071,18 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
     terms: String(b.terms ?? DEFAULT_QUOTES_CONFIG.terms).slice(0, 2000),
     validDays: Math.min(Math.max(Number(b.validDays ?? existing.validDays) || 30, 1), 365),
     notifyEmail: String(b.notifyEmail ?? existing.notifyEmail).slice(0, 200),
+    /**
+     * What a customer must do to accept (issue 118).
+     *
+     * This was added to the type and the defaults and never to this function,
+     * so the setting existed and could not be changed - phone4, the stronger
+     * option, was unreachable from anywhere. Validated against the union
+     * rather than trusted, because an unknown value here would fall through
+     * verifyAccept's checks and gate nothing at all.
+     */
+    acceptCheck: (['none', 'name', 'phone4'] as const).includes(b.acceptCheck as never)
+      ? (b.acceptCheck as 'none' | 'name' | 'phone4')
+      : (existing.acceptCheck ?? 'name'),
     invoiceTheme: INVOICE_THEMES.includes(b.invoiceTheme as never)
       ? (b.invoiceTheme as string)
       : ((existing as { invoiceTheme?: string }).invoiceTheme ?? 'classic'),
