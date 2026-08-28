@@ -35,9 +35,10 @@ import {
   shareInvoice,
 } from './invoices'
 import { docUrl } from './links'
+import { quoteSent } from '@makerbay/email'
 import { documentInsights } from './insights'
 import { docQr } from './qr'
-import { claimAcceptFailure } from '@makerbay/core'
+import { claimAcceptFailure, getTenantBrand } from '@makerbay/core'
 import {
   affirmationFor,
   callerIp,
@@ -891,29 +892,34 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
   const qLabel = quoteLabel(quote.number, config.docPrefix)
   const url = quoteUrl(tenant?.slug ?? '', qLabel, quote.publicToken)
 
+  const brand = await getTenantBrand(tenantId)
+  const mail = quoteSent({
+    brand,
+    contact: { phone: undefined, email: config.notifyEmail || undefined },
+    customerName: quote.customerName,
+    label: qLabel,
+    total: money(quote.totalCents, quote.currency),
+    validUntil: new Date(quote.validUntil).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    }),
+    url,
+    notes: quote.notes,
+    lines: quote.lines.map((l) => ({
+      description: l.description,
+      quantity: `${l.quantity} ${l.unit}`,
+      amount: money(l.totalCents, quote.currency),
+    })),
+  })
+
   const notice = await sendEmail({
     to: quote.customerEmail,
     ref: { tenantId, moduleId: 'quotes', refType: 'quote', refId: quote.quoteId },
     audience: 'customer' as const,
-    fromName: tenant?.name ?? 'MakerBay',
+    fromName: brand.name,
     replyTo: config.notifyEmail ?? '',
-    subject: `Quote ${qLabel} from ${tenant?.name ?? 'us'}`,
-    text: [
-      `${quote.customerName ?? 'Hello'},`,
-      '',
-      `Here is your quote for ${money(quote.totalCents, quote.currency)}.`,
-      '',
-      ...quote.lines.map(
-        (l) => `  ${l.quantity} × ${l.description} — ${money(l.totalCents, quote.currency)}`,
-      ),
-      '',
-      `Total: ${money(quote.totalCents, quote.currency)}`,
-      `Valid until ${new Date(quote.validUntil).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-      '',
-      `View and accept: ${url}`,
-      '',
-      tenant?.name ?? '',
-    ].join('\n'),
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
   })
 
   const updated = await markShared(

@@ -83,6 +83,6 @@ export function authEmail(kind: AuthKind): { subject: string; html: string; text
     },
     // No preference link on a security email: there is nothing to unsubscribe
     // from, and offering one is a phishing vector in itself.
-    ownerFooter('your business', { security: true }),
+    ownerFooter('your business'),
   )
 }

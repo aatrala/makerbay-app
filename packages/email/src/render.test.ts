@@ -134,9 +134,20 @@ describe('renderEmail', () => {
 })
 
 describe('footers', () => {
-  it('offers an owner a preference link, but never on a security email', () => {
-    expect(ownerFooter('X').join(' ')).toContain('/settings/notifications')
-    expect(ownerFooter('X', { security: true }).join(' ')).not.toContain('/settings/notifications')
+  /**
+   * The owner footer used to advertise app.makerbay.app/settings/notifications,
+   * which does not exist and never has. A 404 promising control over your
+   * email is worse than not offering it, so the line is gone and the one
+   * owner-bound message anybody would opt out of - the daily digest - carries
+   * a real unsubscribe of its own instead (issue 121).
+   */
+  it('promises no preferences page, because there is not one', () => {
+    expect(ownerFooter('X').join(' ')).not.toContain('/settings/notifications')
+    expect(ownerFooter('X').join(' ')).not.toMatch(/preferen/i)
+  })
+
+  it('still tells an owner why they are getting it', () => {
+    expect(ownerFooter('Southside Plumbing').join(' ')).toContain('Southside Plumbing')
   })
 
   // A homeowner has no MakerBay account and must never be offered one.

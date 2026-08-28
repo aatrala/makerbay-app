@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { bookingConfirmed, newBooking as newBookingMail } from '@makerbay/email'
 import {
   appendContactEvent,
   type AuditActor,
@@ -8,12 +9,14 @@ import {
   findApiKeyByHash,
   getEffectiveEntitlement,
   getTenant,
+  getTenantBrand,
   getTenantBySlugOrAlias,
   getUser,
   hashApiKey,
   json,
   linkToken,
   listConfigVersions,
+  money,
   readConfigVersion,
   recordAudit,
   requireScope,
@@ -410,26 +413,28 @@ async function confirmSideEffects(
   notifyEmail: string,
 ): Promise<boolean> {
   const view = publicView(row, timezone)
-  const depositLine = row.depositPaidAt && row.depositCents
-    ? `Deposit received: $${(row.depositCents / 100).toFixed(2)}. `
-    : ''
+  const brand = await getTenantBrand(tenantId)
+  const cancelUrl = `${CHAT}/booking/cancel?slug=${encodeURIComponent(await slugOf(tenantId))}&token=${row.cancelToken}`
+  const confirmMail = bookingConfirmed({
+    brand,
+    contact: { email: notifyEmail || undefined },
+    customerName: row.name,
+    service: row.serviceName,
+    when: `${view.date} at ${view.time}`,
+    deposit: row.depositPaidAt && row.depositCents
+      ? money(row.depositCents, 'AUD')
+      : undefined,
+    cancelUrl,
+  })
   const customerMail = await sendEmail({
     to: row.email ?? '',
     ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: row.bookingId },
     audience: 'customer' as const,
-    fromName: businessName,
+    fromName: brand.name,
     replyTo: notifyEmail,
-    subject: `Your ${row.serviceName} booking with ${businessName}`,
-    text: [
-      `${row.name || 'Hello'},`,
-      '',
-      `${depositLine}Your ${row.serviceName} is booked for ${view.date} at ${view.time}.`,
-      '',
-      `Need to cancel? ${CHAT}/booking/cancel?slug=${encodeURIComponent(await slugOf(tenantId))}&token=${row.cancelToken}`,
-      ...(depositLine ? ['', `The deposit is refundable at ${businessName}'s discretion.`] : []),
-      '',
-      businessName,
-    ].join('\n'),
+    subject: confirmMail.subject,
+    text: confirmMail.text,
+    html: confirmMail.html,
   })
   if (!customerMail.sent) {
     row.notifyError = customerMail.error
@@ -442,20 +447,22 @@ async function confirmSideEffects(
     href: `/booking/diary`,
   })
 
+  const ownerMail = newBookingMail({
+    businessName,
+    who: row.name || row.email || row.phone || 'Someone',
+    service: row.serviceName,
+    when: `${view.date} at ${view.time}`,
+    deposit: row.depositPaidAt && row.depositCents ? money(row.depositCents, 'AUD') : undefined,
+    note: row.note,
+  })
   await sendEmail({
     to: notifyEmail || '',
     ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: row.bookingId },
     audience: 'owner' as const,
     replyTo: row.email,
-    subject: `New booking: ${row.serviceName}, ${view.date} ${view.time}`,
-    text: [
-      `${row.name || row.email || row.phone} booked ${row.serviceName}.`,
-      `${view.date} at ${view.time}`,
-      row.depositPaidAt && row.depositCents ? `Deposit paid: $${(row.depositCents / 100).toFixed(2)}` : '',
-      row.note ? `\nNote: ${row.note}` : '',
-      '',
-      `Diary: ${APP}/booking/diary`,
-    ].join('\n'),
+    subject: ownerMail.subject,
+    text: ownerMail.text,
+    html: ownerMail.html,
   })
 
   await emitUsage({ tenantId, moduleId: 'booking', metric: 'booking.created', quantity: 1 })

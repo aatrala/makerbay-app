@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { api, logout, type DashboardModule, type Me } from '@makerbay/web-kit'
+import { isSetupDismissed } from './Home'
 
 /**
  * The shell: one sidebar link per module (sub-pages render as tabs above the
@@ -26,10 +27,24 @@ const ICONS: Record<string, string> = {
   reviews: 'M12 3l2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L3.3 9.4l6-.9z',
 }
 
-// Work: the daily money screens, in job-lifecycle order. Grow: everything
-// that earns the next customer. Get set up: the things you do once, which is
-// why they sit apart - a screen you visit twice a year does not belong beside
-// the diary you open every morning. Unlisted modules land at the end of Grow.
+/**
+ * Work: the daily money screens, in job-lifecycle order. Grow: everything that
+ * earns the next customer. Done for you: the screens where we do the work
+ * instead of the owner.
+ *
+ * "Done for you" rather than "Concierge": the section names the OUTCOME, like
+ * the other two, instead of naming the labour. Concierge also reads as premium
+ * outside hospitality, and this is free on any paid plan - a luxury word
+ * suppresses use of the thing meant to get people started.
+ *
+ * Its position moves. A screen you visit twice a year does not belong beside
+ * the diary you open every morning - but on day one it is the alternative to a
+ * six-step checklist, and the person who will not configure anything is
+ * deciding in their first ten minutes whether this is worth an evening. So it
+ * sits under Home until setup is done, and drops to the bottom afterwards.
+ *
+ * Unlisted modules land at the end of Grow.
+ */
 const WORK = ['requests', 'booking', 'quotes', 'payments', 'contacts', 'voice']
 const GROW = ['genie', 'assistant', 'presence', 'visibility', 'reviews']
 const SETUP = ['setup']
@@ -54,7 +69,10 @@ const HINTS: Record<string, string> = {
   presence: 'Your public page, the one you put on the van',
   visibility: 'Getting found on Google',
   reviews: 'Asking happy customers to say so',
-  setup: 'Paste your website and we build it for you',
+  // Was "Paste your website and we build it for you", which described only the
+  // page - the screen has shipped five kinds since. The approval clause is the
+  // half that convinces a cautious owner, so it earns the second sentence.
+  setup: 'We fill it all in from your website. Nothing goes live until you say so.',
 }
 
 function Icon({ id }: { id: string }) {
@@ -102,6 +120,8 @@ export default function Shell({ me, modules, stripeMode }: {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
+  const setupDone = isSetupDismissed(me.tenant?.tenantId ?? '')
+
   const byId = new Map(modules.map((m) => [m.id, m]))
   const ordered = (ids: string[]) => ids.map((id) => byId.get(id)).filter(Boolean) as DashboardModule[]
   const listed = new Set([...WORK, ...GROW, ...SETUP])
@@ -140,16 +160,22 @@ export default function Shell({ me, modules, stripeMode }: {
 
         <div className="side-body">
           <nav>
-            {localStorage.getItem(`mb.setupDone.${me.tenant?.tenantId}`) !== '1' && (
-              <NavLink to="/home" className="modlink">Home</NavLink>
-            )}
+            {!setupDone && <NavLink to="/home" className="modlink">Home</NavLink>}
+            {/*
+              While there is still setup to do, the do-it-for-me screen sits
+              directly under Home, where it reads as the alternative to the
+              checklist rather than as item twelve - on a phone it was behind
+              the "More" tap entirely. No heading: one item does not need one,
+              and the wand icon already says what it is.
+            */}
+            {!setupDone && setup.map(moduleLink)}
             <div className="navlabel">Work</div>
             {work.map(moduleLink)}
             <div className="navlabel">Grow</div>
             {grow.map(moduleLink)}
-            {setup.length > 0 && (
+            {setupDone && setup.length > 0 && (
               <>
-                <div className="navlabel">Get set up</div>
+                <div className="navlabel">Done for you</div>
                 {setup.map(moduleLink)}
               </>
             )}

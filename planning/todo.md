@@ -894,7 +894,44 @@ binding). Neither is optional.
 **Consults:** product/UX flow, pricing & packaging, security & liability and
 technical architecture are complete. Market & competitive is running.
 
-### 94 — Transactional email templates 💬 SPEC WRITTEN, awaiting sign-off
+### 94 — Transactional email templates ✅ approved and shipped
+
+**Approved and shipped 2026-08-28.** Twenty templates, reviewed as rendered
+output rather than as a spec: an inbox-style gallery showing the From line,
+subject and preheader for each, with the real HTML and the real plain text.
+
+Wired in so far: quote sent, invoice sent, booking confirmed, new booking (to
+the owner), and the review ask. The rest of the call sites still send plain
+text and will follow - `sendEmail` takes `html` as optional precisely so the
+two can coexist rather than needing one large switchover.
+
+Decisions the founder approved:
+- Customer mail is signed with the BUSINESS name, owner mail with MakerBay.
+- The price goes in the subject line on quotes and invoices.
+- Only the review ask and the digest carry an unsubscribe.
+- Security codes carry no links at all.
+- The text part is not derived from the HTML: both render from one block list,
+  so they cannot drift.
+
+Departure from the spec: the brand is read on demand by `getTenantBrand` in
+`packages/core` rather than denormalised onto `TenantRow`. One extra GetItem on
+a path already doing several, against no write-side invalidation to get wrong
+and no backfill to run. The spec's version is the better end state if email
+volume ever makes the read matter; at a few hundred a day it does not.
+
+**Two things found while wiring it:**
+- The owner footer advertised `app.makerbay.app/settings/notifications`, which
+  does not exist and never has. A 404 promising control over your email is
+  worse than not offering it, so the line is gone.
+- `EmailDoc.unsubscribe` was declared and read by nothing, so a template could
+  ask for an unsubscribe and silently not get one (the dead field from 121).
+  Now wired into both parts - and the review ask mints the REAL per-address
+  token before rendering, because `renderEmail` writes the address into the
+  HTML footer and `sendEmail` only ever sees finished strings.
+
+Verified live: a templated quote email sent through the whole pipeline to the
+mailbox simulator and came back `delivered`, with no send errors.
+
 **Spec: docs/spec-email.md, written 2026-08-27.** Copy is a separate approval
 and is published as an artifact for review, not in the repo.
 **Core path, phases 0-6: about 13.5 developer-days, none of it blocked.**

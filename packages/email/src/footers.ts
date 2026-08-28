@@ -11,12 +11,19 @@
 /** Replace before a single email ships. This is legally load-bearing. */
 export const POSTAL_ADDRESS = 'MakerBay Pty Ltd, 14 Wilson Street, Newtown NSW 2042, Australia'
 
-export const ownerFooter = (businessName: string, options?: { security?: boolean }): string[] => [
+export const ownerFooter = (businessName: string): string[] => [
   'MakerBay',
   `You are getting this because you run ${businessName} on MakerBay.`,
-  // A security email offers no preference link: there is nothing to
-  // unsubscribe from, and a link in one is a phishing vector in itself.
-  ...(options?.security ? [] : ['Choose which emails we send: https://app.makerbay.app/settings/notifications']),
+  /*
+   * No preferences link. This used to point at
+   * app.makerbay.app/settings/notifications, which does not exist and never
+   * has - a 404 promising control is worse than not offering it. The mail an
+   * owner can actually opt out of (the daily digest) carries a real
+   * unsubscribe of its own; everything else here is money or work arriving.
+   *
+   * A security email would offer nothing here regardless: a preference link
+   * in one is a phishing vector.
+   */
   POSTAL_ADDRESS,
   'MakerBay will never ask you for your password or a sign-in code.',
 ]

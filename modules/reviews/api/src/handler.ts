@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { reviewAsk } from '@makerbay/email'
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import {
   appendContactEvent,
@@ -7,7 +8,10 @@ import {
   getContact,
   getEffectiveEntitlement,
   getTenant,
+  getTenantBrand,
   getTenantBySlugOrAlias,
+  unsubTokenFor,
+  unsubUrl,
   getUser,
   json,
   linkToken,
@@ -227,23 +231,36 @@ export async function createInvite(
   )
 
   const url = `${CHAT}/review?slug=${encodeURIComponent(tenant?.slug ?? '')}&token=${inviteToken}`
+  const brand = await getTenantBrand(tenantId)
+  const replyTo = await ownerReplyTo(tenantId)
+  /**
+   * The real unsubscribe address, minted before the template renders.
+   *
+   * It has to happen here rather than inside sendEmail: renderEmail puts the
+   * link into BOTH the HTML footer and the text part, and sendEmail only sees
+   * the finished strings. Passing a placeholder would put a visible "stop
+   * getting these" link in front of a customer that went somewhere else
+   * entirely.
+   */
+  const unsubToken = await unsubTokenFor(tenantId, who.email)
+  const mail = reviewAsk({
+    brand,
+    contact: { email: replyTo || undefined },
+    customerName: who.name,
+    message: config.askMessage,
+    url,
+    unsubscribeUrl: unsubToken ? unsubUrl(unsubToken) : '',
+  })
   const notice = await sendEmail({
     to: who.email,
     ref: { tenantId, moduleId: 'reviews', refType: 'review', refId: who.contactId },
     optional: true,
     audience: 'customer' as const,
-    fromName: tenant?.name ?? 'MakerBay',
-    replyTo: await ownerReplyTo(tenantId),
-    subject: `How did we do? - ${tenant?.name ?? ''}`,
-    text: [
-      `${who.name ?? 'Hi'},`,
-      '',
-      config.askMessage,
-      '',
-      `It takes a minute: ${url}`,
-      '',
-      tenant?.name ?? '',
-    ].join('\n'),
+    fromName: brand.name,
+    replyTo,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
   })
 
   await appendContactEvent(tenantId, who.contactId, {

@@ -1,8 +1,11 @@
 import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import { appendContactEvent, ddb, emitUsage, getTenant, json, linkToken, money, sendEmail, ulid } from '@makerbay/core'
+import {
+  appendContactEvent, ddb, emitUsage, getTenant, getTenantBrand, json, linkToken, money, sendEmail, ulid,
+} from '@makerbay/core'
 import { getQuotesConfig, type QuoteLine, type QuoteRow } from './db'
 import { docUrl } from './links'
+import { invoiceSent } from '@makerbay/email'
 import { docQr } from './qr'
 
 /**
@@ -257,7 +260,11 @@ export async function revokeInvoiceLink(tenantId: string, invoiceId: string): Pr
   })
 }
 
-export async function sendInvoice(tenantId: string, invoiceId: string): Promise<APIGatewayProxyResultV2> {
+export async function sendInvoice(
+  tenantId: string,
+  invoiceId: string,
+  payoutsEnabled = false,
+): Promise<APIGatewayProxyResultV2> {
   const invoice = await getInvoice(tenantId, invoiceId)
   if (!invoice) return json(404, { error: 'not_found' })
   if (invoice.status === 'void') return json(409, { error: 'invoice_void' })
@@ -272,24 +279,32 @@ export async function sendInvoice(tenantId: string, invoiceId: string): Promise<
   const config = await getQuotesConfig(tenantId)
   const label = invoiceLabel(invoice, config.docPrefix)
   const url = invoiceUrl(tenant?.slug ?? '', label, invoice.publicToken)
-  const due = new Date(invoice.dueAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const due = new Date(invoice.dueAt).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+  const brand = await getTenantBrand(tenantId)
+  const mail = invoiceSent({
+    brand,
+    contact: { email: config.notifyEmail || undefined },
+    customerName: invoice.customerName,
+    label,
+    total: money(invoice.totalCents, invoice.currency),
+    due,
+    url,
+    // A pay button only when it would actually work; otherwise the bank
+    // details, which is how most of these get paid today.
+    payable: Boolean(payoutsEnabled) && invoice.status !== 'paid',
+    howToPay: invoice.paymentInstructions,
+  })
   const notice = await sendEmail({
     to: invoice.customerEmail,
     ref: { tenantId, moduleId: 'quotes', refType: 'invoice', refId: invoice.invoiceId },
     audience: 'customer' as const,
-    fromName: tenant?.name ?? 'MakerBay',
+    fromName: brand.name,
     replyTo: config.notifyEmail ?? '',
-    subject: `Invoice ${label} from ${tenant?.name ?? 'us'} - ${money(invoice.totalCents, invoice.currency)}`,
-    text: [
-      `${invoice.customerName ?? 'Hello'},`,
-      '',
-      `Invoice ${label} for ${money(invoice.totalCents, invoice.currency)}, due ${due}.`,
-      '',
-      `View it here: ${url}`,
-      invoice.paymentInstructions ? `\nHow to pay:\n${invoice.paymentInstructions}` : '',
-      '',
-      tenant?.name ?? '',
-    ].join('\n'),
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
   })
 
   const now = new Date().toISOString()

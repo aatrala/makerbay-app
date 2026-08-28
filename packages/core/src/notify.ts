@@ -40,6 +40,15 @@ interface EmailBase {
   to: string
   subject: string
   text: string
+  /**
+   * The HTML part (issue 94).
+   *
+   * Optional, and the text part is never derived from it - both render from
+   * the same block list in packages/email, so the two halves cannot drift.
+   * Without it the message goes out text-only, which is what every module did
+   * before the templates landed and remains a valid thing to send.
+   */
+  html?: string
   replyTo?: string
   /**
    * The name the recipient sees in their inbox list, which on a phone is the
@@ -150,7 +159,14 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
             Subject: { Data: headerSafe(input.subject).slice(0, 200) },
             Body: {
               Text: {
-                Data: unsub
+                /*
+                 * The line is appended only for an UNTEMPLATED message. A
+                 * templated one already carries the address in both parts,
+                 * because renderEmail writes it into the HTML footer and the
+                 * text together from one source - appending again would print
+                 * it twice.
+                 */
+                Data: unsub && !input.html
                   ? `${input.text}
 
 —
@@ -158,6 +174,9 @@ Don't want these? Stop them here:
 ${unsub}`
                   : input.text,
               },
+              // Both parts, so a client that refuses HTML still gets a whole
+              // message rather than an empty one.
+              ...(input.html ? { Html: { Data: input.html } } : {}),
             },
             // SESv2 carries custom headers on Simple content, so this needs no
             // move to raw MIME - which the codebase had been bracing for since

@@ -1120,6 +1120,18 @@ export class MakerbayStack extends cdk.Stack {
     }
 
     /**
+     * The templated emails (issue 94) take a brand - the business name, their
+     * colour and their photo - and getTenantBrand reads the presence row for
+     * the last two. It lives in packages/core precisely so a module Lambda
+     * asks for a brand rather than reaching into another module's table, but
+     * the function still needs the name and the permission.
+     */
+    for (const f of [bookingFn, quotesFn, reviewsFn, requestsFn, visibilityFn, reminderFn]) {
+      f.addEnvironment('TABLE_PRESENCECONFIG', presenceConfig.tableName)
+      presenceConfig.grantReadData(f)
+    }
+
+    /**
      * Renders the HTML shell behind a quote or invoice link (issue 118).
      *
      * A SEPARATE function, not a route on quotesFn, and that is the whole

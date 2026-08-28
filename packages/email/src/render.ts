@@ -124,13 +124,30 @@ export function renderEmail(doc: EmailDoc, footerLines: string[]): Rendered {
   const accent = /^#[0-9a-fA-F]{6}$/.test(doc.brand.accent) ? doc.brand.accent : '#c2410c'
   const accentDark = accentOn(accent, '#292524')
 
+  /**
+   * The unsubscribe line, when the document declares one (issue 121).
+   *
+   * `EmailDoc.unsubscribe` was declared and then read by nothing, so a
+   * template could ask for an unsubscribe and silently not get one. Only
+   * `optional` mail sets it: a review ask, the digest. Never an invoice.
+   *
+   * Last in the footer on purpose - present and findable, not competing with
+   * the business's own name and number directly above it.
+   */
+  const unsubLine = doc.unsubscribe ? 'Stop getting these emails' : undefined
+  const lines = unsubLine ? [...footerLines, unsubLine] : footerLines
+
   const text = [
     doc.heading,
     '',
     ...doc.blocks.map(blockText).filter((s) => s !== ''),
     '',
     '---',
-    ...footerLines,
+    // The text part spells the address out: there is no anchor to click in a
+    // plain-text client, so a bare label would be a dead end.
+    ...(doc.unsubscribe
+      ? [...footerLines, `Stop getting these emails: ${doc.unsubscribe.url}`]
+      : footerLines),
   ].join('\n').replace(/\n{3,}/g, '\n\n')
 
   const html = `<!doctype html>
@@ -186,7 +203,11 @@ export function renderEmail(doc: EmailDoc, footerLines: string[]): Rendered {
 ${doc.blocks.map((b) => blockHtml(b, accent)).join('\n')}
   <tr><td class="mb-pad" style="padding:10px 24px 24px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="mb-rule" style="border-top:1px solid #e7e5e4;font-size:0;line-height:0;">&nbsp;</td></tr></table>
-    <p class="mb-mute" style="margin:12px 0 0;font-family:${SANS};font-size:13px;line-height:1.5;color:#a8a29e;">${footerLines.map(esc).join('<br>')}</p>
+    <p class="mb-mute" style="margin:12px 0 0;font-family:${SANS};font-size:13px;line-height:1.5;color:#a8a29e;">${
+      lines.map((l) => (l === unsubLine && doc.unsubscribe
+        ? `<a href="${safeHref(doc.unsubscribe.url)}" style="color:#a8a29e;text-decoration:underline;">${esc(l)}</a>`
+        : esc(l))).join('<br>')
+    }</p>
   </td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
