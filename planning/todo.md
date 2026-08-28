@@ -224,11 +224,23 @@ Calendar two-way sync, QuickBooks/Xero, WhatsApp.
 ### 76 — SES production access ⛔ founder appeal needed (case 178755823800807)
 Submitting hit a wall worth knowing about: a PREVIOUS request (contact
 aatral@makerbay.xyz) was already DENIED, and after a denial the API
-refuses re-submission. **Do:** AWS Console → Support Center → case
-178755823800807 → reply asking for reconsideration. Paste the appeal
-drafted in planning/ses-appeal.md (transactional-only, suppression
-handling, low volume). Until this lands, emails only reach verified
-addresses (yours works).
+refuses re-submission. **Do:** AWS Console → Support → Your support cases → case
+178755823800807 → Reply. Paste the appeal in `planning/ses-appeal.md`.
+Do NOT open a new case or re-submit through the API - both read as routing
+around the decision.
+
+**The appeal was rewritten 2026-08-28** and is now a materially different
+request. The original was denied when the honest answer to "how do you handle
+bounces and complaints" was "the account-level suppression list" - which is the
+question the form is actually asking. Since then: a full bounce and complaint
+pipeline on EventBridge with permanent-vs-transient handling and per-tenant
+suppression (107), one-click unsubscribe per RFC 8058 (121), DMARC (108), a
+separate authenticated sending domain for customer mail (103), and Cognito
+moved onto the same configuration set (104). Every claim in the draft was
+verified against the live account rather than read off the code, and the doc
+carries the four commands to re-check before sending.
+
+Until this lands, mail only reaches verified addresses.
 
 ### 77 — Genie misreads the diary ✅ (P0 bug, fixed + deployed)
 Three compounding causes confirmed and fixed: "today" is now computed
