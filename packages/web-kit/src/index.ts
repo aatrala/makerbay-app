@@ -4,3 +4,4 @@
 
 export * from './api'
 export * from './ui'
+export { default as QrBlock } from './Qr'

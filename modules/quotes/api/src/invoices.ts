@@ -3,6 +3,7 @@ import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/li
 import { appendContactEvent, ddb, emitUsage, getTenant, json, linkToken, money, sendEmail, ulid } from '@makerbay/core'
 import { getQuotesConfig, type QuoteLine, type QuoteRow } from './db'
 import { docUrl } from './links'
+import { docQr } from './qr'
 
 /**
  * Simple invoices, deliberately bounded. An invoice here is a document a
@@ -335,6 +336,30 @@ export async function documentLogo(
 }
 
 /**
+ * The business's phone number, for the printed document.
+ *
+ * On screen a customer can reply to the email or tap through to the page. On
+ * paper there was NO way to reach the tradesperson at all unless they had
+ * hand-typed a number into the document footer - which is the difference
+ * between an invoice that gets queried and one that gets filed and forgotten.
+ *
+ * Reads the same presence row documentLogo does, so this costs no extra query
+ * when both are fetched together.
+ */
+export async function businessPhone(tenantId: string): Promise<string | undefined> {
+  try {
+    const r = await ddb.send(new GetCommand({
+      TableName: process.env.TABLE_PRESENCECONFIG!,
+      Key: { tenantId },
+    }))
+    const phone = String(r.Item?.phone ?? '').trim()
+    return phone || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Document labels: an optional per-tenant tag, the document kind, and a
  * number padded to three digits - SP-INV-001 reads like a real business,
  * INV-0007 reads like software.
@@ -353,20 +378,36 @@ export async function publicInvoiceView(
   businessName: string,
   token: string,
   payoutsEnabled = false,
+  slug = '',
 ): Promise<APIGatewayProxyResultV2> {
   const invoice = await findInvoiceByToken(tenantId, token)
   if (!invoice || invoice.status === 'draft') return json(404, { error: 'not_found' })
   const config = await getQuotesConfig(tenantId)
-  const logoUrl = await documentLogo(tenantId, config)
+  const [logoUrl, phone] = await Promise.all([
+    documentLogo(tenantId, config),
+    businessPhone(tenantId),
+  ])
+  const label = invoiceLabel(invoice, (config as { docPrefix?: string }).docPrefix ?? '')
+  /**
+   * A void invoice has nothing to open. A PAID one keeps its square, because
+   * paper is exactly where it earns its place: the printed sheet is the
+   * customer's receipt, and scanning it is how they get back to the record
+   * months later at tax time.
+   */
+  const qr = invoice.status !== 'void'
+    ? await docQr(invoiceUrl(slug, label, invoice.publicToken))
+    : undefined
   return json(200, {
     business: businessName,
     footer: config.docFooter || undefined,
     logoUrl,
+    ...(phone ? { phone } : {}),
+    ...(qr ? { qr } : {}),
     theme: (config as { invoiceTheme?: string }).invoiceTheme ?? 'classic',
     // A pay button appears only when it would actually work.
     payable: payoutsEnabled && invoice.status === 'sent',
     invoice: {
-      label: invoiceLabel(invoice, (config as { docPrefix?: string }).docPrefix ?? ''),
+      label,
       status: invoice.status,
       lines: invoice.lines,
       subtotalCents: invoice.subtotalCents,

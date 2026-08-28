@@ -3,6 +3,7 @@ import { Link, Route, useLocation, useNavigate, useParams } from 'react-router-d
 import {
   Empty,
   Notice,
+  QrBlock,
   Skeleton,
   api,
   explain,
@@ -599,6 +600,15 @@ function QuoteDetail() {
             <p className="meta">
               Anyone with this link can see the quote. Accepting it asks them to type their name.
             </p>
+            {publicUrl && (
+              <details className="mt">
+                <summary>Show a code they can scan</summary>
+                <div className="mt">
+                  <QrBlock url={publicUrl} label={`quote ${quote.label ?? quote.number}`} size={180}
+                    hint="Hold your phone up and let your customer point their camera at it. If they would rather have it in a message, use Copy the link." />
+                </div>
+              </details>
+            )}
             {!settled && (
               <div className="row mt">
                 {/*
@@ -741,11 +751,12 @@ function InvoiceDetail() {
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const load = useCallback(async () => {
     try {
       const r = await api('GET', `/v1/quotes/invoices/${invoiceId}`)
-      setInvoice(r.invoice); setLabel(r.label); setPublicUrl(r.publicUrl)
+      setInvoice(r.invoice); setLabel(r.label); setPublicUrl(r.publicUrl ?? '')
     } catch (e) { setError(explain(e)) }
   }, [invoiceId])
   useEffect(() => { void load() }, [load])
@@ -754,6 +765,49 @@ function InvoiceDetail() {
     void (async () => {
       setBusy(true); setError(''); setNote('')
       try { await fn(); await load() } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  /**
+   * Hand back the invoice link without sending anything.
+   *
+   * shareInvoice and revokeInvoiceLink shipped with issue 118 phase 1 and were
+   * never wired to a button, so an invoice for a customer with only a phone
+   * number could be built and never reached: the send button is disabled
+   * without an email, and the screen told the owner to "share the link below"
+   * while there was no link below. Invoices did not work without email, only
+   * quotes did.
+   */
+  const share = () =>
+    void (async () => {
+      setBusy(true); setError(''); setNote(''); setCopied(false)
+      try {
+        const url = publicUrl || (await api('POST', `/v1/quotes/invoices/${invoiceId}/share`, {})).publicUrl as string
+        setPublicUrl(url)
+        try {
+          await navigator.clipboard.writeText(url)
+          setCopied(true)
+        } catch {
+          setNote('Copy the link below and send it to your customer.')
+        }
+        await load()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  const revoke = () =>
+    void (async () => {
+      if (!window.confirm(
+        'Stop this link working?
+
+Anyone you already sent it to will not be able to open it. '
+        + 'You get a new link to send instead.',
+      )) return
+      setBusy(true); setError(''); setNote(''); setCopied(false)
+      try {
+        const r = await api('POST', `/v1/quotes/invoices/${invoiceId}/revoke`, {})
+        setPublicUrl(r.publicUrl)
+        setNote('The old link no longer works. Send the new one below.')
+        await load()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
     })()
 
   if (error && !invoice) return (
@@ -830,17 +884,46 @@ function InvoiceDetail() {
             </button>
           </div>
         )}
-        {!invoice.customerEmail && invoice.status === 'draft' && (
-          <p className="meta">This customer has no email — share the link below instead.</p>
+        {invoice.status !== 'void' && (
+          <>
+            {/*
+              The button the invoice screen never had. Sharing marks the
+              invoice sent, which is what makes the link work at all - the
+              public view 404s on a draft.
+            */}
+            <p className="mt">Send the link however you like - a text, WhatsApp, or hand them your phone.</p>
+            <div className="row">
+              <button onClick={share} disabled={busy}>
+                {busy ? 'Working…' : publicUrl ? 'Copy the link' : 'Get the link'}
+              </button>
+            </div>
+            {copied && <p className="meta">Copied. Paste it into a message to your customer.</p>}
+          </>
         )}
         {publicUrl && (
           <>
             <label className="mt">Customer link</label>
             <div className="row">
               <input className="grow" readOnly value={publicUrl} onFocus={(e) => e.target.select()} aria-label="Customer link" />
-              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener">Preview</a>
+              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener noreferrer">Preview</a>
             </div>
             <p className="meta">The page is printable — the customer can save it as a PDF. The look comes from your invoice theme under Price list.</p>
+            <details className="mt">
+              <summary>Show a code they can scan</summary>
+              <div className="mt">
+                <QrBlock url={publicUrl} label={`invoice ${label}`} size={180}
+                  hint="Hold your phone up and let your customer point their camera at it. If they would rather have it in a message, use Copy the link." />
+              </div>
+            </details>
+            {invoice.status !== 'paid' && (
+              <div className="row mt">
+                {/* A paid invoice is the customer's receipt, so its link stays. */}
+                <button className="ghost danger" disabled={busy} onClick={revoke}
+                  title="The old link stops working and you get a new one">
+                  Stop this link working
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

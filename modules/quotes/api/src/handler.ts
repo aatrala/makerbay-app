@@ -23,6 +23,7 @@ import {
   getInvoice,
   invoiceFromQuote,
   documentLogo,
+  businessPhone,
   invoiceLabel,
   quoteLabel,
   listInvoices,
@@ -34,6 +35,7 @@ import {
   shareInvoice,
 } from './invoices'
 import { docUrl } from './links'
+import { docQr } from './qr'
 import {
   affirmationFor,
   callerIp,
@@ -221,7 +223,15 @@ async function resolvePublicTenant(key?: string, slug?: string) {
     if (!found || found.type !== 'publishable') return undefined
     const tenant = await getTenant(found.tenantId)
     return tenant
-      ? { tenantId: tenant.tenantId, name: tenant.name, payoutsEnabled: Boolean(tenant.payoutsEnabled) }
+      ? {
+          tenantId: tenant.tenantId,
+          name: tenant.name,
+          // The PRIMARY slug, not whatever address was used to get here. A
+          // link opened under an old alias should hand out a square for the
+          // current address (issue 119).
+          slug: tenant.slug,
+          payoutsEnabled: Boolean(tenant.payoutsEnabled),
+        }
       : undefined
   }
   if (slug) {
@@ -237,7 +247,15 @@ async function resolvePublicTenant(key?: string, slug?: string) {
      */
     const tenant = await getTenantBySlugOrAlias(slug)
     return tenant
-      ? { tenantId: tenant.tenantId, name: tenant.name, payoutsEnabled: Boolean(tenant.payoutsEnabled) }
+      ? {
+          tenantId: tenant.tenantId,
+          name: tenant.name,
+          // The PRIMARY slug, not whatever address was used to get here. A
+          // link opened under an old alias should hand out a square for the
+          // current address (issue 119).
+          slug: tenant.slug,
+          payoutsEnabled: Boolean(tenant.payoutsEnabled),
+        }
       : undefined
   }
   return undefined
@@ -258,7 +276,9 @@ async function publicRoute(
   if (!resolved) return json(404, { error: 'not_found' })
 
   if (method === 'GET' && path === '/v1/public/quotes/invoice') {
-    return publicInvoiceView(resolved.tenantId, resolved.name, String(q.token ?? ''), resolved.payoutsEnabled)
+    return publicInvoiceView(
+      resolved.tenantId, resolved.name, String(q.token ?? ''), resolved.payoutsEnabled, resolved.slug,
+    )
   }
 
   const match = path.match(/^\/v1\/public\/quotes\/([A-Za-z0-9_-]{20,})(\/respond)?$/)
@@ -294,10 +314,24 @@ async function publicRoute(
     await recordView(resolved.tenantId, quote)
 
     const check = effectiveCheck(config.acceptCheck ?? 'name', quote)
+    /**
+     * The scannable square, only while there is something to scan FOR.
+     *
+     * A settled quote is history: re-sharing it hands out a credential that
+     * can no longer be revoked (revoke is refused once accepted or declined)
+     * for a document nobody can act on. A superseded one is worse - its page
+     * carries a link to the SUCCESSOR's token, and that must never become
+     * machine-readable.
+     */
+    const qr = status === 'sent'
+      ? await docQr(quoteUrl(resolved.slug, quoteLabel(quote.number, config.docPrefix), quote.publicToken))
+      : undefined
     return json(200, {
       business: resolved.name,
       footer: config.docFooter || undefined,
       logoUrl: await documentLogo(resolved.tenantId, config),
+      // For the printed sheet, where there is otherwise no way to reach them.
+      ...(await businessPhone(resolved.tenantId).then((p) => (p ? { phone: p } : {}))),
       quote: { ...publicView(quote, status, config.taxLabel, config.docPrefix), deposit },
       // What the customer must do to accept, and the wording they will be
       // agreeing to. Sent with the document so the page cannot invent either.
@@ -306,6 +340,7 @@ async function publicRoute(
         affirmation: affirmationFor(resolved.name, money(quote.totalCents, quote.currency)),
         ...(check === 'phone4' ? { phoneHint: phoneHintOf(quote.customerPhone) } : {}),
       },
+      ...(qr ? { qr } : {}),
     })
   }
 

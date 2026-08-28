@@ -133,6 +133,45 @@ button:disabled { opacity: 0.5; cursor: default; }
 /* Four digits need a keypad, not a keyboard, and nowhere near full width. */
 .q-gate input#acc-four { max-width: 8em; letter-spacing: 0.25em; }
 .q-gate .hint { margin-top: 6px; }
+
+/* ── The scannable square (issue 119) ──────────────────────────────────── */
+.doc-qr { margin-top: 18px; }
+.qr-toggle {
+  background: none; border: 1px solid #e7e5e4; border-radius: 8px;
+  padding: 9px 14px; font: inherit; color: #57534e; cursor: pointer;
+}
+.qr-panel { margin-top: 12px; }
+/*
+ * 180px, not the 132px the presence QR uses. These URLs are 71-99 characters,
+ * which puts the code at version 6-7 (~41-45 modules): at 132px that is about
+ * 3px per module, which a phone camera struggles with off a screen, at an
+ * angle, or through a screen protector.
+ */
+.qr-img { width: 180px; max-width: 100%; }
+.qr-img svg { display: block; width: 100%; height: auto; }
+/* The address in text, always. The square is the shortcut, not the route. */
+.qr-url { font-size: 13px; color: #78716c; margin-top: 8px; word-break: break-all; }
+
+/*
+ * Business identity for print only. The page header is hidden on paper (it is
+ * a full-bleed brand band that eats a print cartridge), and for two of the
+ * three invoice themes the name and logo live nowhere else - so a printed
+ * invoice said nothing about who sent it.
+ */
+.print-id { display: none; gap: 12px; align-items: center; margin-bottom: 16px; }
+.print-id img { max-height: 48px; width: auto; }
+
+/*
+ * Quotes never had a print stylesheet at all, though a quote is the document
+ * people most want on paper - to lay beside two other tradespeople's prices.
+ */
+@media print {
+  header, footer, .i-print, .qr-toggle, .q-actions, .q-gate { display: none !important; }
+  body { background: #fff; }
+  .qr-panel[hidden] { display: block !important; }
+  .print-id { display: flex !important; }
+  .page-body { max-width: none; padding: 0; }
+}
 .q-state { margin-top: 16px; font-weight: 600; }
 .q-state.ok { color: #15803d; }
 .stars { display: flex; gap: 6px; margin: 6px 0 4px; }

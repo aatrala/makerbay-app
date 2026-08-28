@@ -1776,7 +1776,7 @@ and logo ONLY, never the amount or the customer name, on the tenant's own
 domain where one is configured, and built so the generator structurally cannot
 read the quote row.
 
-### 119 — QR on the quote and invoice page 💬 consulting, awaiting founder sign-off
+### 119 — QR on the quote and invoice page ✅ shipped
 Founder: "keep a QR in quote and invoice page for others to be able to open
 the page."
 
@@ -1799,5 +1799,73 @@ out a screen to be scanned does not.
 - Revoke rotates the token, so a QR must not become a second credential that
   outlives it.
 
-Two agents consulted (security; product/UX + implementation), same pattern as
-118. Discuss, agree, then build.
+Two agents consulted (security; product/UX + implementation). They agreed the
+dashboard is the clearest win and the customer screen the weakest case, and
+SPLIT on print: security said paper outlives revocation, UX said print is the
+only surface with no substitute. Founder chose all three, customer screen
+behind a tap.
+
+**Shipped 2026-08-28.** The square is on all three surfaces:
+- **Customer page**, collapsed under "Open this on another phone", placed
+  BELOW the accept decision. Collapsed because whoever is reading already has
+  the link - the square only helps a second device or person - and a 41-module
+  black block above the price competes with the one control that matters.
+- **Dashboard**, collapsed under "Show a code they can scan", so the
+  copy-to-WhatsApp path stays visually dominant. That path is better for this
+  audience: it lands the link in the customer's phone permanently, where a
+  scanned tab gets lost.
+- **Print**, never collapsed. Paper has no address bar.
+
+Rendered as SVG server-side in the API that already holds the token, NOT in
+the document shell - the shell is deliberately never given the token, and
+generating a QR there would have dismantled the one boundary that makes the
+link preview safe. SVG rather than a raster because a square sized for a phone
+screen is a blurry mess at 300 dpi.
+
+The typed address always ships beside it. A QR is an image of a URL: a screen
+reader user gets nothing from the square, and neither does anyone whose camera
+will not focus. The square is the shortcut; the text is the route.
+
+180px on screen, not the 132px the presence QR uses. These URLs are 71-99
+characters, which puts the code at version 6-7 (~41-45 modules) - at 132px
+that is ~3px per module, at the edge of what a phone camera resolves off a
+screen at an angle.
+
+Suppressed when there is nothing to scan for: a settled quote hands out a
+credential that can no longer be revoked, and a SUPERSEDED one is worse - its
+page carries the successor's token, which must never become machine-readable.
+
+**Printed documents fixed in the same batch**, because a square leading back
+from a document that does not say who sent it is worth nothing:
+- Print hid `<header>`, and for the classic and compact themes the business
+  name and logo lived ONLY there - so a printed invoice was a document number,
+  some lines and a total. Not a valid tax invoice in AU or the UK. A
+  print-only identity block now carries the name, logo and phone number.
+- The phone number had no route onto either document at all unless the owner
+  hand-typed it into the footer. Read from the presence config, alongside the
+  logo, so it costs no extra query.
+- Quotes had no print path whatsoever, though a quote is the document people
+  most want on paper - to lay beside two other tradespeople's prices.
+
+**Two bugs of mine fixed first, both from the 118 batch:**
+- `shareInvoice` and `revokeInvoiceLink` shipped in phase 1 and were never
+  wired to a button. The invoice screen's send was disabled without an email
+  and told the owner to "share the link below" while there was no link below.
+  Invoices did NOT work without email; only quotes did, contrary to what was
+  reported.
+- The customer page was still pinned to `en-AU` after 114 fixed the server,
+  the dashboard and the business page - so the one surface a customer actually
+  reads was the one showing a Londoner "GBP 1,234.50".
+
+`QrBlock` moved from `modules/presence/web` to `packages/web-kit`, next to the
+`.qr-block` styles that were already there, with a `size` prop and an explicit
+white background (it previously relied on a stylesheet rule, so on any surface
+that did not inherit it the code rendered dark-on-dark and was unscannable).
+
+Verified live in a browser: square, caption and typed address all render, the
+print identity block carries the name and phone, and the toggle works.
+
+**Not done, from the security review, worth their own issue:** no per-IP rate
+limit on `/respond` (phone4 is 10,000 possibilities, so the STRONGER accept
+setting is the brute-forceable one - which makes it falsely reassuring); no
+CSP on the document host; invoices record no views at all.

@@ -52,17 +52,94 @@
     })
   }
 
+  /**
+   * The scannable square (issue 119).
+   *
+   * Collapsed on screen, always open on paper. Collapsed because the person
+   * reading this page already HAS the link - the square only helps a second
+   * device or a second person - and a 41-module black block above the price
+   * competes with the one control that matters. On paper it is the only way
+   * back to the live document, so it is never hidden there.
+   *
+   * The typed address always ships with it. A QR is an image of a URL: a
+   * screen-reader user gets nothing from the square, and neither does anyone
+   * whose camera will not focus. The square is the shortcut, the text is the
+   * route.
+   */
+  function qrBlock(qr, trigger, caption) {
+    if (!qr || !qr.svg) return ''
+    return (
+      '<div class="doc-qr">' +
+      '<button type="button" class="qr-toggle" id="qr-toggle" aria-expanded="false" aria-controls="qr-panel">' +
+      esc(trigger) + '</button>' +
+      '<div class="qr-panel" id="qr-panel" hidden>' +
+      // aria-hidden: the square says nothing a screen reader can use, and the
+      // address underneath says everything it can.
+      '<div class="qr-img" aria-hidden="true">' + qr.svg + '</div>' +
+      '<p class="hint">' + esc(caption) + '</p>' +
+      '<p class="qr-url">Or type this address into a browser:<br />' +
+      '<a href="' + esc(qr.url) + '">' + esc(qr.url) + '</a></p>' +
+      '</div></div>'
+    )
+  }
+
+  /** Wire the reveal. Kept separate because innerHTML replaces the nodes. */
+  function bindQr() {
+    var t = document.getElementById('qr-toggle')
+    var panel = document.getElementById('qr-panel')
+    if (!t || !panel) return
+    t.addEventListener('click', function () {
+      var open = t.getAttribute('aria-expanded') === 'true'
+      t.setAttribute('aria-expanded', open ? 'false' : 'true')
+      if (open) panel.setAttribute('hidden', '') 
+      else panel.removeAttribute('hidden')
+    })
+  }
+
+  /**
+   * Business identity for the printed page.
+   *
+   * Print hides <header>, and for the classic and compact themes the name and
+   * logo live ONLY there - so a printed invoice was a document number, some
+   * lines and a total, with nothing saying who sent it. That is not a valid
+   * tax invoice in AU or the UK, and not something a homeowner can act on.
+   * This block is invisible on screen and printed at the top of the sheet.
+   */
+  function printIdentity(business, logoUrl, phone) {
+    return (
+      '<div class="print-id">' +
+      (logoUrl ? '<img src="' + esc(logoUrl) + '" alt="" />' : '') +
+      '<div><strong>' + esc(business) + '</strong>' +
+      (phone ? '<br />' + esc(phone) : '') +
+      '</div></div>'
+    )
+  }
+
   function fail(message) {
     app.className = 'error'
     app.textContent = message
   }
 
+  /**
+   * Render each currency the way the country that uses it renders it.
+   *
+   * This page was still pinned to en-AU after issue 114 fixed the server, the
+   * dashboard and the public business page - so the ONE surface a customer
+   * actually reads was the one still showing a Londoner "GBP 1,234.50" instead
+   * of "£1,234.50" on their own quote. Same table as packages/core/money.ts;
+   * duplicated because this file has no bundler and imports nothing.
+   */
+  var CASH_LOCALE = {
+    AUD: 'en-AU', NZD: 'en-NZ', GBP: 'en-GB', USD: 'en-US', CAD: 'en-CA',
+    EUR: 'en-IE', INR: 'en-IN', SGD: 'en-SG', ZAR: 'en-ZA', AED: 'en-AE'
+  }
   function money(cents, currency) {
+    var code = String(currency || 'AUD').toUpperCase()
     try {
-      return new Intl.NumberFormat('en-AU', { style: 'currency', currency: currency || 'AUD' })
+      return new Intl.NumberFormat(CASH_LOCALE[code] || 'en', { style: 'currency', currency: code })
         .format(cents / 100)
     } catch (e) {
-      return '$' + (cents / 100).toFixed(2)
+      return code + ' ' + (cents / 100).toFixed(2)
     }
   }
 
@@ -463,6 +540,7 @@
       app.innerHTML =
         '<header>' + qLogo + '<div class="name">' + esc(business) + '</div></header>' +
         '<div class="page-body">' +
+        printIdentity(business, res.data.logoUrl, res.data.phone) +
         '<h2 class="q-title">Quote ' + esc(q.label || '#' + q.number) + (q.customerName ? ' for ' + esc(q.customerName) : '') + '</h2>' +
         '<table class="q-lines"><tbody>' + lines + '</tbody>' +
         '<tfoot>' +
@@ -472,7 +550,12 @@
         '</tfoot></table>' +
         (q.notes ? '<p class="q-notes">' + esc(q.notes) + '</p>' : '') +
         (q.terms ? '<p class="q-terms">' + esc(q.terms) + '</p>' : '') +
-        stateBlock + foot
+        stateBlock +
+        // Below the decision, never above it.
+        qrBlock(res.data.qr, 'Open this on another phone',
+          "Point the other phone's camera at this square. It will offer to open this page.") +
+        '<p class="i-print"><button type="button" class="ghost" id="print">Print or save as PDF</button></p>' +
+        foot
 
       function respond(decision) {
         var err = document.getElementById('f-err')
@@ -497,6 +580,11 @@
             err.textContent = (r.data && r.data.message) || 'That did not work. Try again.'
           })
       }
+      bindQr()
+      var printBtn = document.getElementById('print')
+      // Quotes had no print path at all, though a quote is the document people
+      // most want on paper - to put next to two other plumbers' prices.
+      if (printBtn) printBtn.addEventListener('click', function () { window.print() })
       var acceptBtn = document.getElementById('accept')
       if (acceptBtn) acceptBtn.addEventListener('click', function () { respond('accept') })
       var declineBtn = document.getElementById('decline')
@@ -636,7 +724,11 @@
           '.inv .i-paid{display:inline-block;padding:.2rem .6rem;border-radius:4px;font-weight:700}' +
           '.inv .i-pay{white-space:pre-wrap;padding:.75rem;border-radius:6px;margin-top:1rem}' +
           '.inv .i-print{margin-top:1.25rem}' +
-          '@media print{header,footer,.i-print{display:none!important}body{background:#fff}}' +
+          '@media print{header,footer,.i-print,.qr-toggle{display:none!important}' +
+          'body{background:#fff}' +
+          // Paper has no address bar, so the square is never collapsed there.
+          '.qr-panel[hidden]{display:block!important}' +
+          '.print-id{display:flex!important}}' +
           // classic: serif headings, ruled lines, quiet.
           (theme === 'classic'
             ? '.inv h2{font-family:Georgia,serif;font-weight:400;letter-spacing:.02em}' +
@@ -678,6 +770,7 @@
         app.innerHTML =
           '<header>' + iLogo + '<div class="name">' + esc(business) + '</div></header>' +
           '<div class="page-body"><div class="inv">' +
+          printIdentity(business, res.data.logoUrl, res.data.phone) +
           heading +
           '<div class="i-meta">' +
           '<span>' + (inv.customerName ? 'Billed to ' + esc(inv.customerName) : '') + '</span>' +
@@ -699,10 +792,18 @@
               '<p class="form-err" id="pay-err"></p>'
             : '') +
           (inv.paymentInstructions && !inv.paidAt ? '<div class="i-pay">' + esc(inv.paymentInstructions) + '</div>' : '') +
-          '<p class="i-print"><button class="ghost" id="print">Print or save as PDF</button></p>' +
+          // On paper the pay button is hidden, so this square IS the way to
+          // pay. Wording says so when there is something to pay.
+          qrBlock(res.data.qr,
+            res.data.payable ? 'Open this on your phone to pay' : 'Open this on another phone',
+            res.data.payable
+              ? "Point a phone's camera at this square to open this invoice and pay."
+              : "Point the other phone's camera at this square. It will offer to open this page.") +
+          '<p class="i-print"><button type="button" class="ghost" id="print">Print or save as PDF</button></p>' +
           (res.data.footer ? '<p class="doc-footer">' + esc(res.data.footer) + '</p>' : '') +
           '</div></div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
 
+        bindQr()
         if (params.get('paid') === 'pending' && !inv.paidAt) {
           var note = document.createElement('p')
           note.className = 'q-state ok'

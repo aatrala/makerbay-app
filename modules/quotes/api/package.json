@@ -3,10 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "dependencies": {
+    "qrcode": "^1.5.4",
     "@makerbay/core": "0.1.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/aws-lambda": "^8.10.145"
   }
 }
