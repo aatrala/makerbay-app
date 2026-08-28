@@ -1921,3 +1921,60 @@ and the defaults in the 118 batch and never to `updateConfig`, so the setting
 existed and could not be changed - `phone4` was unreachable from anywhere. The
 first brute-force test passed 25 "guesses" because the gate was never on.
 Persisted now, validated against the union, and surfaced in Quotes settings.
+
+### 121 — No unsubscribe on any email ⛔ P0 before real volume
+Asked directly by the founder. The honest answer is that there is none, in any
+form:
+
+- **No `List-Unsubscribe` header.** `sendEmail` uses SES `Content.Simple`,
+  which cannot set custom headers at all. The header needs `Content.Raw` -
+  which `packages/core/src/notify.ts:27` already anticipates, and is the reason
+  `headerSafe()` was written for issue 109.
+- **No unsubscribe link in any footer.** `customerFooter`
+  (`packages/email/src/footers.ts:24`) carries the business, a contact line, a
+  reason and our postal address, and stops there.
+- **`EmailDoc.unsubscribe?: { url, mailto }` exists in
+  `packages/email/src/blocks.ts:44` and is never read by `render.ts`.** A dead
+  field that makes the codebase look like it handles this.
+- **No preferences page, no suppression list a recipient can add themselves
+  to.** `emailBlocked` only reflects what SES reported (a bounce or a spam
+  complaint), never what a person asked for.
+
+**Why it matters, in order:**
+
+1. **The review ask is the exposure.** "How did we do?" promotes a business, so
+   it is the message most likely to count as commercial rather than
+   transactional under the Australian Spam Act 2003, CAN-SPAM, CASL and UK
+   PECR - and it is sent to a homeowner who never signed up with MakerBay.
+   There are TWO senders of it: `modules/reviews` and `modules/visibility`.
+   Both are already marked `optional: true`, so the plumbing knows which mail
+   is objectionable; there is just nothing a recipient can do about it.
+2. **The only way to stop mail today is to report it as spam.** That is the
+   single most damaging signal for deliverability, and the one thing an
+   unsubscribe link exists to prevent. It also lands on a shared sending
+   domain, so one tenant's customers can degrade delivery for every tenant.
+3. **Gmail and Yahoo's bulk sender rules require one-click unsubscribe
+   (RFC 8058) above 5,000 messages a day.** Not yet - the account is capped at
+   200/day - but the cap lifts with issue 76, and this should be in place
+   before volume rather than after.
+
+**Not needed for:** quotes, invoices, bookings and password resets. Those are
+transactional - the customer asked for them - and an unsubscribe link on a
+security email is a phishing vector, which is why `authEmail` deliberately
+carries none.
+
+**Shape of the fix:**
+- Move `sendEmail` from `Content.Simple` to `Content.Raw` for `optional: true`
+  mail, and add `List-Unsubscribe` plus `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
+  `headerSafe()` already exists for exactly this transition.
+- A signed unsubscribe token (not the document token - unsubscribing must not
+  hand over a quote), resolving to a per-tenant, per-address suppression that
+  `emailBlocked` already knows how to read: it just needs a third state
+  alongside `bounced` and `complained`.
+- A one-click confirmation page saying which business it stops, not "you have
+  been unsubscribed from MakerBay" - the customer has never heard of us.
+- Wire the dead `unsubscribe` field in `blocks.ts` into `render.ts`, or delete
+  it.
+
+**Blocked on nothing.** Can be built and tested today with the mailbox
+simulator, the same way issue 107 was.
