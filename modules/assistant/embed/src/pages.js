@@ -392,12 +392,37 @@
             : '') +
           '</p>'
       } else {
+        // The accept gate (issue 118). It sits on the ACTION, never the view:
+        // anyone the link was forwarded to may read the price - that is what
+        // a link is for, and showing it to a partner is behaviour we want -
+        // but agreeing to it is a different act. The typed name is both the
+        // gate and the signature; a bare click is anonymous.
+        var acc = res.data.accept || { check: 'none' }
+        var gate = ''
+        if (acc.check !== 'none') {
+          gate =
+            '<div class="q-gate">' +
+            '<label for="acc-name">Your name</label>' +
+            '<input id="acc-name" type="text" autocomplete="name" placeholder="Type your name" />' +
+            (acc.check === 'phone4'
+              ? '<label for="acc-four">Last 4 digits of your phone number</label>'
+                + '<input id="acc-four" type="text" inputmode="numeric" maxlength="4" '
+                + 'autocomplete="off" placeholder="0000" />'
+                + '<p class="hint">' + esc(acc.phoneHint || 'the number this was sent to') + '.</p>'
+              : '') +
+            '</div>'
+        }
         stateBlock =
+          gate +
           '<div class="q-actions">' +
-          '<button class="primary" id="accept">Accept this quote</button>' +
-          '<button class="ghost" id="decline">Decline</button>' +
+          '<button class="primary" id="accept">Yes — go ahead at this price</button>' +
+          '<button class="ghost" id="decline">No thanks</button>' +
           '</div>' +
-          '<p class="hint">Valid until ' + esc(validUntil) + '. Accepting tells ' + esc(business) + ' to go ahead.</p>' +
+          // Says what saying yes commits them to, and what it does not. The
+          // old wording ("Accepting tells X to go ahead") left a homeowner
+          // unsure whether they had just agreed to pay something today.
+          '<p class="hint">' + esc(acc.affirmation || '') + ' This price is good until '
+            + esc(validUntil) + '. You are not paying anything today.</p>' +
           '<p class="form-err" id="f-err"></p>'
       }
 
@@ -421,8 +446,20 @@
       function respond(decision) {
         var err = document.getElementById('f-err')
         err.textContent = ''
+        var nameEl = document.getElementById('acc-name')
+        var fourEl = document.getElementById('acc-four')
+        var payload = { slug: slug, decision: decision }
+        if (nameEl) payload.name = nameEl.value
+        if (fourEl) payload.phone4 = fourEl.value
+        // Answered here as well as on the server so the customer is not made
+        // to wait on a round trip to be told they left a box empty.
+        if (decision === 'accept' && nameEl && !nameEl.value.trim()) {
+          err.textContent = 'Please type your name to accept.'
+          nameEl.focus()
+          return
+        }
         app.querySelectorAll('button').forEach(function (b) { b.disabled = true })
-        post(base + '/respond?slug=' + encodeURIComponent(slug), { slug: slug, decision: decision })
+        post(base + '/respond?slug=' + encodeURIComponent(slug), payload)
           .then(function (r) {
             if (r.status === 200) return quotePage()
             app.querySelectorAll('button').forEach(function (b) { b.disabled = false })
@@ -433,7 +470,11 @@
       if (acceptBtn) acceptBtn.addEventListener('click', function () { respond('accept') })
       var declineBtn = document.getElementById('decline')
       if (declineBtn) declineBtn.addEventListener('click', function () {
-        if (window.confirm('Decline this quote?')) respond('decline')
+        if (declineBtn.getAttribute('data-sure') === '1') { respond('decline'); return }
+        declineBtn.setAttribute('data-sure', '1')
+        declineBtn.textContent = 'Tap again to tell them no thanks'
+        document.getElementById('f-err').textContent =
+          'They will be told. You can still get back in touch if you change your mind.'
       })
       var payBtn = document.getElementById('paydeposit')
       if (payBtn) payBtn.addEventListener('click', function () {

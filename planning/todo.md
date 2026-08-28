@@ -1635,3 +1635,52 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
   custom domain demo.makerbay.app, slug alias southside-plumbing,
   deposit 20%, Genie grant.
 - Support runbook: docs/runbook-support.md (staff bootstrap is CLI-only).
+
+### 118 — Quotes and invoices without email ✅ phase 1 shipped
+A tradesperson with only a phone number could build a quote and never obtain
+its link. Not a missing feature: a circular dependency. `sendQuote` refused
+without an email, emailing was the ONLY transition out of draft, and the link
+rendered only once the quote left draft.
+
+**Consulted two sub-agents** (security, and product/UX) before building. Both
+argued independently against the optional view password, and the founder chose
+"no password, but gate Accept".
+
+**Shipped 2026-08-28, verified 25/25 against the deployed Lambda**
+(`scripts/verify-share-flow.mjs`, which drives the real shipped artifact with
+synthetic API Gateway events):
+- `POST /v1/quotes/{id}/share` and `/revoke`, plus the same two for invoices.
+  Sharing is now the primitive; email is one way of doing it.
+- The accept gate sits on the ACTION, never the view. Anyone the link reaches
+  may read the price - that is what a link is for, and showing it to a partner
+  is behaviour we want - but agreeing to it asks for a typed name, optionally
+  plus the last 4 digits of the number it went to. Declining is never gated: a
+  wrongly-declined quote is recoverable by a phone call, a wrongly-accepted
+  one is not.
+- The typed name doubles as the signature. `acceptance` now records the name,
+  full IP, user agent, the exact affirmation wording, which check was
+  satisfied, a frozen snapshot of the figures shown, and a SHA-256 over a
+  CANONICAL form of them - key-sorted, so the party checking it can reproduce
+  it. Before this, accepting wrote `acceptedAt` and nothing else.
+- The name is deliberately NOT compared against the one on the quote: quotes
+  made out to "Marie" get accepted by her husband, and anyone holding the link
+  could read the name off the page anyway.
+- `phone4` degrades to `name` when the quote has no number, rather than
+  presenting a box nobody can satisfy.
+- Revoke rotates the token and resets the view counts, because carrying them
+  over would tell the owner the customer had opened something they have never
+  seen.
+- Views are counted at the API, never at the CDN: a link-preview bot fetches
+  the page shell the instant the message is sent, and a dashboard that says
+  "opened" before the customer touched it is worse than one that says nothing.
+- A phone field on the quote form. Its absence meant the customers most likely
+  to be reached by text could not be quoted at all.
+
+**Phase 2, not built:** the link preview. `chat.makerbay.app` serves one static
+shell with `<title>Chat</title>` and no Open Graph tags, so a quote pasted into
+WhatsApp shows an unlabelled link on an unfamiliar domain - a conversion
+problem today, not a privacy one. Needs a CloudFront Function or Lambda@Edge,
+since a static bucket cannot vary meta tags per token. Decided: business name
+and logo ONLY, never the amount or the customer name, on the tenant's own
+domain where one is configured, and built so the generator structurally cannot
+read the quote row.

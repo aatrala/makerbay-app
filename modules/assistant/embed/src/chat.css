@@ -118,7 +118,21 @@ button:disabled { opacity: 0.5; cursor: default; }
 .q-total td { font-weight: 700; color: #1c1917; font-size: 17px; }
 .q-notes { margin-top: 14px; color: #57534e; }
 .q-terms { margin-top: 10px; color: #78716c; font-size: 13px; }
-.q-actions { display: flex; gap: 10px; }
+.q-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/*
+ * The accept gate (issue 118). Deliberately looks like part of the document
+ * rather than a barrier in front of it: a customer who cannot get past it can
+ * still read every figure and ring the tradesperson.
+ */
+.q-gate { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e7e5e4; }
+.q-gate label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+.q-gate input {
+  width: 100%; padding: 10px 12px; border: 1px solid #e7e5e4; border-radius: 8px;
+  font: inherit; box-sizing: border-box;
+}
+/* Four digits need a keypad, not a keyboard, and nowhere near full width. */
+.q-gate input#acc-four { max-width: 8em; letter-spacing: 0.25em; }
+.q-gate .hint { margin-top: 6px; }
 .q-state { margin-top: 16px; font-weight: 600; }
 .q-state.ok { color: #15803d; }
 .stars { display: flex; gap: 6px; margin: 6px 0 4px; }

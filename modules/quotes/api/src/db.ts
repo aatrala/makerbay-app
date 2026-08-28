@@ -36,6 +36,12 @@ export interface QuoteRow {
   requestId?: string
   customerName?: string
   customerEmail?: string
+  /**
+   * The number the link was sent to. Optional, and the only identifier a
+   * tradesperson reliably has when there is no email (issue 118). Also what
+   * the last-four accept check compares against.
+   */
+  customerPhone?: string
   lines: QuoteLine[]
   subtotalCents: number
   taxRate: number
@@ -66,7 +72,82 @@ export interface QuoteRow {
   supersededByToken?: string
   /** The quote this one replaces. Written by revise. */
   revisionOf?: string
+  /**
+   * What was agreed, by whom, to what wording (issue 118).
+   *
+   * Before this, accepting wrote `acceptedAt` and nothing else. In a dispute
+   * over a four-figure job that proves something happened, not that this
+   * customer agreed to these figures. Written once, never updated.
+   */
+  acceptance?: AcceptanceRecord
+  /** Set when the owner kills a shared link. The old token stops resolving. */
+  tokenRotatedAt?: string
+  /** Honest delivery signal when there is no email to track (issue 118). */
+  firstViewedAt?: string
+  lastViewedAt?: string
+  viewCount?: number
+  /** How the link reached the customer, so "sent" is a fact and not a claim. */
+  sharedVia?: 'email' | 'link'
 }
+
+/**
+ * The evidence behind an acceptance.
+ *
+ * Deliberately facts about the transaction, not observation of the person:
+ * no geolocation, no fingerprinting, no behavioural trail. Each field earns
+ * its place by answering a question a dispute would actually ask.
+ */
+export interface AcceptanceRecord {
+  at: string
+  /**
+   * The customer's typed name. This is the signature - a bare button click is
+   * anonymous, and under the AU ETA / UK ECA / US ESIGN regimes it is the
+   * deliberate act of typing a name that carries weight.
+   */
+  name: string
+  /**
+   * Full, not truncated. The whole evidential point is telling the customer's
+   * own connection from somebody else's, and a masked IP proves neither.
+   * Lawful basis is performance of a contract; it lives and dies with the quote.
+   */
+  ip?: string
+  userAgent?: string
+  /** The exact words shown above the button, so what was agreed to is provable. */
+  affirmation: string
+  /** Which extra check was satisfied, if any. */
+  check: AcceptCheck
+  /**
+   * SHA-256 over a canonical form of the figures displayed. One short string
+   * an adjudicator can compare, and it makes later tampering detectable
+   * rather than merely discouraged.
+   */
+  documentHash: string
+  /** The figures themselves, frozen. The hash is only useful with these. */
+  snapshot: AcceptanceSnapshot
+}
+
+export interface AcceptanceSnapshot {
+  lines: QuoteLine[]
+  subtotalCents: number
+  taxRate: number
+  taxCents: number
+  totalCents: number
+  currency: string
+  validUntil: string
+  notes?: string
+  terms?: string
+}
+
+/**
+ * What a customer must do to accept, beyond tapping.
+ *
+ * `name` is the default and the floor: it is the signature, so it is never
+ * skipped for the sake of one fewer field. `phone4` adds the last four digits
+ * of the number the link went to - the customer cannot forget it, it needs no
+ * separate message, and it is checkable. `none` exists for a business that
+ * wants a bare tap and accepts what that costs them in a dispute.
+ */
+export type AcceptCheck = 'none' | 'name' | 'phone4'
 
 export interface QuotesConfigRow {
   tenantId: string
@@ -85,6 +166,12 @@ export interface QuotesConfigRow {
   docFooter?: string
   /** Business photo as the document logo (defaults on when a photo exists). */
   showLogoOnDocs?: boolean
+  /**
+   * What a customer must do to accept (issue 118). Defaults to `name`: with no
+   * email in the loop the link is the whole delivery mechanism, and a typed
+   * name is both the gate and the signature.
+   */
+  acceptCheck?: AcceptCheck
 }
 
 /**
@@ -100,6 +187,7 @@ const TAX_LABEL: Record<string, string> = {
 }
 
 export const DEFAULT_QUOTES_CONFIG: Omit<QuotesConfigRow, 'tenantId'> = {
+  acceptCheck: 'name',
   taxRate: 0,
   taxLabel: 'GST',
   currency: 'AUD',

@@ -28,8 +28,19 @@ import {
   listInvoices,
   patchInvoice,
   publicInvoiceView,
+  revokeInvoiceLink,
   sendInvoice,
+  shareInvoice,
 } from './invoices'
+import {
+  affirmationFor,
+  callerIp,
+  documentHash,
+  effectiveCheck,
+  lastFour,
+  snapshotOf,
+  verifyAccept,
+} from './accept'
 import {
   DEFAULT_QUOTES_CONFIG,
   computeTotals,
@@ -44,6 +55,7 @@ import {
   putPriceItem,
   putQuote,
   putQuotesConfig,
+  type AcceptanceRecord,
   type PriceItemRow,
   type QuoteLine,
   type QuoteRow,
@@ -122,6 +134,13 @@ export const handler = async (
     const send = path.match(/^\/v1\/quotes\/([0-9A-Z]{26})\/send$/)
     if (method === 'POST' && send) return await sendQuote(tenantId, send[1])
 
+    // Sharing needs no email address (issue 118).
+    const share = path.match(/^\/v1\/quotes\/([0-9A-Z]{26})\/share$/)
+    if (method === 'POST' && share) return await shareQuote(tenantId, share[1])
+
+    const revoke = path.match(/^\/v1\/quotes\/([0-9A-Z]{26})\/revoke$/)
+    if (method === 'POST' && revoke) return await revokeQuoteLink(tenantId, revoke[1])
+
     const revise = path.match(/^\/v1\/quotes\/([0-9A-Z]{26})\/revise$/)
     if (method === 'POST' && revise) return await reviseQuote(tenantId, revise[1])
 
@@ -142,6 +161,10 @@ export const handler = async (
     if (method === 'PATCH' && inv) return await patchInvoice(tenantId, inv[1], body(event))
     const invSend = path.match(/^\/v1\/quotes\/invoices\/([0-9A-Z]{26})\/send$/)
     if (method === 'POST' && invSend) return await sendInvoice(tenantId, invSend[1])
+    const invShare = path.match(/^\/v1\/quotes\/invoices\/([0-9A-Z]{26})\/share$/)
+    if (method === 'POST' && invShare) return await shareInvoice(tenantId, invShare[1])
+    const invRevoke = path.match(/^\/v1\/quotes\/invoices\/([0-9A-Z]{26})\/revoke$/)
+    if (method === 'POST' && invRevoke) return await revokeInvoiceLink(tenantId, invRevoke[1])
 
     return json(404, { error: 'not_found' })
   } catch (err) {
@@ -250,18 +273,65 @@ async function publicRoute(
           payable: resolved.payoutsEnabled && !depositPaid,
         }
       : null
+    // Counted here and never at the CDN. A link preview bot fetches the page
+    // shell to build its card the instant the message is sent, so a CDN-level
+    // count would tell the owner "opened" before the customer had touched it,
+    // and a dashboard that lies is worse than one that says nothing. This
+    // endpoint is called by the page's own JavaScript, which bots do not run.
+    await recordView(resolved.tenantId, quote)
+
+    const check = effectiveCheck(config.acceptCheck ?? 'name', quote)
     return json(200, {
       business: resolved.name,
       footer: config.docFooter || undefined,
       logoUrl: await documentLogo(resolved.tenantId, config),
       quote: { ...publicView(quote, status, config.taxLabel, config.docPrefix), deposit },
+      // What the customer must do to accept, and the wording they will be
+      // agreeing to. Sent with the document so the page cannot invent either.
+      accept: {
+        check,
+        affirmation: affirmationFor(resolved.name, money(quote.totalCents, quote.currency)),
+        ...(check === 'phone4' ? { phoneHint: phoneHintOf(quote.customerPhone) } : {}),
+      },
     })
   }
 
   if (method === 'POST' && match[2]) {
-    return await respond(resolved.tenantId, resolved.name, quote, status, String(b.decision ?? ''))
+    return await respond(
+      resolved.tenantId, resolved.name, quote, status, String(b.decision ?? ''), b, event,
+    )
   }
   return json(404, { error: 'not_found' })
+}
+
+/**
+ * "the number ending 5678", so the customer knows which phone is being asked
+ * about without the page republishing the whole number to whoever holds the
+ * link.
+ */
+const phoneHintOf = (phone?: string): string | undefined => {
+  const four = lastFour(phone)
+  return four ? `the number ending ${four}` : undefined
+}
+
+/**
+ * Note that the customer opened it.
+ *
+ * The only delivery signal there is once email is out of the loop. Failing to
+ * record a view must never cost the customer their page, so this swallows.
+ */
+async function recordView(tenantId: string, quote: QuoteRow): Promise<void> {
+  try {
+    const now = new Date().toISOString()
+    await putQuote({
+      ...quote,
+      firstViewedAt: quote.firstViewedAt ?? now,
+      lastViewedAt: now,
+      viewCount: (quote.viewCount ?? 0) + 1,
+    })
+  } catch (err) {
+    console.warn('view count failed', { tenantId, quoteId: quote.quoteId, err: String(err) })
+  }
 }
 
 const publicView = (q: QuoteRow, status: QuoteStatus, taxLabel: string, docPrefix = '') => ({
@@ -329,22 +399,62 @@ async function respond(
   quote: QuoteRow,
   status: QuoteStatus,
   decision: string,
+  b: Record<string, unknown>,
+  event: Event,
 ): Promise<APIGatewayProxyResultV2> {
   const denied = respondGuard(quote, status, decision)
   if (denied) return denied
 
-  const now = new Date().toISOString()
+  const config = await getQuotesConfig(tenantId)
   const accepted = decision === 'accept'
+  const check = effectiveCheck(config.acceptCheck ?? 'name', quote)
+
+  /**
+   * The gate sits on ACCEPTING, never on viewing.
+   *
+   * Anyone the link was forwarded to can read the price - that is the point of
+   * a link, and the customer showing it to their partner is the behaviour we
+   * want. Agreeing to it is a different act, and only that one is checked.
+   *
+   * Declining is not gated: someone who wants to say no should never be made
+   * to prove who they are first, and a wrongly-declined quote is recoverable
+   * by a phone call in a way a wrongly-accepted one is not.
+   */
+  let acceptance: AcceptanceRecord | undefined
+  if (accepted) {
+    const failed = verifyAccept(check, quote, {
+      name: String(b.name ?? ''),
+      phone4: String(b.phone4 ?? ''),
+    })
+    if (failed) return json(400, failed)
+
+    const snapshot = snapshotOf(quote)
+    acceptance = {
+      at: new Date().toISOString(),
+      name: String(b.name ?? '').trim().slice(0, 120),
+      ip: callerIp(event),
+      userAgent: String(event.headers?.['user-agent'] ?? '').slice(0, 256) || undefined,
+      // The wording is rebuilt here rather than trusted from the request: the
+      // customer must be recorded as agreeing to what we showed, not to
+      // whatever text a POST claimed was on screen.
+      affirmation: affirmationFor(businessName, money(quote.totalCents, quote.currency)),
+      check,
+      documentHash: documentHash(snapshot),
+      snapshot,
+    }
+  }
+
+  const now = new Date().toISOString()
   const updated: QuoteRow = {
     ...quote,
     status: accepted ? 'accepted' : 'declined',
     acceptedAt: accepted ? now : undefined,
     declinedAt: accepted ? undefined : now,
+    ...(acceptance ? { acceptance } : {}),
     updatedAt: now,
   }
   await putQuote(updated)
 
-  const config = await getQuotesConfig(tenantId)
   const qLabel = quoteLabel(quote.number, config.docPrefix)
   await appendContactEvent(tenantId, quote.contactId, {
     moduleId: 'quotes',
@@ -424,18 +534,26 @@ async function create(tenantId: string, event: Event): Promise<APIGatewayProxyRe
   let contactId = String(b.contactId ?? '')
   let customerName = String(b.customerName ?? '').trim()
   let customerEmail = String(b.customerEmail ?? '').trim()
+  // The one identifier a tradesperson always has. Before issue 118 the form
+  // took an email and nothing else, which meant the customers most likely to
+  // be reached by text could not be quoted at all.
+  let customerPhone = String(b.customerPhone ?? '').trim()
 
   if (contactId) {
     const contact = await getContact(tenantId, contactId)
     if (!contact) return json(404, { error: 'unknown_contact' })
     customerName = customerName || contact.name || ''
     customerEmail = customerEmail || contact.email || ''
+    customerPhone = customerPhone || contact.phone || ''
   } else {
-    if (!customerName && !customerEmail) {
-      return json(400, { error: 'customer_required', message: 'Pick a contact or give a name and email.' })
+    if (!customerName && !customerEmail && !customerPhone) {
+      return json(400, {
+        error: 'customer_required',
+        message: 'Pick a contact, or give a name with an email or phone number.',
+      })
     }
     const contact = await upsertContact(tenantId, {
-      name: customerName, email: customerEmail, source: 'quotes',
+      name: customerName, email: customerEmail, phone: customerPhone, source: 'quotes',
     })
     contactId = contact.contactId
   }
@@ -452,6 +570,7 @@ async function create(tenantId: string, event: Event): Promise<APIGatewayProxyRe
     requestId: b.requestId ? String(b.requestId) : undefined,
     customerName: customerName || undefined,
     customerEmail: customerEmail || undefined,
+    customerPhone: customerPhone || undefined,
     lines: lines.map((l, i) => ({ ...l, totalCents: totals.lineTotals[i] })),
     subtotalCents: totals.subtotalCents,
     taxRate: config.taxRate,
@@ -557,17 +676,141 @@ async function patch(tenantId: string, quoteId: string, event: Event): Promise<A
   return json(200, { quote })
 }
 
+/** The customer's link for a quote. One definition, so it cannot drift. */
+const quoteUrl = (slug: string, token: string): string =>
+  `${CHAT}/quote?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`
+
+/**
+ * Mark a quote as out with the customer.
+ *
+ * Extracted from sendQuote because emailing was the ONLY way to reach this
+ * state, and the link only renders once the quote leaves draft (issue 118).
+ * A tradesperson holding nothing but a phone number could therefore create a
+ * quote and never obtain its link at all - not a missing feature, a circular
+ * dependency. Sharing is now the primitive; email is one way of doing it.
+ */
+async function markShared(
+  tenantId: string,
+  quote: QuoteRow,
+  via: 'email' | 'link',
+  label: string,
+  notifyError?: string,
+): Promise<QuoteRow> {
+  const now = new Date().toISOString()
+  const updated: QuoteRow = {
+    ...quote,
+    // Sending is what makes a quote real, even if the email bounced - the link
+    // still works, and the owner can pass it on by hand.
+    status: quote.status === 'draft' ? 'sent' : quote.status,
+    sentAt: quote.sentAt ?? now,
+    sharedVia: quote.sharedVia ?? via,
+    updatedAt: now,
+    notifyError,
+  }
+  await putQuote(updated)
+  await appendContactEvent(tenantId, quote.contactId, {
+    moduleId: 'quotes',
+    // Says which channel, because with no email there is nothing else that can
+    // answer "did this actually go out?" later.
+    title: via === 'email'
+      ? `Sent quote ${label} for ${money(quote.totalCents, quote.currency)}`
+      : `Shared a link to quote ${label} for ${money(quote.totalCents, quote.currency)}`,
+    href: `/quotes/${quote.quoteId}`,
+  })
+  await emitUsage({ tenantId, moduleId: 'quotes', metric: 'quote.sent', quantity: 1 })
+  return updated
+}
+
+/**
+ * Hand back the customer link without sending anything.
+ *
+ * The tradesperson passes it on however they like - a text, WhatsApp, or the
+ * phone held out across a kitchen table. No email address required, which is
+ * the entire point of issue 118.
+ */
+async function shareQuote(tenantId: string, quoteId: string): Promise<APIGatewayProxyResultV2> {
+  const quote = await getQuote(tenantId, quoteId)
+  if (!quote) return json(404, { error: 'not_found' })
+  if (quote.status === 'superseded') {
+    return json(409, {
+      error: 'superseded',
+      message: 'This quote was replaced by a newer one. Share that one instead.',
+    })
+  }
+
+  const [tenant, config] = await Promise.all([getTenant(tenantId), getQuotesConfig(tenantId)])
+  const label = quoteLabel(quote.number, config.docPrefix)
+  const updated = await markShared(tenantId, quote, 'link', label)
+  return json(200, {
+    quote: updated,
+    publicUrl: quoteUrl(tenant?.slug ?? '', quote.publicToken),
+    label,
+    emailed: false,
+  })
+}
+
+/**
+ * Kill a shared link and mint a new one.
+ *
+ * The honest answer to "I sent it to the wrong Dave", and the reason this
+ * product does not need a view password: the realistic threat is a mis-sent
+ * link, and no password in the same message would have stopped that anyway.
+ * Anyone holding the old link now gets a not-found.
+ */
+async function revokeQuoteLink(tenantId: string, quoteId: string): Promise<APIGatewayProxyResultV2> {
+  const quote = await getQuote(tenantId, quoteId)
+  if (!quote) return json(404, { error: 'not_found' })
+  // Rotating the token on a settled quote would strand the customer's own
+  // record of what they agreed to, and there is nothing left to protect.
+  if (quote.status === 'accepted' || quote.status === 'declined') {
+    return json(409, {
+      error: 'quote_settled',
+      message: `Quote ${quoteLabel(quote.number)} has already been ${quote.status}, so its link cannot be changed.`,
+    })
+  }
+
+  const [tenant, config] = await Promise.all([getTenant(tenantId), getQuotesConfig(tenantId)])
+  const now = new Date().toISOString()
+  const updated: QuoteRow = {
+    ...quote,
+    publicToken: linkToken(),
+    tokenRotatedAt: now,
+    updatedAt: now,
+    // The new link has been seen by nobody. Carrying the old counts over would
+    // tell the owner the customer had opened something they have never seen.
+    firstViewedAt: undefined,
+    lastViewedAt: undefined,
+    viewCount: 0,
+  }
+  await putQuote(updated)
+  const label = quoteLabel(quote.number, config.docPrefix)
+  await appendContactEvent(tenantId, quote.contactId, {
+    moduleId: 'quotes',
+    title: `Stopped the old link to quote ${label} working`,
+    href: `/quotes/${quote.quoteId}`,
+  })
+  return json(200, {
+    quote: updated,
+    publicUrl: quoteUrl(tenant?.slug ?? '', updated.publicToken),
+    label,
+  })
+}
+
 async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayProxyResultV2> {
   const quote = await getQuote(tenantId, quoteId)
   if (!quote) return json(404, { error: 'not_found' })
   if (!quote.customerEmail) {
-    return json(400, { error: 'no_customer_email', message: 'This customer has no email address.' })
+    return json(400, {
+      error: 'no_customer_email',
+      // Names the way out, because there now IS one.
+      message: 'This customer has no email address. Share the link instead and send it however you like.',
+    })
   }
 
   const tenant = await getTenant(tenantId)
   const config = await getQuotesConfig(tenantId)
   const qLabel = quoteLabel(quote.number, config.docPrefix)
-  const url = `${CHAT}/quote?slug=${tenant?.slug ?? ''}&token=${quote.publicToken}`
+  const url = quoteUrl(tenant?.slug ?? '', quote.publicToken)
 
   const notice = await sendEmail({
     to: quote.customerEmail,
@@ -594,23 +837,9 @@ async function sendQuote(tenantId: string, quoteId: string): Promise<APIGatewayP
     ].join('\n'),
   })
 
-  const now = new Date().toISOString()
-  const updated: QuoteRow = {
-    ...quote,
-    // Sending is what makes a quote real, even if the email bounced - the link
-    // still works, and the owner can pass it on by hand.
-    status: quote.status === 'draft' ? 'sent' : quote.status,
-    sentAt: quote.sentAt ?? now,
-    updatedAt: now,
-    notifyError: notice.sent ? undefined : notice.error,
-  }
-  await putQuote(updated)
-  await appendContactEvent(tenantId, quote.contactId, {
-    moduleId: 'quotes',
-    title: `Sent quote ${qLabel} for ${money(quote.totalCents, quote.currency)}`,
-    href: `/quotes/${quote.quoteId}`,
-  })
-  await emitUsage({ tenantId, moduleId: 'quotes', metric: 'quote.sent', quantity: 1 })
+  const updated = await markShared(
+    tenantId, quote, 'email', qLabel, notice.sent ? undefined : notice.error,
+  )
 
   return json(200, { quote: updated, publicUrl: url, emailed: notice.sent, emailError: notice.error })
 }

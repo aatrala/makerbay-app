@@ -35,6 +35,7 @@ interface Quote {
   contactId: string
   customerName?: string
   customerEmail?: string
+  customerPhone?: string
   lines: Line[]
   subtotalCents: number
   taxCents: number
@@ -48,6 +49,16 @@ interface Quote {
   /** Set once an invoice exists for this quote - one invoice per quote. */
   invoiceId?: string
   createdAt: string
+  /**
+   * Whether the customer has actually opened it (issue 118). Counted by the
+   * API when the page asks for the document, never at the CDN - a link
+   * preview bot fetches the shell the instant the message is sent, and a
+   * dashboard that says "opened" before the customer touched it is worse
+   * than one that says nothing.
+   */
+  viewCount?: number
+  firstViewedAt?: string
+  lastViewedAt?: string
 }
 
 interface Invoice {
@@ -239,6 +250,7 @@ function NewQuote() {
   )
   const [customerName, setCustomerName] = useState(params.get('name') ?? '')
   const [customerEmail, setCustomerEmail] = useState(params.get('email') ?? '')
+  const [customerPhone, setCustomerPhone] = useState(params.get('phone') ?? '')
   const [notes, setNotes] = useState(dup.notes ?? '')
   const [validDays, setValidDays] = useState('')
   const [error, setError] = useState('')
@@ -279,7 +291,7 @@ function NewQuote() {
     void (async () => {
       try {
         const r = await api('POST', '/v1/quotes', {
-          customerName, customerEmail, notes, requestId,
+          customerName, customerEmail, customerPhone, notes, requestId,
           contactId: contactId || undefined,
           validDays: validDays ? Number(validDays) : undefined,
           lines: lines
@@ -327,8 +339,15 @@ function NewQuote() {
               <label htmlFor="q-email">Email</label>
               <input id="q-email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
             </div>
+            <div className="grow">
+              <label htmlFor="q-phone">Phone</label>
+              <input id="q-phone" type="tel" value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)} />
+            </div>
           </div>
-          <p className="meta">They are matched to an existing contact by email, or added as a new one.</p>
+          <p className="meta">
+            Either one is enough. With a phone number you can text them the link instead of emailing it.
+          </p>
         </div>
 
         <div className="card">
@@ -406,6 +425,7 @@ function QuoteDetail() {
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -424,6 +444,47 @@ function QuoteDetail() {
         setNote(r.emailed
           ? `Sent to ${quote?.customerEmail}.`
           : 'Email is not switched on for this account yet, so nothing was sent. Copy the link below and send it yourself.')
+        await load()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  /**
+   * Put the link on the clipboard, marking the quote sent on the way.
+   *
+   * A draft has no working link - the public page 404s on one - so the first
+   * press has to go to the server before there is anything worth copying.
+   * After that it is a straight copy.
+   */
+  const share = () =>
+    void (async () => {
+      setBusy(true); setError(''); setNote(''); setCopied(false)
+      try {
+        const url = publicUrl || (await api('POST', `/v1/quotes/${quoteId}/share`, {})).publicUrl as string
+        setPublicUrl(url)
+        // If the clipboard is refused - an insecure context, or a browser that
+        // wants a fresher gesture - the link is still shown in the field
+        // below, so the tradesperson is never left with nothing.
+        try {
+          await navigator.clipboard.writeText(url)
+          setCopied(true)
+        } catch {
+          setNote('Copy the link below and send it to your customer.')
+        }
+        await load()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  const revoke = () =>
+    void (async () => {
+      if (!window.confirm(
+        'Stop this link working?\n\nAnyone you already sent it to will not be able to open it. '
+        + 'You get a new link to send instead.',
+      )) return
+      setBusy(true); setError(''); setNote(''); setCopied(false)
+      try {
+        const r = await api('POST', `/v1/quotes/${quoteId}/revoke`, {})
+        setPublicUrl(r.publicUrl)
+        setNote('The old link no longer works. Send the new one below.')
         await load()
       } catch (e) { setError(explain(e)) } finally { setBusy(false) }
     })()
@@ -504,29 +565,62 @@ function QuoteDetail() {
       </div>
 
       <div className="card">
-        <h2>Send it</h2>
+        <h2>Get it to your customer</h2>
         {!settled ? (
           <>
-            <p>Emails the customer a link they can open on their phone and accept.</p>
+            {/*
+              Sharing first, emailing second. Before issue 118 the only way out
+              of draft was an email, and the link stayed hidden until then - so
+              a tradesperson holding nothing but a phone number could build a
+              quote and never get its link at all.
+            */}
+            <p>Send the link however you like - a text, WhatsApp, or just hand them your phone.</p>
             <div className="row">
-              <button onClick={send} disabled={busy || !quote.customerEmail}>
-                {busy ? 'Sending…' : quote.status === 'draft' ? 'Send quote' : 'Send again'}
+              <button onClick={share} disabled={busy}>
+                {busy ? 'Working…' : publicUrl ? 'Copy the link' : 'Get the link'}
               </button>
-              {!quote.customerEmail && <span className="meta">Add an email address first.</span>}
+              <button className="ghost" onClick={send} disabled={busy || !quote.customerEmail}
+                title={quote.customerEmail ? `Email it to ${quote.customerEmail}` : 'This customer has no email address'}>
+                {quote.status === 'draft' ? 'Email it instead' : 'Email it again'}
+              </button>
             </div>
+            {copied && <p className="meta">Copied. Paste it into a message to your customer.</p>}
           </>
         ) : (
-          <p className="meta">This quote has been {quote.status} and cannot be resent.</p>
+          <p className="meta">This quote has been {quote.status}, so it cannot be sent again.</p>
         )}
         {publicUrl && quote.status !== 'draft' && (
           <>
             <label className="mt">Customer link</label>
             <div className="row">
               <input className="grow" readOnly value={publicUrl} onFocus={(e) => e.target.select()} aria-label="Customer link" />
-              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener">Preview</a>
+              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener noreferrer">Preview</a>
             </div>
-            <p className="meta">Anyone with this link can view and accept. Share it only with your customer.</p>
+            <p className="meta">
+              Anyone with this link can see the quote. Accepting it asks them to type their name.
+            </p>
+            {!settled && (
+              <div className="row mt">
+                {/*
+                  The honest answer to "I sent it to the wrong Dave", and the
+                  reason this product has no view password: a password pasted
+                  into the same message would not have stopped that either.
+                */}
+                <button className="ghost danger" disabled={busy} onClick={revoke}
+                  title="The old link stops working and you get a new one">
+                  Stop this link working
+                </button>
+              </div>
+            )}
           </>
+        )}
+        {quote.status !== 'draft' && (
+          <p className="meta mt">
+            {quote.viewCount
+              ? `Opened ${quote.viewCount === 1 ? 'once' : `${quote.viewCount} times`}, last on ${
+                new Date(quote.lastViewedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}.`
+              : 'Not opened yet.'}
+          </p>
         )}
       </div>
 

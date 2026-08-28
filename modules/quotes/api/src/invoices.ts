@@ -46,6 +46,10 @@ export interface InvoiceRow {
   sentAt?: string
   paidAt?: string
   notifyError?: string
+  /** Set when the owner kills a shared link. The old token stops resolving. */
+  tokenRotatedAt?: string
+  /** The number the link went to, when there is no email (issue 118). */
+  customerPhone?: string
 }
 
 /** Invoice numbers are their own atomic series - INV-7 must never repeat. */
@@ -125,6 +129,7 @@ export async function invoiceFromQuote(tenantId: string, quote: QuoteRow): Promi
     contactId: quote.contactId,
     customerName: quote.customerName,
     customerEmail: quote.customerEmail,
+    customerPhone: quote.customerPhone,
     lines: quote.lines,
     subtotalCents: quote.subtotalCents,
     taxRate: quote.taxRate,
@@ -143,18 +148,99 @@ export async function invoiceFromQuote(tenantId: string, quote: QuoteRow): Promi
   return invoice
 }
 
+/** The customer's link for an invoice. One definition, so it cannot drift. */
+export const invoiceUrl = (slug: string, token: string): string =>
+  `${CHAT}/invoice?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`
+
+/**
+ * Hand back the customer link without sending anything (issue 118).
+ *
+ * The invoice screen already showed a link unconditionally, but the public
+ * view 404s on a draft - so a tradesperson could copy a link that told their
+ * customer "this invoice could not be found". Sharing marks it sent, which
+ * makes the link the copy button hands over actually work.
+ */
+export async function shareInvoice(tenantId: string, invoiceId: string): Promise<APIGatewayProxyResultV2> {
+  const invoice = await getInvoice(tenantId, invoiceId)
+  if (!invoice) return json(404, { error: 'not_found' })
+  if (invoice.status === 'void') return json(409, { error: 'invoice_void' })
+
+  const [tenant, config] = await Promise.all([getTenant(tenantId), getQuotesConfig(tenantId)])
+  const label = invoiceLabel(invoice, config.docPrefix)
+  const now = new Date().toISOString()
+  const updated: InvoiceRow = {
+    ...invoice,
+    status: invoice.status === 'draft' ? 'sent' : invoice.status,
+    sentAt: invoice.sentAt ?? now,
+    updatedAt: now,
+  }
+  await ddb.send(new PutCommand({ TableName: Tables.invoices(), Item: updated }))
+  if (invoice.contactId) {
+    await appendContactEvent(tenantId, invoice.contactId, {
+      moduleId: 'quotes',
+      title: `Shared a link to invoice ${label} for ${money(invoice.totalCents, invoice.currency)}`,
+    })
+  }
+  await emitUsage({ tenantId, moduleId: 'quotes', metric: 'invoice.sent', quantity: 1 })
+  return json(200, {
+    invoice: updated,
+    publicUrl: invoiceUrl(tenant?.slug ?? '', invoice.publicToken),
+    label,
+    emailed: false,
+  })
+}
+
+/** Kill a shared invoice link and mint a new one. */
+export async function revokeInvoiceLink(tenantId: string, invoiceId: string): Promise<APIGatewayProxyResultV2> {
+  const invoice = await getInvoice(tenantId, invoiceId)
+  if (!invoice) return json(404, { error: 'not_found' })
+  // A paid invoice is the customer's receipt. Rotating its link would strand
+  // them, and there is nothing left to protect.
+  if (invoice.status === 'paid') {
+    return json(409, {
+      error: 'invoice_paid',
+      message: 'This invoice is paid, so its link cannot be changed. The customer needs it as their receipt.',
+    })
+  }
+
+  const [tenant, config] = await Promise.all([getTenant(tenantId), getQuotesConfig(tenantId)])
+  const now = new Date().toISOString()
+  const updated: InvoiceRow = {
+    ...invoice,
+    publicToken: linkToken(),
+    tokenRotatedAt: now,
+    updatedAt: now,
+  }
+  await ddb.send(new PutCommand({ TableName: Tables.invoices(), Item: updated }))
+  const label = invoiceLabel(invoice, config.docPrefix)
+  if (invoice.contactId) {
+    await appendContactEvent(tenantId, invoice.contactId, {
+      moduleId: 'quotes',
+      title: `Stopped the old link to invoice ${label} working`,
+    })
+  }
+  return json(200, {
+    invoice: updated,
+    publicUrl: invoiceUrl(tenant?.slug ?? '', updated.publicToken),
+    label,
+  })
+}
+
 export async function sendInvoice(tenantId: string, invoiceId: string): Promise<APIGatewayProxyResultV2> {
   const invoice = await getInvoice(tenantId, invoiceId)
   if (!invoice) return json(404, { error: 'not_found' })
   if (invoice.status === 'void') return json(409, { error: 'invoice_void' })
   if (!invoice.customerEmail) {
-    return json(400, { error: 'no_customer_email', message: 'This customer has no email address.' })
+    return json(400, {
+      error: 'no_customer_email',
+      message: 'This customer has no email address. Share the link instead and send it however you like.',
+    })
   }
 
   const tenant = await getTenant(tenantId)
   const config = await getQuotesConfig(tenantId)
   const label = invoiceLabel(invoice, config.docPrefix)
-  const url = `${CHAT}/invoice?slug=${tenant?.slug ?? ''}&token=${invoice.publicToken}`
+  const url = invoiceUrl(tenant?.slug ?? '', invoice.publicToken)
   const due = new Date(invoice.dueAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const notice = await sendEmail({
     to: invoice.customerEmail,
