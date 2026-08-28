@@ -1063,9 +1063,27 @@ propagates, and pointing customer mail at an unverified identity would fail
 every send. Switching it over is a second deploy once DKIM reads SUCCESS - the
 same discipline the GSI in issue 118 needed and did not get.
 
-**Remaining:** confirm DKIM is SUCCESS, then set `EMAIL_FROM_CUSTOMER` to
-`send.makerbay.app` and verify one customer-bound send against the mailbox
-simulator.
+**A DNS bug found by checking rather than waiting.** DKIM sat at PENDING for
+hours while the MAIL FROM records reported SUCCESS - and that split is what
+gave it away, because the MAIL FROM records were written by hand and the DKIM
+ones came from CDK. Route 53 held:
+
+    <token>._domainkey.send.makerbay.app.makerbay.app
+
+The zone name twice. `dkimRecords[].name` is already fully qualified, but it
+is a CloudFormation token, so CDK cannot see at synth time that it already
+ends with the zone name and appends it again. `recordName` wants the part
+BELOW the zone. Fixed with Fn::Select to pull the bare token out of the front;
+CloudFormation removed the doubled records on deploy, and the CNAMEs now
+resolve to `<token>.dkim.amazonses.com`.
+
+Worth remembering as a class: a CDK construct that takes a "record name" is
+almost always asking for the relative name, and a token argument silently
+defeats the guard that would otherwise catch the mistake.
+
+**Remaining:** DKIM propagates on SES's own schedule. Once it reads SUCCESS,
+set `EMAIL_FROM_CUSTOMER` to `send.makerbay.app` and verify one customer-bound
+send against the mailbox simulator.
 
 ### 104 — Cognito auth emails are unconfigured: wrong sender, 50/day cap ✅ shipped
 The user pool (`infra/lib/makerbay-stack.ts:386`) has no `email:` property

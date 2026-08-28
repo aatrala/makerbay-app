@@ -324,12 +324,29 @@ export class MakerbayStack extends cdk.Stack {
       mailFromDomain: `bounce.${CUSTOMER_DOMAIN}`,
       configurationSet: emailConfigSet,
     })
-    // The three Easy DKIM CNAMEs. Without these the identity never verifies
-    // and every send from it fails.
+    /**
+     * The three Easy DKIM CNAMEs. Without these the identity never verifies
+     * and every send from it fails.
+     *
+     * `recordName` is the part BELOW the zone, not the full name, and that
+     * distinction is not cosmetic here. `dkimRecords[].name` is already
+     * fully qualified - `<token>._domainkey.send.makerbay.app` - but it is a
+     * CloudFormation token, so CDK cannot see at synth time that it already
+     * ends with the zone name and appends the zone again. The first attempt
+     * published
+     *   <token>._domainkey.send.makerbay.app.makerbay.app
+     * which resolves to nothing, so DKIM sat at PENDING while the MAIL FROM
+     * records - which I had written by hand and were therefore correct -
+     * reported SUCCESS. That split is what gave it away.
+     *
+     * Fn::Select pulls the bare token out of the front, and the rest is
+     * literal, so what CDK appends lands in the right place.
+     */
     customerIdentity.dkimRecords.forEach((r, i) => {
+      const token = cdk.Fn.select(0, cdk.Fn.split('.', r.name))
       new route53.CnameRecord(this, `CustomerDkim${i + 1}`, {
         zone: publicZone,
-        recordName: r.name,
+        recordName: `${token}._domainkey.send`,
         domainName: r.value,
       })
     })
