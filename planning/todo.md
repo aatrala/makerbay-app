@@ -973,7 +973,7 @@ Bcc:` injection. Prerequisite for the `Raw` MIME that
 **Verified:** typecheck clean, 103 tests (was 98), web/admin/infra typecheck,
 all Lambda entry points bundle.
 
-### 103 — Every customer-bound email is sent by MakerBay, not the business 🔶 HALF FIXED
+### 103 — Every customer-bound email is sent by MakerBay, not the business 🔶 identity deployed, awaiting DKIM
 `EmailInput` in `packages/core/src/notify.ts` has no `from` field, and
 `FROM()` hardcodes `process.env.EMAIL_FROM ?? 'hello@makerbay.app'`. Every
 Lambda sets `EMAIL_FROM: hello@makerbay.app`. So a homeowner who booked
@@ -988,6 +988,23 @@ degrades delivery for every other tenant on the domain.
 `Southside Plumbing <southside-plumbing@send.makerbay.app>` with the
 owner's address as Reply-To. One verified SES domain identity covers every
 tenant, so SPF and DKIM still pass and no per-tenant DNS is needed.
+
+**2026-08-28: the separate identity is deployed, but NOT yet in use.**
+`send.makerbay.app` is its own SES domain identity with its own DKIM keys - not
+just a different address on the parent - because receiving providers track
+reputation per domain, and inheriting the parent's keys would leave the two
+streams sharing exactly the reputation this split exists to separate. Its
+custom MAIL FROM (`bounce.send.makerbay.app`) has the MX and SPF records that
+make DMARC align for the subdomain the way issue 108 did for the parent.
+
+`EMAIL_FROM_CUSTOMER` is deliberately still unset: DKIM shows PENDING while DNS
+propagates, and pointing customer mail at an unverified identity would fail
+every send. Switching it over is a second deploy once DKIM reads SUCCESS - the
+same discipline the GSI in issue 118 needed and did not get.
+
+**Remaining:** confirm DKIM is SUCCESS, then set `EMAIL_FROM_CUSTOMER` to
+`send.makerbay.app` and verify one customer-bound send against the mailbox
+simulator.
 
 ### 104 — Cognito auth emails are unconfigured: wrong sender, 50/day cap ✅ shipped
 The user pool (`infra/lib/makerbay-stack.ts:386`) has no `email:` property
@@ -1922,7 +1939,7 @@ existed and could not be changed - `phone4` was unreachable from anywhere. The
 first brute-force test passed 25 "guesses" because the gate was never on.
 Persisted now, validated against the union, and surfaced in Quotes settings.
 
-### 121 — No unsubscribe on any email ⛔ P0 before real volume
+### 121 — No unsubscribe on any email ✅ shipped
 Asked directly by the founder. The honest answer is that there is none, in any
 form:
 
@@ -1976,5 +1993,36 @@ carries none.
 - Wire the dead `unsubscribe` field in `blocks.ts` into `render.ts`, or delete
   it.
 
-**Blocked on nothing.** Can be built and tested today with the mailbox
-simulator, the same way issue 107 was.
+**Shipped 2026-08-28.** Smaller than the plan above assumed, because SESv2
+carries custom headers on `Content.Simple` - so the move to raw MIME that this
+codebase had been bracing for since issue 109 turned out to be unnecessary.
+
+- `List-Unsubscribe` plus `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+  (RFC 8058), and a plain text line for clients that show neither.
+- Only on `optional` mail. A quote with an unsubscribe link invites somebody to
+  opt out of the document they are waiting for.
+- A stored random token rather than an HMAC: a signing key needs managing,
+  rotating and keeping out of logs, while a token stored beside the address
+  needs none of that, matches `linkToken`, and is revocable. Stable per
+  address, so a link in a three-month-old email still works.
+- The reverse lookup lives under a reserved partition of the MailLog table, so
+  no second table and no second index.
+- Acting is immediate on both GET and POST. A confirmation step means the
+  one-click unsubscribe silently never happens, and for a human it is where
+  people give up and press spam instead - the outcome this exists to avoid.
+- An unknown token gets the same answer as a used one, so the endpoint is not
+  an address-checking oracle.
+- Unsubscribing stops only `optional` mail: someone who unsubscribed from
+  review requests is still owed the invoice for the work.
+
+**A bug caught only by verifying live.** The reserved partition constant held a
+NUL byte rather than the intended leading space - the source file even read as
+binary to grep. The write and the read agreed with each other and with nothing
+else, so every unsubscribe link resolved to "this link has expired", silently,
+with no error logged. Unit tests passed throughout, because they exercised
+write-then-read through the same constant. Replaced with `unsub-token`, which a
+26-character uppercase ULID can never collide with, and the whole tree scanned
+for other control characters (none).
+
+Verified live: the page names the business, one-click POST returns 200, and the
+suppression is recorded.

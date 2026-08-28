@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 import { emailBlocked, type MailRef } from './maillog'
+import { unsubTokenFor, unsubUrl } from './unsubscribe'
 
 /**
  * One email sender for every module.
@@ -105,6 +106,24 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
     if (blocked) return { sent: false, error: `address_${blocked}` }
   }
 
+  /**
+   * A way out that is not the spam button (issue 121).
+   *
+   * Only on `optional` mail - review asks and digests. Everything else is
+   * transactional: the customer asked for it, and a quote with an unsubscribe
+   * link invites somebody to opt out of the document they are waiting for.
+   *
+   * Both the header and a line of text. The header is what Gmail and Apple
+   * Mail turn into their own one-tap control, and what their bulk-sender rules
+   * require above 5,000 messages a day; the text line is for every client that
+   * shows neither.
+   */
+  let unsub: string | undefined
+  if (input.optional && input.ref) {
+    const token = await unsubTokenFor(input.ref.tenantId, to)
+    if (token) unsub = unsubUrl(token)
+  }
+
   try {
     const envelope = input.audience === 'customer' ? (FROM_CUSTOMER() ?? FROM()) : FROM()
     await ses.send(
@@ -129,7 +148,31 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
         Content: {
           Simple: {
             Subject: { Data: headerSafe(input.subject).slice(0, 200) },
-            Body: { Text: { Data: input.text } },
+            Body: {
+              Text: {
+                Data: unsub
+                  ? `${input.text}
+
+—
+Don't want these? Stop them here:
+${unsub}`
+                  : input.text,
+              },
+            },
+            // SESv2 carries custom headers on Simple content, so this needs no
+            // move to raw MIME - which the codebase had been bracing for since
+            // issue 109 and which would have meant hand-building every message.
+            ...(unsub
+              ? {
+                  Headers: [
+                    { Name: 'List-Unsubscribe', Value: `<${unsub}>` },
+                    // RFC 8058. Without it the mail client shows a link rather
+                    // than its own one-tap control, and the bulk-sender rules
+                    // are not satisfied.
+                    { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
+                  ],
+                }
+              : {}),
           },
         },
       }),
@@ -179,6 +222,9 @@ export function explainEmailError(error?: string): string | undefined {
   }
   if (error === 'address_complained') {
     return 'This customer has asked not to receive email, so nothing was sent.'
+  }
+  if (error === 'address_unsubscribed') {
+    return 'This customer unsubscribed from these messages, so nothing was sent. Quotes and invoices still reach them.'
   }
   if (error === 'sandbox_or_rejected') {
     return 'Email is not switched on for this account yet, so nothing was sent. Send the link yourself for now.'

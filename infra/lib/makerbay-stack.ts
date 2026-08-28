@@ -296,6 +296,60 @@ export class MakerbayStack extends cdk.Stack {
       mailFromDomain: `mail.${DOMAIN}`,
       configurationSet: emailConfigSet,
     })
+    /**
+     * A separate sending domain for customer-bound mail (issue 103).
+     *
+     * A homeowner who marks a review request as spam should not be able to
+     * damage the domain a tradesperson's PASSWORD RESET arrives from.
+     * Receiving providers track reputation per domain, so the split is what
+     * makes those two streams independent - one shared identity means one
+     * annoyed customer of one plumber degrades delivery for every tenant.
+     *
+     * Its own identity with its own DKIM keys, not just a different address on
+     * the same one, because that is what gives the subdomain a reputation of
+     * its own rather than inheriting the parent's.
+     *
+     * NOTE: nothing sends from here until EMAIL_FROM_CUSTOMER is set, and that
+     * is deliberately a SECOND deploy. Pointing customer mail at an identity
+     * that has not finished verifying would fail every send - the same mistake
+     * as shipping code before its index was ACTIVE.
+     */
+    const CUSTOMER_DOMAIN = `send.${DOMAIN}`
+    const customerIdentity = new ses.EmailIdentity(this, 'CustomerEmailIdentity', {
+      // Identity.domain, NOT publicHostedZone: the latter resolves to the
+      // zone's own name and would declare a second identity for makerbay.app.
+      // A subdomain needs its own identity, and therefore its own DKIM records
+      // written into the parent zone by hand below.
+      identity: ses.Identity.domain(CUSTOMER_DOMAIN),
+      mailFromDomain: `bounce.${CUSTOMER_DOMAIN}`,
+      configurationSet: emailConfigSet,
+    })
+    // The three Easy DKIM CNAMEs. Without these the identity never verifies
+    // and every send from it fails.
+    customerIdentity.dkimRecords.forEach((r, i) => {
+      new route53.CnameRecord(this, `CustomerDkim${i + 1}`, {
+        zone: publicZone,
+        recordName: r.name,
+        domainName: r.value,
+      })
+    })
+    /**
+     * The custom MAIL FROM needs an MX so bounces come back to SES, and an SPF
+     * TXT so the envelope domain passes. Both are what make DMARC align for
+     * this subdomain the way they already do for the parent (issue 108).
+     */
+    new route53.MxRecord(this, 'CustomerMailFromMx', {
+      zone: publicZone,
+      recordName: `bounce.${CUSTOMER_DOMAIN}`,
+      values: [{ priority: 10, hostName: `feedback-smtp.${this.region}.amazonses.com` }],
+    })
+    new route53.TxtRecord(this, 'CustomerMailFromSpf', {
+      zone: publicZone,
+      recordName: `bounce.${CUSTOMER_DOMAIN}`,
+      values: ['v=spf1 include:amazonses.com ~all'],
+    })
+    new cdk.CfnOutput(this, 'CustomerEmailDomain', { value: CUSTOMER_DOMAIN })
+
     // Anything that sends mail gets this, rather than a blanket ses:* grant.
     const sesSendPolicy = new iam.PolicyStatement({
       // SESv2 SendEmail authorises against both actions depending on how the
@@ -304,6 +358,8 @@ export class MakerbayStack extends cdk.Stack {
       actions: ['ses:SendEmail', 'ses:SendRawEmail'],
       resources: [
         `arn:aws:ses:${this.region}:${this.account}:identity/${DOMAIN}`,
+        // Customer-bound mail sends from the separate subdomain identity.
+        `arn:aws:ses:${this.region}:${this.account}:identity/send.${DOMAIN}`,
         `arn:aws:ses:${this.region}:${this.account}:configuration-set/${emailConfigSet.configurationSetName}`,
       ],
     })
@@ -1077,6 +1133,25 @@ export class MakerbayStack extends cdk.Stack {
      * request arrives here, so this function is never even given the
      * credential that would identify a document.
      */
+    /**
+     * The unsubscribe endpoint (issue 121).
+     *
+     * Its own function, with read/write on the mail log and read on tenants
+     * and nothing else: it is reachable by anyone holding a link from an
+     * email, so the less it can touch the better.
+     */
+    const unsubscribeFn = fn('UnsubscribeFn', 'packages/core-api/src/unsubscribe-page.ts', {
+      TABLE_MAILLOG: mailLog.tableName,
+      TABLE_TENANTS: tenants.tableName,
+      TABLE_CONTACTS: contacts.tableName,
+      TABLE_CONTACTEVENTS: contactEvents.tableName,
+    })
+    mailLog.grantReadWriteData(unsubscribeFn)
+    tenants.grantReadData(unsubscribeFn)
+    // setEmailStatus mirrors the state onto the contact so the dashboard can
+    // show it where the customer actually is.
+    for (const t of [contacts, contactEvents]) t.grantReadWriteData(unsubscribeFn)
+
     const docShellFn = fn('DocShellFn', 'packages/core-api/src/doc-shell.ts', {
       TABLE_TENANTS: tenants.tableName,
       TABLE_SLUGALIASES: slugAliases.tableName,
@@ -1514,6 +1589,17 @@ export class MakerbayStack extends cdk.Stack {
       path: '/v1/public/doc/shell',
       methods: [apigwv2.HttpMethod.GET],
       integration: new HttpLambdaIntegration('DocShellIntegration', docShellFn),
+    })
+    /**
+     * POST as well as GET: RFC 8058 one-click is a POST from the mail client
+     * itself, and without it Gmail and Apple Mail show a plain link rather
+     * than their own one-tap control - which is what the bulk-sender rules
+     * actually ask for.
+     */
+    httpApi.addRoutes({
+      path: '/v1/public/unsubscribe',
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('UnsubscribeIntegration', unsubscribeFn),
     })
     httpApi.addRoutes({
       path: '/v1/setup/{proxy+}',

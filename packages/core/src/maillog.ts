@@ -120,7 +120,7 @@ export async function mailForRef(
 
 // ── Per-tenant address status ────────────────────────────────────────────
 
-export type EmailStatus = 'ok' | 'bounced' | 'complained'
+export type EmailStatus = 'ok' | 'bounced' | 'complained' | 'unsubscribed'
 
 const statusKey = (tenantId: string, email: string) => ({
   tenantId,
@@ -190,6 +190,11 @@ export async function emailBlocked(
     const status = r.Item?.state as EmailStatus | undefined
     if (status === 'bounced') return 'bounced'
     if (status === 'complained' && optional) return 'complained'
+    // Asked to stop, so stop - but only the mail they can object to. Someone
+    // who unsubscribed from review requests is still owed the invoice for the
+    // work, and withholding it to honour a preference they never expressed
+    // about invoices would be the wrong reading of what they asked for.
+    if (status === 'unsubscribed' && optional) return 'unsubscribed'
     return false
   } catch {
     // A status we cannot read must never become a send we refuse: losing a
