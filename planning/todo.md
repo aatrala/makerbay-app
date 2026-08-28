@@ -1034,7 +1034,7 @@ Bcc:` injection. Prerequisite for the `Raw` MIME that
 **Verified:** typecheck clean, 103 tests (was 98), web/admin/infra typecheck,
 all Lambda entry points bundle.
 
-### 103 — Every customer-bound email is sent by MakerBay, not the business 🔶 identity deployed, awaiting DKIM
+### 103 — Every customer-bound email is sent by MakerBay, not the business ✅ shipped
 `EmailInput` in `packages/core/src/notify.ts` has no `from` field, and
 `FROM()` hardcodes `process.env.EMAIL_FROM ?? 'hello@makerbay.app'`. Every
 Lambda sets `EMAIL_FROM: hello@makerbay.app`. So a homeowner who booked
@@ -1081,9 +1081,27 @@ Worth remembering as a class: a CDK construct that takes a "record name" is
 almost always asking for the relative name, and a token argument silently
 defeats the guard that would otherwise catch the mistake.
 
-**Remaining:** DKIM propagates on SES's own schedule. Once it reads SUCCESS,
-set `EMAIL_FROM_CUSTOMER` to `send.makerbay.app` and verify one customer-bound
-send against the mailbox simulator.
+**Done 2026-08-28.** Customer mail leaves from `hello@send.makerbay.app`;
+owner mail is untouched on `hello@makerbay.app`. Verified on all five sending
+Lambdas, and a real customer quote email delivered from the new domain.
+
+**Why the identity had to be recreated.** After the doubled-CNAME bug was fixed
+the records were correct and resolving from two public resolvers, all three
+tokens matched what SES expected, signing was enabled, and a forced toggle of
+DKIM signing changed nothing - it stayed PENDING for over an hour. SES had
+evidently stopped re-checking after roughly five hours of failures.
+
+Deleting and recreating took two deploys, because CloudFormation would
+otherwise create a second identity with the same name before deleting the
+first. The MX and SPF records for `bounce.send` were left in place: they were
+hand-written and correct, independent of the identity, so MAIL FROM verified
+immediately on the way back.
+
+**The detail that confirmed the diagnosis:** AWS reissued the SAME three DKIM
+tokens, so the CNAMEs already in Route 53 matched straight away and the new
+identity verified in under a minute against records that had been sitting there
+unchanged. The DNS was never the problem after the fix - the old identity had
+simply given up looking.
 
 ### 104 — Cognito auth emails are unconfigured: wrong sender, 50/day cap ✅ shipped
 The user pool (`infra/lib/makerbay-stack.ts:386`) has no `email:` property

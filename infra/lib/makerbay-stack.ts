@@ -1215,6 +1215,20 @@ export class MakerbayStack extends cdk.Stack {
     ]) {
       f.addEnvironment('TABLE_MAILLOG', mailLog.tableName)
       mailLog.grantReadWriteData(f)
+      /**
+       * Customer-bound mail now leaves from its own domain (issue 103).
+       *
+       * A homeowner who marks a review request as spam damages the reputation
+       * of send.makerbay.app, not of the domain a tradesperson's password
+       * reset arrives from. Receivers track reputation per domain, so this
+       * split is the whole point - and it is only safe to switch on now that
+       * the identity reads SUCCESS for both DKIM and MAIL FROM.
+       *
+       * Owner-bound mail is untouched: sendEmail only reaches for this on the
+       * customer branch, so notifications still arrive from hello@makerbay.app
+       * as they always have.
+       */
+      f.addEnvironment('EMAIL_FROM_CUSTOMER', `hello@${CUSTOMER_DOMAIN}`)
     }
 
     // ── Grants ───────────────────────────────────────────────────────────
