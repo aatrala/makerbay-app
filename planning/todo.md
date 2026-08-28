@@ -900,10 +900,34 @@ technical architecture are complete. Market & competitive is running.
 output rather than as a spec: an inbox-style gallery showing the From line,
 subject and preheader for each, with the real HTML and the real plain text.
 
-Wired in so far: quote sent, invoice sent, booking confirmed, new booking (to
-the owner), and the review ask. The rest of the call sites still send plain
-text and will follow - `sendEmail` takes `html` as optional precisely so the
-two can coexist rather than needing one large switchover.
+**All call sites wired 2026-08-28.** Every customer-bound and owner-bound
+email now renders from a template: quote, invoice, booking confirmed, booking
+reminder, booking cancelled (both directions), review ask (both senders),
+request reply, new request, new booking, quote accepted/declined, deposit
+paid, deposit-on-a-lapsed-booking, missed call, the daily digest, and the
+your-notifications-are-bouncing notice.
+
+`packages/core-api/support.ts` is deliberately left as plain text: it is
+staff-to-staff ticket mail inside MakerBay, not something a tradesperson or
+their customer ever sees.
+
+Three things the templates would have quietly dropped, put back:
+- The missed-call email lost the REASON a text failed. "Text messaging is not
+  switched on for this account yet" is something an owner can fix; without it
+  a missing text looks like a fault they cannot act on. It also lost the direct
+  link to the lead.
+- The digest lost "On the Trade plan these arrive the moment each lead lands".
+  Without it the digest reads as the product being slow rather than the plan.
+- The new-request email lost the configured extra form fields (address,
+  preferred time, the custom question) - often the whole reason the form has
+  more than one box.
+
+14 rule-level tests over the whole set rather than assertions about wording:
+every template renders both parts, spells every link out in the text, leaves no
+unresolved holes, keeps subjects inside a phone inbox, and carries a preheader.
+Customer mail never names MakerBay above the footer rule and always says why it
+arrived; the unsubscribe appears on the review ask and the digest and nowhere
+else.
 
 Decisions the founder approved:
 - Customer mail is signed with the BUSINESS name, owner mail with MakerBay.

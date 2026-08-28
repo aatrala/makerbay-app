@@ -21,6 +21,11 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
 
 vi.mock('@makerbay/core', () => ({
   ddb: { send: async (c: { input: Record<string, unknown> }) => void writes.push(c.input) },
+  // The owner notice renders a template now, and renderEmail reaches back into
+  // core for the two colour helpers. Real implementations, not stubs, so the
+  // rendered output is the one that would actually be sent.
+  accentOn: (accent: string) => accent,
+  readableOn: () => '#ffffff',
   recordMailEvent: async (row: unknown) => void recorded.push(row),
   setEmailStatus: async (...a: unknown[]) => void statuses.push(a),
   sendEmail: async (i: { to: string; subject: string }) => {

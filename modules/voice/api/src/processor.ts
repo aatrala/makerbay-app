@@ -13,6 +13,7 @@
  */
 
 import type { DynamoDBStreamEvent, S3Event } from 'aws-lambda'
+import { missedCall } from '@makerbay/email'
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { StartTranscriptionJobCommand, TranscribeClient } from '@aws-sdk/client-transcribe'
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime'
@@ -140,20 +141,21 @@ async function rescue(tenantId: string, rescueId: string, caller: string): Promi
     }),
   )
 
+  const mail = missedCall({
+    businessName: tenant.name,
+    caller,
+    texted: sms.sent,
+    anonymous,
+    smsProblem: explainSmsError(sms.error),
+    leadUrl: contact ? `${APP}/requests/${requestId}` : undefined,
+  })
   await sendEmail({
     to: notifyEmail,
     audience: 'owner' as const,
     ref: { tenantId, moduleId: 'voice', refType: 'request', refId: rescueId },
-    subject: `Missed call from ${anonymous ? 'a withheld number' : caller}`,
-    text: [
-      `Someone called ${tenant.name} and nobody could answer.`,
-      anonymous ? 'The number was withheld, so no text could be sent.' :
-        sms.sent
-          ? `They have been texted a booking link at ${caller}.`
-          : `${explainSmsError(sms.error) ?? ''} Call them back on ${caller}.`,
-      '',
-      contact ? `The lead: ${APP}/requests/${requestId}` : '',
-    ].join('\n'),
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
   })
 
   await emitUsage({ tenantId, moduleId: 'voice', metric: 'missedcall.rescued', quantity: 1 })

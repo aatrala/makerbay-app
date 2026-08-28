@@ -1,3 +1,4 @@
+import { newRequest, requestReply } from '@makerbay/email'
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import {
   appendContactEvent,
@@ -5,6 +6,7 @@ import {
   findApiKeyByHash,
   getEffectiveEntitlement,
   getTenant,
+  getTenantBrand,
   getTenantBySlugOrAlias,
   getUser,
   hashApiKey,
@@ -34,7 +36,6 @@ type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
 const KINDS: RequestKind[] = ['handoff', 'lead', 'feedback', 'missedcall']
 const STATUSES: RequestStatus[] = ['new', 'open', 'closed']
-const APP = 'https://app.makerbay.app'
 
 export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> => {
   const method = event.requestContext.http.method
@@ -232,22 +233,25 @@ async function create(
   // arrives with the morning coffee rather than the moment it lands.
   if (await isPaidTenant(tenantId)) {
     const notifyTo = config.notifyEmail || (await ownerEmail(tenantId))
+    const mail = newRequest({
+      businessName: tenant?.name ?? 'your business',
+      who: name || contact.email || contact.phone || 'Someone',
+      kind,
+      // The configured extra fields stay with the message. They are often the
+      // whole reason the form has more than one box.
+      message: [row.message, ...Object.entries(extra).map(([k, v]) => `${k}: ${v}`)]
+        .filter(Boolean)
+        .join('\n'),
+      contact: contact.email ?? contact.phone ?? undefined,
+    })
     const notice = await sendEmail({
       to: notifyTo,
       audience: 'owner' as const,
       ref: { tenantId, moduleId: 'requests', refType: 'request', refId: row.requestId },
       replyTo: contact.email,
-      subject: `New ${kind} from ${name || contact.email || contact.phone}`,
-      text: [
-        `${name || 'Someone'} left you a message through ${tenant?.name ?? 'your assistant'}.`,
-        '',
-        row.message,
-        ...Object.entries(extra).map(([k, v]) => `${k}: ${v}`),
-        '',
-        `Reply to: ${contact.email ?? contact.phone ?? 'no contact details'}`,
-        '',
-        `Open it: ${APP}/requests/${requestId}`,
-      ].join('\n'),
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     })
     if (!notice.sent) row.notifyError = notice.error
   }
@@ -338,16 +342,24 @@ async function addReply(
   const request = await getRequest(tenantId, requestId)
   if (!request) return json(404, { error: 'not_found' })
 
-  const tenant = await getTenant(tenantId)
+  const brand = await getTenantBrand(tenantId)
+  const replyTo = await ownerReplyTo(tenantId)
+  const replyMail = requestReply({
+    brand,
+    contact: { email: replyTo || undefined },
+    subject: request.subject,
+    body: text,
+  })
   const notice = request.email
     ? await sendEmail({
         to: request.email,
         audience: 'customer' as const,
         ref: { tenantId, moduleId: 'requests', refType: 'request', refId: request.requestId },
-        fromName: tenant?.name ?? 'MakerBay',
-        replyTo: await ownerReplyTo(tenantId),
-        subject: `Re: ${request.subject}`,
-        text: `${text}\n\n—\n${tenant?.name ?? 'The team'}`,
+        fromName: brand.name,
+        replyTo,
+        subject: replyMail.subject,
+        text: replyMail.text,
+        html: replyMail.html,
       })
     : { sent: false, error: 'no_recipient' as const }
 

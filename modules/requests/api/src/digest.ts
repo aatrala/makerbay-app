@@ -1,5 +1,8 @@
 import { ScanCommand } from '@aws-sdk/lib-dynamodb'
-import { ddb, getTenant, isPaidWorkspace, sendEmail } from '@makerbay/core'
+import { requestsDigest } from '@makerbay/email'
+import {
+  ddb, getTenant, isPaidWorkspace, sendEmail, unsubTokenFor, unsubUrl,
+} from '@makerbay/core'
 import { getRequestsConfig } from './db'
 
 /**
@@ -9,7 +12,6 @@ import { getRequestsConfig } from './db'
  * the Australian east coast, where the first customers live.
  */
 
-const APP = 'https://app.makerbay.app'
 
 export const handler = async (): Promise<void> => {
   const since = new Date(Date.now() - 24 * 3_600_000).toISOString()
@@ -42,27 +44,28 @@ export const handler = async (): Promise<void> => {
       const to = config.notifyEmail || (await ownerEmail(tenantId))
       if (!to) continue
 
-      const lines = rows
-        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
-        .map((r) => {
-          const who = r.name || r.email || r.phone || 'someone'
-          return `- ${who}: ${String(r.subject ?? r.message ?? '').slice(0, 90)}`
-        })
+      // The real per-address token, minted before the template renders: the
+      // digest's unsubscribe link goes into both the HTML footer and the text
+      // part, and sendEmail only ever sees the finished strings.
+      const unsubToken = await unsubTokenFor(tenantId, to)
+      const mail = requestsDigest({
+        businessName: tenant?.name ?? 'your business',
+        items: rows
+          .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+          .map((r) => ({
+            who: String(r.name || r.email || r.phone || 'someone'),
+            summary: String(r.subject ?? r.message ?? '').slice(0, 90),
+          })),
+        unsubscribeUrl: unsubToken ? unsubUrl(unsubToken) : '',
+      })
       await sendEmail({
         to,
         audience: 'owner' as const,
         ref: { tenantId, moduleId: 'requests', refType: 'request', refId: `digest-${rows[0]?.requestId ?? 'none'}` },
         optional: true,
-        subject: `${rows.length} new request${rows.length === 1 ? '' : 's'} for ${tenant?.name ?? 'your business'} yesterday`,
-        text: [
-          `While you were working, ${rows.length === 1 ? 'someone' : `${rows.length} people`} left you a message:`,
-          '',
-          ...lines,
-          '',
-          `Answer them: ${APP}/requests`,
-          '',
-          'On the Trade plan these arrive the moment each lead lands, not the morning after.',
-        ].join('\n'),
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
       })
       console.log('digest sent', { tenantId, count: rows.length })
     } catch (err) {

@@ -299,22 +299,29 @@ async function onBookingCompleted(detail: BookingCompletedEvent['detail']): Prom
     )
     const reviewLink = String(cfg.Item?.reviewLink ?? '')
     if (cfg.Item?.autoAsk !== true || !reviewLink) return
-    const tenant = await getTenant(tenantId)
+    const brand = await getTenantBrand(tenantId)
+    const replyTo = await ownerReplyTo(tenantId)
+    const unsubToken = await unsubTokenFor(tenantId, email)
+    const mail = reviewAsk({
+      brand,
+      contact: { email: replyTo || undefined },
+      message: String(
+        cfg.Item?.askMessage
+        ?? 'Thanks for choosing us! A Google review takes a minute and makes a real difference.',
+      ),
+      url: reviewLink,
+      unsubscribeUrl: unsubToken ? unsubUrl(unsubToken) : '',
+    })
     const notice = await sendEmail({
       to: email,
       ref: { tenantId, moduleId: 'reviews', refType: 'review', refId: contactId },
       optional: true,
       audience: 'customer' as const,
-      fromName: tenant?.name ?? 'MakerBay',
-      replyTo: await ownerReplyTo(tenantId),
-      subject: `How did we do? - ${tenant?.name ?? ''}`,
-      text: [
-        String(cfg.Item?.askMessage ?? 'Thanks for choosing us! A Google review takes a minute and makes a real difference.'),
-        '',
-        `Leave a review: ${reviewLink}`,
-        '',
-        tenant?.name ?? '',
-      ].join('\n'),
+      fromName: brand.name,
+      replyTo,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     })
     await appendContactEvent(tenantId, contactId, {
       moduleId: 'visibility',

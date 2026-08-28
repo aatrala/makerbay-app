@@ -1,3 +1,4 @@
+import { notificationsBroken } from '@makerbay/email'
 import { recordMailEvent, sendEmail, setEmailStatus, type MailState } from '@makerbay/core'
 
 /**
@@ -178,19 +179,16 @@ async function tellOwner(tenantId: string, bounced: string, audience: string): P
     const owner = users.find((u) => u.role === 'owner') ?? users[0]
     // Do not write to the address that just bounced.
     if (!owner?.email || owner.email.toLowerCase() === bounced.toLowerCase()) return
+    const mail = notificationsBroken({
+      businessName: tenant?.name ?? 'your workspace',
+      bounced,
+    })
     await sendEmail({
       to: owner.email,
       audience: 'owner',
-      subject: 'Your notification email is not working',
-      text: [
-        `Emails to ${bounced} are bouncing, so ${tenant?.name ?? 'your workspace'} is not being told`,
-        'about new bookings, requests or quotes going out.',
-        '',
-        'Nothing has been lost. Everything is still in your dashboard, and the moment you fix the',
-        'address the notifications start again.',
-        '',
-        'Change it under Booking, Hours, or Requests, Settings.',
-      ].join('\n'),
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     })
   } catch (err) {
     console.error('owner bounce notice failed', { tenantId, err: String(err) })

@@ -147,7 +147,20 @@ export const newRequest = (r: {
   )
 
 export const missedCall = (m: {
-  businessName: string; caller: string; texted: boolean; anonymous: boolean
+  businessName: string
+  caller: string
+  texted: boolean
+  anonymous: boolean
+  /**
+   * Why the text did not go, in plain words.
+   *
+   * Worth carrying rather than dropping: "text messaging is not switched on
+   * for this account yet" is something the owner can fix, and without it a
+   * missing text looks like a fault they cannot act on.
+   */
+  smsProblem?: string
+  /** The request this call became, when a contact could be attached. */
+  leadUrl?: string
 }) =>
   render(
     doc(
@@ -155,7 +168,7 @@ export const missedCall = (m: {
       m.texted ? 'They have been texted a booking link.' : 'Nobody could answer.',
       'Missed call',
       [
-        { t: 'lede', text: `Someone rang and nobody could answer.` },
+        { t: 'lede', text: 'Someone rang and nobody could answer.' },
         {
           t: 'para',
           text: m.anonymous
@@ -164,10 +177,42 @@ export const missedCall = (m: {
               ? `They have been texted a booking link at ${m.caller}.`
               : `They rang from ${m.caller}. No text went out, so a call back is the only way to catch them.`,
         },
-        { t: 'button', label: 'See missed calls', href: `${APP}/voice` },
+        ...(m.smsProblem && !m.texted && !m.anonymous
+          ? [{ t: 'note' as const, text: m.smsProblem }]
+          : []),
+        m.leadUrl
+          ? { t: 'button' as const, label: 'Open the lead', href: m.leadUrl }
+          : { t: 'button' as const, label: 'See missed calls', href: `${APP}/voice` },
       ],
     ),
     m.businessName,
+  )
+
+/**
+ * A deposit landed for a booking whose hold had already lapsed.
+ *
+ * Rare, and awkward: the customer has paid for a slot that is no longer being
+ * held. The owner needs the fact and one decision, so the email carries
+ * exactly those and does not pretend the booking is confirmed.
+ */
+export const depositOnLapsedBooking = (d: {
+  businessName: string; service: string; amount: string
+}) =>
+  render(
+    doc(
+      `A ${d.amount} deposit arrived for a booking that had lapsed`,
+      'The slot was no longer being held.',
+      'A deposit arrived late',
+      [
+        { t: 'lede', text: `Someone paid ${d.amount} for a ${d.service} booking whose hold had already expired.` },
+        {
+          t: 'para',
+          text: 'The time was not kept for them. Either offer them another slot, or refund it.',
+        },
+        { t: 'button', label: 'Refund it', href: `${APP}/payments` },
+      ],
+    ),
+    d.businessName,
   )
 
 // ── The daily digest: the only optional owner mail ───────────────────────
@@ -191,6 +236,9 @@ export const requestsDigest = (d: {
         },
         { t: 'rows', rows: d.items.map((i) => [i.who, i.summary] as [string, string]) },
         { t: 'button', label: 'Open them', href: `${APP}/requests` },
+        // Says why this is a morning summary rather than an alert. Without it
+        // the digest reads as the product being slow, when it is the plan.
+        { t: 'note', text: 'On the Trade plan these arrive the moment each lead lands, not the morning after.' },
       ],
       // The one owner-bound email a person can reasonably not want. Everything
       // else here is money or work arriving, which nobody opts out of.

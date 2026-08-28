@@ -1,14 +1,17 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { reviewAsk } from '@makerbay/email'
 import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import {
   appendContactEvent,
   ddb,
   emitUsage,
   getContact,
-  getTenant,
   getUser,
   json,
+  getTenantBrand,
   ownerReplyTo,
+  unsubTokenFor,
+  unsubUrl,
   sendEmail,
   type CallerContext,
 } from '@makerbay/core'
@@ -139,24 +142,30 @@ async function ask(tenantId: string, event: Event): Promise<APIGatewayProxyResul
     return json(400, { error: 'no_email', message: 'This contact has no email address to send to.' })
   }
 
-  const tenant = await getTenant(tenantId)
+  const brand = await getTenantBrand(tenantId)
+  const replyTo = await ownerReplyTo(tenantId)
+  // The real per-address token, minted before rendering: renderEmail writes
+  // the link into the HTML footer as well as the text, and sendEmail only ever
+  // sees the finished strings.
+  const unsubToken = await unsubTokenFor(tenantId, contact.email)
+  const mail = reviewAsk({
+    brand,
+    contact: { email: replyTo || undefined },
+    customerName: contact.name,
+    message: config.askMessage,
+    url: config.reviewLink,
+    unsubscribeUrl: unsubToken ? unsubUrl(unsubToken) : '',
+  })
   const notice = await sendEmail({
     to: contact.email,
     ref: { tenantId, moduleId: 'visibility', refType: 'review', refId: contactId },
     optional: true,
     audience: 'customer' as const,
-    fromName: tenant?.name ?? 'MakerBay',
-    replyTo: await ownerReplyTo(tenantId),
-    subject: `How did we do? - ${tenant?.name ?? ''}`,
-    text: [
-      `${contact.name ?? 'Hi'},`,
-      '',
-      config.askMessage,
-      '',
-      `Leave a review: ${config.reviewLink}`,
-      '',
-      tenant?.name ?? '',
-    ].join('\n'),
+    fromName: brand.name,
+    replyTo,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
   })
 
   await appendContactEvent(tenantId, contactId, {

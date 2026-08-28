@@ -1,5 +1,6 @@
 import { GetCommand } from '@aws-sdk/lib-dynamodb'
-import { ddb, emitUsage, getTenant, sendEmail } from '@makerbay/core'
+import { bookingReminder } from '@makerbay/email'
+import { ddb, emitUsage, getTenant, getTenantBrand, sendEmail } from '@makerbay/core'
 import { displayTime } from './slots'
 
 /**
@@ -28,6 +29,15 @@ export const handler = async (event: { tenantId: string; bookingId: string }): P
     timeZone: timezone, weekday: 'long', day: 'numeric', month: 'long',
   }).format(new Date(String(booking.startsAt)))
 
+  const brand = await getTenantBrand(event.tenantId)
+  const mail = bookingReminder({
+    brand,
+    contact: { email: String(cfg.Item?.notifyEmail ?? '') || undefined },
+    customerName: booking.name ? String(booking.name) : undefined,
+    service: String(booking.serviceName),
+    when: `${when} at ${displayTime(String(booking.startsAt), timezone)}`,
+    cancelUrl: `https://chat.makerbay.app/booking/cancel?slug=${encodeURIComponent(tenant?.slug ?? '')}&token=${booking.cancelToken}`,
+  })
   const notice = await sendEmail({
     to: String(booking.email),
     ref: {
@@ -37,20 +47,11 @@ export const handler = async (event: { tenantId: string; bookingId: string }): P
       refId: String(booking.bookingId),
     },
     audience: 'customer' as const,
-    fromName: tenant?.name ?? 'MakerBay',
+    fromName: brand.name,
     replyTo: String(cfg.Item?.notifyEmail ?? ''),
-    subject: `Reminder: ${booking.serviceName} ${when} at ${displayTime(String(booking.startsAt), timezone)}`,
-    text: [
-      `${booking.name ?? 'Hi'},`,
-      '',
-      `A reminder about your ${booking.serviceName} with ${tenant?.name ?? 'us'}:`,
-      `${when} at ${displayTime(String(booking.startsAt), timezone)}.`,
-      '',
-      `Can't make it? Cancel here so the time goes to someone else:`,
-      `https://chat.makerbay.app/booking/cancel?slug=${tenant?.slug ?? ''}&token=${booking.cancelToken}`,
-      '',
-      tenant?.name ?? '',
-    ].join('\n'),
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
   })
   if (notice.sent) {
     await emitUsage({ tenantId: event.tenantId, moduleId: 'booking', metric: 'reminder.sent', quantity: 1 })

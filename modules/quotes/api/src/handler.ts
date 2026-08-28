@@ -35,7 +35,7 @@ import {
   shareInvoice,
 } from './invoices'
 import { docUrl } from './links'
-import { quoteSent } from '@makerbay/email'
+import { depositPaid, quoteAnswered, quoteSent } from '@makerbay/email'
 import { documentInsights } from './insights'
 import { docQr } from './qr'
 import { claimAcceptFailure, getTenantBrand } from '@makerbay/core'
@@ -537,19 +537,27 @@ async function respond(
       : `Declined quote ${qLabel}`,
     href: `/quotes/${quote.quoteId}`,
   })
+  const depositPct = Number((config as { depositPercent?: number }).depositPercent ?? 0)
+  const answered = quoteAnswered({
+    businessName,
+    customerName: quote.customerName ?? 'Your customer',
+    label: qLabel,
+    total: money(quote.totalCents, quote.currency),
+    accepted,
+    quoteUrl: `${APP}/quotes/${quote.quoteId}`,
+    // Named only when one is actually asked for, so the owner is not told to
+    // expect money that is never coming.
+    deposit: accepted && depositPct > 0
+      ? money(Math.round(quote.totalCents * Math.min(depositPct, 100) / 100), quote.currency)
+      : undefined,
+  })
   await sendEmail({
     to: config.notifyEmail || '',
     audience: 'owner' as const,
     ref: { tenantId, moduleId: 'quotes', refType: 'quote', refId: quote.quoteId },
-    subject: `Quote ${qLabel} ${accepted ? 'accepted' : 'declined'}`,
-    text: [
-      `${quote.customerName ?? 'Your customer'} ${accepted ? 'accepted' : 'declined'} quote ${qLabel}.`,
-      accepted ? `Total: ${money(quote.totalCents, quote.currency)}` : '',
-      '',
-      `${APP}/quotes/${quote.quoteId}`,
-      '',
-      businessName,
-    ].join('\n'),
+    subject: answered.subject,
+    text: answered.text,
+    html: answered.html,
   })
 
   if (accepted) {
@@ -1046,16 +1054,21 @@ async function onPaymentReceived(detail: PaymentReceivedEvent['detail']): Promis
         title: `Paid the deposit on quote ${qLabel} - ${money(detail.amountCents, detail.currency)}`,
         href: `/quotes/${quote.quoteId}`,
       })
+      const owner = await getTenant(tenantId)
+      const paid = depositPaid({
+        businessName: owner?.name ?? 'your business',
+        customerName: quote.customerName ?? 'Your customer',
+        label: qLabel,
+        amount: money(detail.amountCents, detail.currency),
+        url: `${APP}/quotes/${quote.quoteId}`,
+      })
       await sendEmail({
         to: config.notifyEmail || '',
         audience: 'owner' as const,
         ref: { tenantId, moduleId: 'quotes', refType: 'quote', refId: quote.quoteId },
-        subject: `Deposit paid on quote ${qLabel}`,
-        text: [
-          `${quote.customerName ?? 'Your customer'} paid the ${money(detail.amountCents, detail.currency)} deposit on quote ${qLabel}.`,
-          '',
-          `Quote: ${APP}/quotes/${quote.quoteId}`,
-        ].join('\n'),
+        subject: paid.subject,
+        text: paid.text,
+        html: paid.html,
       })
     }
   } catch (err) {

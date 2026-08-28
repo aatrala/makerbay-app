@@ -1,5 +1,11 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
-import { bookingConfirmed, newBooking as newBookingMail } from '@makerbay/email'
+import {
+  bookingCancelled,
+  bookingCancelledByCustomer,
+  bookingConfirmed,
+  depositOnLapsedBooking,
+  newBooking as newBookingMail,
+} from '@makerbay/email'
 import {
   appendContactEvent,
   type AuditActor,
@@ -59,7 +65,6 @@ import { displayTime, openDates, slotStillFree, slotsFor, zoned } from './slots'
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
 const CHAT = 'https://chat.makerbay.app'
-const APP = 'https://app.makerbay.app'
 // pending_payment deliberately absent: the owner PATCH can never set it.
 const STATUSES: BookingStatus[] = ['confirmed', 'cancelled', 'completed', 'noshow']
 
@@ -486,12 +491,18 @@ async function onDepositPaid(detail: PaymentReceivedEvent['detail']): Promise<vo
     // owner refunds a lapsed one from the Payments screen.
     console.error('deposit paid but booking not pending', { tenantId, bookingId, paymentId, status: row.status, err: String(err) })
     const config = await getBookingConfig(tenantId)
+    const lapsed = depositOnLapsedBooking({
+      businessName: (await getTenant(tenantId))?.name ?? 'your business',
+      service: row.serviceName,
+      amount: money(detail.amountCents, detail.currency ?? 'AUD'),
+    })
     await sendEmail({
       to: config.notifyEmail || '',
       audience: 'owner' as const,
       ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: bookingId },
-      subject: 'A deposit arrived for a booking that lapsed',
-      text: `A $${(detail.amountCents / 100).toFixed(2)} deposit was paid for a ${row.serviceName} booking whose hold had expired. Refund it from ${APP}/payments if the time no longer works.`,
+      subject: lapsed.subject,
+      text: lapsed.text,
+      html: lapsed.html,
     })
     return
   }
@@ -603,12 +614,19 @@ async function cancelByToken(
     moduleId: 'booking',
     title: `Cancelled their ${booking.serviceName} booking`,
   })
+  const cancelMail = bookingCancelledByCustomer({
+    businessName,
+    who: booking.name || booking.email || 'Someone',
+    service: booking.serviceName,
+    when: displayTime(booking.startsAt, config.timezone),
+  })
   await sendEmail({
     to: config.notifyEmail || '',
     audience: 'owner' as const,
     ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: booking.bookingId },
-    subject: `Cancelled: ${booking.serviceName}, ${displayTime(booking.startsAt, config.timezone)}`,
-    text: `${booking.name || booking.email} cancelled their ${booking.serviceName} booking.\n\n${businessName}`,
+    subject: cancelMail.subject,
+    text: cancelMail.text,
+    html: cancelMail.html,
   })
   return json(200, { cancelled: true })
 }
@@ -815,15 +833,23 @@ async function patchBooking(tenantId: string, bookingId: string, event: Event): 
   if (status === 'cancelled' && existing.status !== 'cancelled') {
     await cancelReminder(bookingId)
     const config = await getBookingConfig(tenantId)
-    const tenant = await getTenant(tenantId)
+    const cancelBrand = await getTenantBrand(tenantId)
+    const cancelledMail = bookingCancelled({
+      brand: cancelBrand,
+      contact: { email: config.notifyEmail || undefined },
+      customerName: existing.name,
+      service: existing.serviceName,
+      when: displayTime(existing.startsAt, config.timezone),
+    })
     await sendEmail({
       to: existing.email ?? '',
       audience: 'customer' as const,
       ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: bookingId },
-      fromName: tenant?.name ?? 'MakerBay',
+      fromName: cancelBrand.name,
       replyTo: config.notifyEmail,
-      subject: `Your ${existing.serviceName} booking has been cancelled`,
-      text: `Your ${existing.serviceName} on ${displayTime(existing.startsAt, config.timezone)} has been cancelled.\n\n${tenant?.name ?? ''}`,
+      subject: cancelledMail.subject,
+      text: cancelledMail.text,
+      html: cancelledMail.html,
     })
     await appendContactEvent(tenantId, existing.contactId, {
       moduleId: 'booking',
