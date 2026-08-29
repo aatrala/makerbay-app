@@ -47,6 +47,10 @@ export const handler = async (event: { tenantId: string; bookingId: string }): P
       refId: String(booking.bookingId),
     },
     audience: 'customer' as const,
+    // Outside the daily cap (issue 134): this fires on a schedule, long after
+    // the booking it belongs to, and a reminder for a confirmed appointment
+    // must not be lost because the day's allowance went on something else.
+    exempt: true,
     fromName: brand.name,
     replyTo: String(cfg.Item?.notifyEmail ?? ''),
     subject: mail.subject,

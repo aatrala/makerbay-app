@@ -1,5 +1,13 @@
 import { notificationsBroken } from '@makerbay/email'
-import { recordMailEvent, sendEmail, setEmailStatus, type MailState } from '@makerbay/core'
+import {
+  COMPLAINT_BRAKE,
+  countComplaint,
+  recordMailEvent,
+  restrictSending,
+  sendEmail,
+  setEmailStatus,
+  type MailState,
+} from '@makerbay/core'
 
 /**
  * What SES tells us after it has taken a message (issue 107).
@@ -103,6 +111,25 @@ export const handler = async (event: { detail?: SesEvent }): Promise<void> => {
     await setEmailStatus(tenantId, to, 'complained', d.complaint?.complaintFeedbackType)
     await markRow(tenantId, tag(d, 'refType'), tag(d, 'refId'), 'complained')
     console.warn('complaint', { tenantId, to: mask(to) })
+
+    /*
+     * The auto-brake (issue 134).
+     *
+     * A workspace generating complaints is the one thing that can cost every
+     * other workspace their deliverability, and at our volume a handful in a
+     * day is already far above the rate a provider will tolerate. So it
+     * stops sending optional mail without waiting for a human.
+     *
+     * It restricts sending rather than suspending the account. Suspension is
+     * refused at the authorizer, which would lock the owner out of the
+     * dashboard - including the screen that would tell them what happened and
+     * let them argue with us about it.
+     */
+    const complaints = await countComplaint(tenantId)
+    if (complaints >= COMPLAINT_BRAKE) {
+      await restrictSending(tenantId, `${complaints} spam reports in 24 hours`)
+      console.error('sending restricted', { tenantId, complaints })
+    }
   }
 }
 

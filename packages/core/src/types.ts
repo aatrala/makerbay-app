@@ -26,6 +26,16 @@ export interface TenantRow {
    * plans; that is exactly the bug this field exists to close.
    */
   overageOptIn?: boolean
+  /**
+   * Sending state (issue 134).
+   *
+   * `sendingRestrictedAt` is set by the complaint brake and forces the
+   * bottom tier regardless of everything else. Deliberately separate from
+   * `status: 'suspended'`: suspension locks the owner out of the dashboard,
+   * including the screen that would explain what happened.
+   */
+  sendingRestrictedAt?: string
+  sendingRestrictedReason?: string
   slug: string
   plan: string
   status: 'active' | 'suspended'

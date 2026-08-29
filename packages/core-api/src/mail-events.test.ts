@@ -19,6 +19,9 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   },
 }))
 
+let complaintCount = 1
+const restricted: Array<{ tenantId: string; reason: string }> = []
+
 vi.mock('@makerbay/core', () => ({
   ddb: { send: async (c: { input: Record<string, unknown> }) => void writes.push(c.input) },
   // The owner notice renders a template now, and renderEmail reaches back into
@@ -27,6 +30,12 @@ vi.mock('@makerbay/core', () => ({
   accentOn: (accent: string) => accent,
   readableOn: () => '#ffffff',
   recordMailEvent: async (row: unknown) => void recorded.push(row),
+  // The complaint auto-brake (issue 134). Counting is mocked so a test can
+  // choose how many complaints this workspace has had today.
+  COMPLAINT_BRAKE: 3,
+  countComplaint: async () => complaintCount,
+  restrictSending: async (tenantId: string, reason: string) =>
+    void restricted.push({ tenantId, reason }),
   setEmailStatus: async (...a: unknown[]) => void statuses.push(a),
   sendEmail: async (i: { to: string; subject: string }) => {
     sent.push(i)
@@ -64,6 +73,9 @@ beforeEach(() => {
   statuses.length = 0
   sent.length = 0
   writes.length = 0
+  restricted.length = 0
+  complaintCount = 1
+  process.env.TABLE_TENANTS = 'makerbay-tenants'
   process.env.TABLE_QUOTES = 'makerbay-quotes'
   process.env.TABLE_BOOKINGS = 'makerbay-bookings'
   process.env.TABLE_REQUESTS = 'makerbay-requests'
@@ -97,6 +109,45 @@ describe('mail events', () => {
         complaintFeedbackType: 'abuse' },
     }) as never)
     expect(statuses[0]).toEqual(['T1', 'cross@example.com', 'complained', 'abuse'])
+  })
+
+  /*
+   * The auto-brake (issue 134). One complaint is a misclick; several in a day
+   * from one workspace is the thing that costs every OTHER workspace their
+   * deliverability, which is why it acts without waiting for a human.
+   */
+  it('does not restrict a workspace over a single complaint', async () => {
+    complaintCount = 1
+    await handler(ses('Complaint', {
+      complaint: { complainedRecipients: [{ emailAddress: 'cross@example.com' }] },
+    }) as never)
+    expect(restricted).toEqual([])
+  })
+
+  it('restricts sending once complaints pass the brake', async () => {
+    complaintCount = 3
+    await handler(ses('Complaint', {
+      complaint: { complainedRecipients: [{ emailAddress: 'cross@example.com' }] },
+    }) as never)
+    expect(restricted).toHaveLength(1)
+    expect(restricted[0].tenantId).toBe('T1')
+    expect(restricted[0].reason).toContain('3')
+  })
+
+  /**
+   * Restricting must never become suspending. The authorizer refuses a
+   * suspended tenant outright, so suspension would lock the owner out of the
+   * dashboard - including the screen that would tell them what happened.
+   */
+  it('restricts sending rather than suspending the account', async () => {
+    complaintCount = 5
+    await handler(ses('Complaint', {
+      complaint: { complainedRecipients: [{ emailAddress: 'cross@example.com' }] },
+    }) as never)
+    const statusWrites = writes.filter((w) =>
+      JSON.stringify(w).includes('suspended'))
+    expect(statusWrites).toEqual([])
+    expect(restricted).toHaveLength(1)
   })
 
   // Telling an owner their customer reported them as spam is a support

@@ -416,6 +416,12 @@ async function confirmSideEffects(
   row: BookingRow,
   timezone: string,
   notifyEmail: string,
+  /**
+   * True on the deposit path (issue 134). The customer has paid; they are
+   * owed the confirmation whether or not the day's send allowance is spent,
+   * and a paid booking nobody was told about is the worst outcome available.
+   */
+  exempt = false,
 ): Promise<boolean> {
   const view = publicView(row, timezone)
   const brand = await getTenantBrand(tenantId)
@@ -445,6 +451,7 @@ async function confirmSideEffects(
     to: row.email ?? '',
     ref: { tenantId, moduleId: 'booking', refType: 'booking', refId: row.bookingId },
     audience: 'customer' as const,
+    exempt,
     fromName: brand.name,
     replyTo: notifyEmail,
     subject: confirmMail.subject,
@@ -518,7 +525,7 @@ async function onDepositPaid(detail: PaymentReceivedEvent['detail']): Promise<vo
   }
   const updated = { ...row, status: 'confirmed' as BookingStatus, depositPaidAt: new Date().toISOString(), paymentId }
   const [config, tenant] = await Promise.all([getBookingConfig(tenantId), getTenant(tenantId)])
-  await confirmSideEffects(tenantId, tenant?.name ?? '', updated, config.timezone, config.notifyEmail)
+  await confirmSideEffects(tenantId, tenant?.name ?? '', updated, config.timezone, config.notifyEmail, true)
 }
 
 async function slugOf(tenantId: string): Promise<string> {

@@ -41,6 +41,19 @@ interface EmailBase {
   subject: string
   text: string
   /**
+   * Skip the daily send cap (issue 134).
+   *
+   * ONLY for mail that completes a promise already made to this customer: a
+   * reminder for an appointment we confirmed, or the confirmation for a
+   * deposit they have already paid. Both fire hours or days after the action
+   * that caused them, and a cap spent in between must not swallow them.
+   *
+   * Not a way to make an important email important. Everything customer-bound
+   * feels important; the test is whether the customer is already expecting
+   * this specific message because of something that has happened.
+   */
+  exempt?: boolean
+  /**
    * The HTML part (issue 94).
    *
    * Optional, and the text part is never derived from it - both render from
@@ -113,6 +126,53 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
   if (input.ref) {
     const blocked = await emailBlocked(input.ref.tenantId, to, input.optional === true)
     if (blocked) return { sent: false, error: `address_${blocked}` }
+  }
+
+  /*
+   * The daily send cap (issue 134).
+   *
+   * One choke point, so all nine customer-bound paths are covered without a
+   * single call site changing - and so a tenth added tomorrow is covered on
+   * the day it is written.
+   *
+   * Only customer-bound mail counts. Mail to the owner is mail they asked for
+   * about their own business; capping it would mean withholding "you have a
+   * new booking" from somebody having a good day.
+   *
+   * `exempt` is for messages that are the second half of a promise already
+   * made: a reminder for an appointment we confirmed, or the confirmation for
+   * a deposit already paid. Both fire hours or days after the thing that
+   * caused them, and a cap spent in between must not swallow them.
+   */
+  if (input.audience === 'customer' && input.ref && !input.exempt) {
+    const { tierFor, claimSend } = await import('./sendcap')
+    const { getTenant } = await import('./db')
+    const { isPaidWorkspace } = await import('./entitlements')
+    const tenantId = input.ref.tenantId
+    let limits
+    try {
+      const tenant = await getTenant(tenantId)
+      limits = tierFor({
+        payoutsEnabled: tenant?.payoutsEnabled,
+        paid: await isPaidWorkspace(tenantId),
+        // Written by the payments module the moment Stripe Connect
+        // onboarding completes, so it already means exactly "verified since".
+        verifiedSince: tenant?.connectOnboardedAt,
+        sendingRestrictedAt: tenant?.sendingRestrictedAt,
+      })
+    } catch (err) {
+      // A lookup failure must never cut off a paying customer mid-day, so
+      // assume tier 1 rather than tier 0. The same asymmetry emailBlocked
+      // uses: a status we cannot read must not become a send we refuse.
+      console.error('send tier lookup failed, assuming verified', { tenantId, err: String(err) })
+      limits = { tier: 1 as const, transactionalPerDay: 200, optionalPerDay: 50 }
+    }
+    const optional = input.optional === true
+    const limit = optional ? limits.optionalPerDay : limits.transactionalPerDay
+    const claim = await claimSend(tenantId, optional, limit)
+    if (!claim.ok) {
+      return { sent: false, error: optional ? 'daily_optional_limit' : 'daily_send_limit' }
+    }
   }
 
   /**
@@ -235,6 +295,22 @@ export function explainEmailError(error?: string): string | undefined {
   }
   if (error === 'complained') {
     return 'They marked this as spam. Nothing further will be sent to them automatically.'
+  }
+  /*
+   * The send caps (issue 134). These read on the owner's own screen, so they
+   * say what happened, why, and what to do - the product promises honest
+   * errors rather than a spinner, and "limit exceeded" is a spinner in words.
+   */
+  if (error === 'daily_optional_limit') {
+    return 'Review requests are switched off until your business is verified. '
+      + 'Connect Stripe to take payments and they turn on straight away - it also '
+      + 'proves you are a real business, which is what keeps our email out of spam '
+      + 'folders.'
+  }
+  if (error === 'daily_send_limit') {
+    return 'This business has sent all the emails it can today. It will send again '
+      + 'tomorrow, or connect Stripe to lift the limit. Send the link yourself in '
+      + 'the meantime.'
   }
   if (error === 'address_bounced') {
     return 'That address bounced last time, so nothing was sent. Check it on the contact and try again.'

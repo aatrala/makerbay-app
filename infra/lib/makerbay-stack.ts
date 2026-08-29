@@ -1252,7 +1252,12 @@ export class MakerbayStack extends cdk.Stack {
       actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:BatchGetItem'],
       resources: [quotes.tableArn, `${quotes.tableArn}/index/*`, invoices.tableArn, `${invoices.tableArn}/index/*`],
     }))
-    for (const t of [tenants, users]) t.grantReadData(mailEventsFn)
+    for (const t of [users]) t.grantReadData(mailEventsFn)
+    // Write, not read: the complaint auto-brake sets sendingRestrictedAt when
+    // a workspace generates enough spam reports to threaten everybody else's
+    // deliverability (issue 134).
+    tenants.grantReadWriteData(mailEventsFn)
+    mailEventsFn.addEnvironment('TABLE_TENANTS', tenants.tableName)
     mailEventsFn.addToRolePolicy(sesSendPolicy)
     new events.Rule(this, 'MailEventsRule', {
       // Default bus, because that is the only one SES will publish to. The
@@ -1273,6 +1278,22 @@ export class MakerbayStack extends cdk.Stack {
     ]) {
       f.addEnvironment('TABLE_MAILLOG', mailLog.tableName)
       mailLog.grantReadWriteData(f)
+      /*
+       * The daily send cap needs to know who is sending (issue 134).
+       *
+       * It reads the tenant for payoutsEnabled and the onboarding date, and
+       * the grants to tell a paying or comped workspace from a new one. Read
+       * only: the counter itself lives in MailLog, already granted above.
+       *
+       * These fail OPEN by design - a lookup error assumes a verified
+       * workspace rather than cutting off a paying customer mid-day - so a
+       * missing grant here would not break sending. It would silently switch
+       * the cap off, which is worse, because everything would look fine.
+       */
+      f.addEnvironment('TABLE_TENANTS', tenants.tableName)
+      f.addEnvironment('TABLE_ENTITLEMENTS', entitlements.tableName)
+      f.addEnvironment('TABLE_GRANTS', grants.tableName)
+      for (const t of [tenants, entitlements, grants]) t.grantReadData(f)
       /**
        * Customer-bound mail now leaves from its own domain (issue 103).
        *
