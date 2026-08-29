@@ -449,6 +449,7 @@ const pricingPage = () => {
           <li>After-hours voice answering, when it passes our latency bar</li>
           <li>Priority support — your tickets answered first</li>
         </ul>
+        <p class="meta" style="margin-top:12px">$990 a year — 2 months free.</p>
         <a class="btn ghost" href="${APP}">Get started</a>
       </div>
     </div>
@@ -534,8 +535,10 @@ ${[...free, ...modules.filter((m) => !isFree(m))].map(row).join('\n')}
     <p>You are told in the dashboard, plainly, before anything stops. Message overage is opt-in;
     the default is a polite stop, never a surprise bill.</p>
     <h3>How does annual billing work?</h3>
-    <p>$290 a year — two months free. Annual plans pause politely at the message allowance
-    instead of billing overage, so a yearly invoice can never surprise you. Month to month
+    <p>Trade is $290 a year and Genie is $990 — two months free on either. Annual plans pause
+    politely at the message allowance instead of billing overage, so a yearly invoice can never
+    surprise you. Founding members keep their discount on annual too: $190 a year rather than
+    $290. Month to month
     stays the headline; there are no contracts and no cancellation calls.</p>
     <h3>Do prices differ by country?</h3>
     <p>No. Same prices worldwide, in USD. Stripe handles your local card and currency conversion.</p>

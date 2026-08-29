@@ -117,10 +117,38 @@ export const PLANS: Record<string, PlanDefinition> = {
  */
 export const GENIE_ALLOWANCES = { free: 25, pro: 250, genie: 2500 } as const
 
-/** Annual: two months free, and no metered overage - the plan pauses at the
- * allowance instead (Stripe cannot mix a yearly base with monthly metering,
- * and a surprise catch-up bill at renewal would break the no-surprises rule). */
-export const ANNUAL_PRICE_CENTS = 29000
+/**
+ * Annual pricing: two months free, and no metered overage - the plan pauses
+ * at the allowance instead (Stripe cannot mix a yearly base with monthly
+ * metering, and a surprise catch-up bill at renewal would break the
+ * no-surprises rule).
+ *
+ * Ten months of the monthly price, every time. Derived rather than typed, so
+ * a change to a monthly price can never leave its annual price behind saying
+ * something that is no longer two months free (issue 145).
+ */
+export const MONTHS_FREE_ON_ANNUAL = 2
+export const annualPriceCents = (planId: string): number => {
+  const plan = PLANS[planId]
+  if (!plan) throw new Error(`no plan "${planId}"`)
+  return plan.monthlyPriceCents * (12 - MONTHS_FREE_ON_ANNUAL)
+}
+
+/** Kept for callers that predate per-plan annual pricing. Trade's annual. */
+export const ANNUAL_PRICE_CENTS = annualPriceCents('pro')
+
+/**
+ * The founding price, and its annual twin (issues 84, 145).
+ *
+ * The first 100 workspaces pay $19 a month for Trade and keep it for as long
+ * as they stay. Adding an annual toggle exposed a gap: a founding member who
+ * chose annual would silently have lost the founding discount, so there is a
+ * founding annual price on the same two-months-free ratio.
+ */
+export const FOUNDING_PRICE_CENTS = 1900
+export const FOUNDING_ANNUAL_PRICE_CENTS =
+  FOUNDING_PRICE_CENTS * (12 - MONTHS_FREE_ON_ANNUAL)
+export const FOUNDING_LIMIT = 100
 
 /**
  * What a Trade subscription switches on beyond the assistant. One place, so

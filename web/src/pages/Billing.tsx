@@ -244,12 +244,13 @@ export default function Billing() {
               {busy ? 'Opening Stripe…' : `${money(pro.monthlyPriceCents)} / month`}
             </button>
             <button className="ghost" onClick={() => void go('/v1/core/billing/checkout', { interval: 'year' })} disabled={busy}>
-              {money(29000)} / year — 2 months free
+              {money(pro.monthlyPriceCents * 10)} / year — 2 months free
             </button>
           </div>
           <p className="meta mt">
-            <strong>Founding offer:</strong> the first 100 workspaces pay $19/month — applied
-            automatically at checkout, and yours for as long as you stay.
+            <strong>Founding offer:</strong> the first 100 workspaces pay $19/month, or
+            $190/year — applied automatically at checkout whichever term you pick, and yours
+            for as long as you stay.
           </p>
           <p className="meta mt">
             Monthly includes pay-as-you-go beyond the message allowance at{' '}
@@ -267,12 +268,21 @@ export default function Billing() {
             your real numbers, and actions — send a quote, chase an invoice, block out time —
             each behind a card only you can confirm. Month to month, cancel any time.
           </p>
-          <button onClick={() => void go('/v1/core/billing/checkout', { plan: 'genie' })} disabled={busy}>
-            {busy ? 'Opening Stripe…' : `${money(genie.monthlyPriceCents)} / month`}
-          </button>
+          <div className="row">
+            <button onClick={() => void go('/v1/core/billing/checkout', { plan: 'genie', interval: 'month' })} disabled={busy}>
+              {busy ? 'Opening Stripe…' : `${money(genie.monthlyPriceCents)} / month`}
+            </button>
+            {/* Genie was month-only on the reasoning that nobody should prepay
+                a year of something new. It is now the same age as the rest,
+                and a customer who wanted to commit could not (issue 145). */}
+            <button className="ghost" onClick={() => void go('/v1/core/billing/checkout', { plan: 'genie', interval: 'year' })} disabled={busy}>
+              {money(genie.monthlyPriceCents * 10)} / year — 2 months free
+            </button>
+          </div>
           <p className="meta mt">
             Every plan includes a Genie taster — 25 messages a month on Free, 250 on Trade — so
-            you can try it before upgrading.
+            you can try it before upgrading. Annual pauses politely at the allowance rather
+            than billing beyond it, the same as Trade.
           </p>
         </div>
       )}

@@ -11,7 +11,18 @@ import {
   setTenantBilling,
   type CallerContext,
 } from '@makerbay/core'
-import { ANNUAL_PRICE_CENTS, GENIE_PRODUCT_KEY, isTestMode, METER_EVENT_NAME, PLANS, PRO_PRODUCT_KEY, stripeClient } from './stripe-client'
+import {
+  annualPriceCents,
+  FOUNDING_ANNUAL_PRICE_CENTS,
+  FOUNDING_LIMIT,
+  FOUNDING_PRICE_CENTS,
+  GENIE_PRODUCT_KEY,
+  isTestMode,
+  METER_EVENT_NAME,
+  PLANS,
+  PRO_PRODUCT_KEY,
+  stripeClient,
+} from './stripe-client'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
 
@@ -246,21 +257,53 @@ async function geniePrices(stripe: Awaited<ReturnType<typeof stripeClient>>) {
   return { base, metered, product }
 }
 
-/** The annual base: two months free, no metered item (see ANNUAL_PRICE_CENTS). */
+/**
+ * The annual base for a plan: two months free, no metered item.
+ *
+ * One function for Trade and Genie rather than two, so the discount ratio
+ * cannot drift between them - the amount comes from annualPriceCents, which
+ * derives it from the monthly price (issue 145).
+ */
 async function annualPrice(
   stripe: Awaited<ReturnType<typeof stripeClient>>,
   productId: string,
+  planId: 'pro' | 'genie',
 ) {
-  const lookup = `${PRO_PRODUCT_KEY}-base-annual`
+  const productKey = planId === 'genie' ? GENIE_PRODUCT_KEY : PRO_PRODUCT_KEY
+  const lookup = `${productKey}-base-annual`
   const existing = await stripe.prices.list({ lookup_keys: [lookup], limit: 5 })
   if (existing.data[0]) return existing.data[0]
   return stripe.prices.create({
     product: productId,
     currency: 'usd',
-    unit_amount: ANNUAL_PRICE_CENTS,
+    unit_amount: annualPriceCents(planId),
     recurring: { interval: 'year' },
     lookup_key: lookup,
-    nickname: 'Trade annual',
+    nickname: `${PLANS[planId].name} annual`,
+  })
+}
+
+/**
+ * The founding price on an annual term (issue 145).
+ *
+ * Without it, a founding member who chose annual would quietly have paid the
+ * standard $290 instead of a founding rate - the discount would have vanished
+ * at exactly the moment they committed hardest. Same two-months-free ratio.
+ */
+async function foundingAnnualPrice(
+  stripe: Awaited<ReturnType<typeof stripeClient>>,
+  productId: string,
+) {
+  const lookup = `${PRO_PRODUCT_KEY}-base-founding-annual`
+  const existing = await stripe.prices.list({ lookup_keys: [lookup], limit: 1 })
+  if (existing.data[0]) return existing.data[0]
+  return await stripe.prices.create({
+    product: productId,
+    currency: 'usd',
+    unit_amount: FOUNDING_ANNUAL_PRICE_CENTS,
+    recurring: { interval: 'year' },
+    lookup_key: lookup,
+    nickname: 'Founding member annual',
   })
 }
 
@@ -270,9 +313,6 @@ async function annualPrice(
 // simply how Stripe works. Seats are counted from live subscriptions on the
 // founding price itself; when they are gone, checkout quietly uses the
 // standard price.
-
-const FOUNDING_LIMIT = 100
-const FOUNDING_PRICE_CENTS = 1900
 
 async function foundingPrice(
   stripe: Awaited<ReturnType<typeof stripeClient>>,
@@ -291,12 +331,23 @@ async function foundingPrice(
   })
 }
 
+/**
+ * Seats remaining, counted across BOTH founding prices.
+ *
+ * There are two now, monthly and annual (issue 145). Counting only one would
+ * mean a hundred annual founders still left a hundred monthly seats open, and
+ * "first 100 workspaces" would quietly have meant two hundred.
+ */
 async function foundingSeatsLeft(
   stripe: Awaited<ReturnType<typeof stripeClient>>,
-  priceId: string,
+  ...priceIds: string[]
 ): Promise<number> {
-  const subs = await stripe.subscriptions.list({ price: priceId, status: 'active', limit: 100 })
-  return Math.max(0, FOUNDING_LIMIT - subs.data.length)
+  let taken = 0
+  for (const priceId of priceIds) {
+    const subs = await stripe.subscriptions.list({ price: priceId, status: 'active', limit: 100 })
+    taken += subs.data.length
+  }
+  return Math.max(0, FOUNDING_LIMIT - taken)
 }
 
 async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayProxyResultV2> {
@@ -331,15 +382,44 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
     // metered price exists; the webhook attaches it to the subscription the
     // moment it is created, so usage metering is never missed.
     const genie = await geniePrices(stripe)
-    lineItems = [{ price: genie.base.id, quantity: 1 }]
+    lineItems = interval === 'year'
+      // Genie is annual-capable now (issue 145). It used to be month-only on
+      // the reasoning that nobody should prepay a year of something new -
+      // true when it was new, and it is now the same age as the rest.
+      ? [{ price: (await annualPrice(stripe, genie.product.id, 'genie')).id, quantity: 1 }]
+      : [{ price: genie.base.id, quantity: 1 }]
   } else if (interval === 'year') {
-    lineItems = [{ price: (await annualPrice(stripe, product.id)).id, quantity: 1 }]
+    /*
+     * Annual Trade, founding rate while seats last (issue 145).
+     *
+     * Without this branch a founding member choosing annual would silently
+     * have paid the standard $290 - losing the discount at exactly the moment
+     * they committed hardest to us.
+     */
+    let annualBase = await annualPrice(stripe, product.id, 'pro')
+    try {
+      const [foundingMonthly, foundingAnnual] = await Promise.all([
+        foundingPrice(stripe, product.id),
+        foundingAnnualPrice(stripe, product.id),
+      ])
+      const left = await foundingSeatsLeft(stripe, foundingMonthly.id, foundingAnnual.id)
+      if (left > 0) {
+        annualBase = foundingAnnual
+        foundingSeats = left
+      }
+    } catch (err) {
+      console.warn('founding annual price unavailable, using standard', String(err))
+    }
+    lineItems = [{ price: annualBase.id, quantity: 1 }]
   } else {
     // Monthly Trade: founding price while seats last, standard after.
     let monthlyBase = base
     try {
-      const founding = await foundingPrice(stripe, product.id)
-      const left = await foundingSeatsLeft(stripe, founding.id)
+      const [founding, foundingAnnual] = await Promise.all([
+        foundingPrice(stripe, product.id),
+        foundingAnnualPrice(stripe, product.id),
+      ])
+      const left = await foundingSeatsLeft(stripe, founding.id, foundingAnnual.id)
       if (left > 0) {
         monthlyBase = founding
         foundingSeats = left
@@ -369,10 +449,15 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
       ? {
           custom_text: {
             submit: {
-              message:
-                `Founding member price: $${(FOUNDING_PRICE_CENTS / 100).toFixed(0)} a month instead of `
-                + `$${(PLANS.pro.monthlyPriceCents / 100).toFixed(0)}, and you keep it for as long as you stay. `
-                + `${foundingSeats} of ${FOUNDING_LIMIT} places left.`,
+              // The annual founder pays a yearly figure, so quoting a monthly
+              // price on their checkout page would be wrong (issue 145).
+              message: interval === 'year'
+                ? `Founding member price: ${(FOUNDING_ANNUAL_PRICE_CENTS / 100).toFixed(0)} a year `
+                  + `instead of ${(annualPriceCents('pro') / 100).toFixed(0)}, and you keep it for as `
+                  + `long as you stay. ${foundingSeats} of ${FOUNDING_LIMIT} places left.`
+                : `Founding member price: ${(FOUNDING_PRICE_CENTS / 100).toFixed(0)} a month instead of `
+                  + `${(PLANS.pro.monthlyPriceCents / 100).toFixed(0)}, and you keep it for as long as you stay. `
+                  + `${foundingSeats} of ${FOUNDING_LIMIT} places left.`,
             },
           },
         }
