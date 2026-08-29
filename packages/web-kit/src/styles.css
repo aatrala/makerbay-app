@@ -563,3 +563,12 @@ tr.rowlink:hover td { background: rgba(79, 70, 229, .05); }
 .genie-chips .chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .genie-form { display: flex; gap: 8px; flex-shrink: 0; }
 .genie-form input { flex: 1; }
+
+/* A second line under a link or label. Used where an explanation has to be
+   readable on a phone: a `title` attribute is a hover tooltip and touch
+   devices never fire it, so six carefully written sentences were invisible
+   to the audience the product is built for (issue 148). */
+.block { display: block; margin-top: 2px; }
+/* Tap targets. An inline anchor inside a list row is about 22px tall and only
+   as wide as its text; 44px is the floor for a thumb in a van. */
+.checklist li > a { display: block; min-height: 24px; padding: 6px 0; }

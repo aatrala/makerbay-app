@@ -76,7 +76,25 @@ export const DEFAULT_PRESENCE: Omit<PresenceConfigRow, 'tenantId'> = {
   email: '',
   showBooking: true,
   showAssistant: true,
-  published: true,
+  /*
+   * A new page is NOT live (issue 148).
+   *
+   * This defaulted to true, so every workspace served a real public page at
+   * /p/{slug} from the second it was created - no intro, no photo, no
+   * services, findable by anyone with the address. The setup checklist even
+   * ticked "publish your page" on day one, because it was telling the truth
+   * about a state nobody had chosen.
+   *
+   * The product already holds a half-finished page back from Google for
+   * exactly this reason; this extends the same judgement to the page itself.
+   * Publishing is now something the owner does, which is what the checklist
+   * always claimed it was.
+   *
+   * Safe for existing workspaces: every presence row written to date carries
+   * an explicit `published` value, so none of them inherits this default.
+   * Verified against the live table before the change.
+   */
+  published: false,
 }
 
 export async function getPresenceConfig(tenantId: string): Promise<PresenceConfigRow> {

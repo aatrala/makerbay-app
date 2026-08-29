@@ -2742,3 +2742,61 @@ The risk today is bounded - the staff count is one - but this is no longer
 only an internal matter. Annex II of the **published** DPA lists role-based
 limits as planned **by 31 October 2026**, so it is now a dated commitment in a
 contract customers can read.
+
+### 148 — Getting started, rebuilt ✅ shipped 2026-08-29
+Two consults, then every finding verified by hand. The screen had six defects,
+and one of them was not really about the checklist at all.
+
+**Every new workspace was publishing an empty page.** `DEFAULT_PRESENCE.published`
+was `true`, so `/p/{slug}` served a real public page from the second a
+workspace existed - no intro, no photo, no services. The checklist ticked
+"publish your page" on day one because it was telling the truth about a state
+nobody chose. Now defaults to false. Safe for existing workspaces: all four
+presence rows carry an explicit value, verified against the live table before
+changing it.
+
+**Two of six steps ticked before the owner did anything.** Hours read
+`some(day => day.length > 0)` against `DEFAULT_BOOKING_CONFIG`, which is
+Mon-Fri 9-5. A new workspace opened on "2 of 6 done" and the two ticked steps
+were the two you cannot click into, because done steps render as plain text.
+
+**Today's diary showed yesterday's until 10am.** `startsAt` is a UTC instant,
+`today` was a UTC date, and the default workspace timezone is Australia/Sydney.
+The correct zone was in the same payload and thrown away. Now the screen shows
+**tomorrow** in the business's zone - by the time an owner reads today's jobs
+they are already in the van, and tomorrow is the one they can still do
+something about. Missing phone numbers and addresses are flagged while there
+is time to chase them.
+
+**Other defects fixed:** `to="/booking"` was not a route and redirected back
+to Home; owner time-blocks were listed as customer appointments; a failed read
+rendered a confident "Nothing needs you right now"; a failed crawl counted as
+assistant knowledge; an unpriced or switched-off service counted as a priced
+one; `sentAt` missing sorted as "over three days old"; and "Hide setup" hid
+nothing while silently removing the Home link from the sidebar, because
+`App.tsx` never passed the callback.
+
+**Restructured to three steps** - priced service, hours, publish - because
+those form a real chain that ends in a URL the owner can send somebody. The
+sixth step needed a Google Business Profile, which is days and off-platform,
+so the bar could never finish; the founder's own screenshot showed 5 of 6.
+The other three moved to an unnumbered "when you have a minute" group.
+
+**Home now offers the setup flow it never mentioned.** The concierge fills
+four of these from one pasted URL, is free, and its only route was a sidebar
+entry behind "More" on a phone - in a product whose vision doc says "they are
+not going to configure anything".
+
+**Also:** step copy is trade-aware via issue 143's examples; the chase list
+uses the existing `/v1/quotes/insights`, so "1 quote is out and unanswered"
+became "Quote 14 · Jane Smith — 6 days · never opened"; completion hands over
+the page URL with a copy button and a QR code instead of vanishing silently;
+explanations render as text rather than a `title` tooltip no phone can show;
+the progress bar has a role and values; done/to-do is announced rather than
+conveyed by colour alone; and tap targets are block-level.
+
+**Dead code removed:** an "All set" message that could never render, because
+the card returned null one branch earlier - introduced when the checklist was
+made to retire itself.
+
+No new endpoints and no new CloudFormation resources; the stack stays at 493.
