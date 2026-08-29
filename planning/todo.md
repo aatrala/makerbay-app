@@ -2380,3 +2380,95 @@ for deletion.
    solicitor. Sections 10 (liability) and 13 (governing law) in the Terms, and
    sections 5 and 6 in the Privacy Policy, are the ones worth paying someone to
    look at.
+
+### 137 — Cognito on SES made signup impossible in the sandbox ✅ fixed 2026-08-29
+Issue 104 moved sign-up and password-reset codes onto SES on 27 August. In the
+SES sandbox, SES authorises the RECIPIENT as well as the sender, and someone
+signing up has by definition never been verified, so every real signup was
+rejected before a code was sent. **Nobody could create an account between 27
+and 29 August.**
+
+Proven live: `sesv2 send-email` to an unverified address returns "Email
+address is not verified". Only `aatrala@gmail.com` and the two verified
+domains could have received a code, which is exactly why the 25 August
+walkthrough succeeded and nothing after 27 August would have.
+
+Fixed by routing auth mail through Cognito's own sender behind
+`SES_LEFT_THE_SANDBOX` in the stack. Branded templates unaffected: the
+`userVerification` block and the CustomMessage trigger both still apply,
+confirmed in the synth output. Costs a no-reply From address, config-set
+visibility for auth mail, and a 50/day ceiling instead of 200.
+
+**Flip the constant back when issue 76 lands, and check first rather than
+assuming:** `aws sesv2 get-account --query ProductionAccessEnabled`.
+
+**Lesson worth keeping:** 104 was a good change that was correct in every
+respect except the one that mattered, and the unit suite was green throughout.
+Same shape as issue 107's reserved-keyword bug. Auth is the one flow where
+"deployed and typechecked" is not evidence of anything.
+
+### 138 — Overage is billed automatically while /pricing says opt-in ⛔ P1
+`packages/core/src/entitlements.ts:107` computes
+`overage: live.some(g => g.source === 'stripe' && g.planTier !== 'free') ? 'billed' : 'block'`,
+and `:139` writes `overage: 'billed'` unconditionally from the Stripe webhook.
+There is no opt-in toggle anywhere in the codebase.
+
+Meanwhile /pricing says "$0.02 each, opt-in - the default is a polite stop"
+and the FAQ says "never a surprise bill". The polite stop is real for Free,
+comps and annual only; a monthly Trade or Genie subscriber is billed from the
+moment the webhook lands.
+
+Same class as the tax clause corrected in `10f4eb9`: a page selling honesty
+making a claim the code contradicts. Build the toggle rather than weaken the
+page - the promise is a good one and it answers the market's loudest
+complaint cluster.
+
+### 139 — /compare/jobber is invisible ⛔ quick
+The page exists, is live, and has the price-mechanics table plus a "when
+Jobber is the better pick" section. But it is absent from the sitemap array in
+`site/build.mjs`, and the hand-written homepage footer does not link it (only
+the generated `footer()` does, which the homepage does not use). A page built
+to rank, missing from the sitemap and unlinked from the highest-authority page
+on the domain, will not rank. Two lines.
+
+### 140 — Default quote terms contradict the quote's own expiry ⛔ P1
+`modules/quotes/api/src/db.ts:194` ships
+`terms: 'Valid for 30 days. Payment due on completion.'` on every quote. Set
+"Valid for" to 14 and the customer page reads "Valid for 30 days." one line
+under "This price is good until [14 days out]". Reachable with zero typing, on
+a money document. Issue 82 added a guard on the `notes` field, not this one.
+
+### 141 — A failed review invite cannot be sent by hand
+Issue 118 made quotes survive the email outage by making share links the
+primitive. Review invites did not get the same treatment: email-only, they
+refuse a contact with no email, and `createInvite` returns only
+`{sent, emailError, reviewId}` - never the URL. So the owner is told it failed
+and given no way to recover. Booking confirmations have the same shape
+(`modules/booking/api/src/handler.ts:434`). Returning the URL is small and
+makes both survivable.
+
+### 142 — Two dead ends on the live site ⛔ quick
+`site/src/index.html:351` links to `#modules`, an anchor removed when the
+modules grid was replaced. And `modules/setup/web/src/index.tsx:241` is a
+four-column diff table with no `.scroll-x` wrapper - the one table of thirty
+that the issue 80 mobile pass missed, because that screen shipped after it
+under issue 93.
+
+### 143 — The trade picker is write-only
+Onboarding captures the trade across twelve options (issue 83) and stores it
+at `packages/core-api/src/handler.ts:153`. Nothing reads it. A salon still
+sees "Labour, qualified electrician" in the quotes placeholders and a plumber
+sees salon-flavoured pricing. The expensive half is built; reading the field
+to select placeholder sets is small, and it also seeds the vertical landing
+pages if those ever happen.
+
+### 136 — Triage of the 25 August marketing and flow review ✅ delivered
+36 claims re-verified against HEAD by two agents on 2026-08-29. 16 already
+fixed (mostly the 26-27 August batch), 5 live defects nobody had noticed
+(filed as 137-142), 8 genuinely open, 7 previously deferred by the founder.
+Board: https://claude.ai/code/artifact/ae231b56-31b5-4f02-98ee-da2e548ce8aa
+
+The review was accurate when written. Its most valuable property turned out to
+be the verification pass rather than the findings: re-checking a four-day-old
+review found a live signup outage that neither the review nor the tracker knew
+about.
