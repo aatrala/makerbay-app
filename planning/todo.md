@@ -1,5 +1,16 @@
 # MakerBay — Issue Tracker & Status Board
 
+> **Where work is tracked.** This file is the working list. Two other places
+> hold items and are easy to miss:
+>
+> - `SPEC.md` section 8 - things only the founder can do, with long lead
+>   times. Reconciled 2026-08-29; its three items are issues 76, 122 and 123
+>   here. Check it when asking "what is open", because nothing in this file
+>   surfaces it.
+> - `planning/marketing-and-flow-review-2026-08-25.md` - the issue 90/91
+>   output, including a 19-item product-gap list. Its findings became issues
+>   77-81; the rest are roadmap or deliberate scope, not open work.
+
 Location: `makerbay-app/planning/todo.md` (inside the app repo).
 Updated 2026-08-25. One section per issue with a manual test you can run.
 
@@ -304,17 +315,32 @@ shadow), larger message type, and bubbles bottom-anchored so any void
 sits above the conversation, chat-style. Verified live at 1920px and
 375px - no horizontal overflow, mobile nav intact.
 
-### 90 — Marketing identity consults 📋 not started (the 2026-08-24 agent run was lost with its session)
+### 90 — Marketing identity consults 🔶 partly delivered, taglines and logos outstanding
 Founder-requested proposals to evaluate: (a) 3 site design directions
 (visual system + structure), (b) 15 tagline candidates in three
 groups, (c) 6 logo concepts as production SVGs, (d) a written
 rationale + critique of the current content structure and style.
 
-### 91 — Product-flow review per module 📋 not started (the 2026-08-24 agent run was lost with its session)
+**Correction 2026-08-29.** This was marked "not started, the agent run was
+lost" on 2026-08-28. That was wrong: `planning/marketing-and-flow-review-2026-08-25.md`
+holds the output, and it is substantial - competitor analysis, four marketing
+page directions with hero copy, a pricing assessment and a 19-item gap list.
+
+What it delivers: (a) as four combinable directions rather than three, and (d)
+in full. What is still outstanding: (b) the tagline candidates and (c) the logo
+concepts. Those are the remaining half of this issue.
+
+### 91 — Product-flow review per module ✅ delivered (planning/marketing-and-flow-review-2026-08-25.md)
 Owner-side flows (dashboard, phone-first solo tradie) and
 customer-side flows (public page, chat, booking incl. deposits, quote
 accept, invoice pay, reviews) each audited for concrete improvements,
 ranked value ÷ effort with a proposed first batch.
+
+**Delivered** in `planning/marketing-and-flow-review-2026-08-25.md` sections 4
+(application flows), 5 (a 19-item gap list) and 6 (quick wins), including a
+live walk of app.makerbay.app. Several of its findings became issues 77, 78,
+79, 80 and 81 and are shipped; the rest are folded into the roadmap below or
+are deliberate scope.
 
 ### Scheduled after launch (founder-agreed order, not yet built)
 Google sign-in (first post-launch item) → Google Calendar two-way
@@ -2156,3 +2182,32 @@ for other control characters (none).
 
 Verified live: the page names the business, one-click POST returns 200, and the
 suppression is recorded.
+
+### 122 — Google Business Profile API access ⛔ founder action, long lead time
+Untracked until 2026-08-29: it lives in `SPEC.md` section 8 as a founder item
+and had never been carried into this file, so it was invisible to every "what
+is open" question asked here.
+
+The Reviews module's MONITORING stage needs a Google Cloud project approved for
+the Business Profile API, plus per-tenant OAuth. Asking for reviews already
+works without it - what needs approval is reading back what customers posted.
+
+**Why it matters now rather than later:** Google's approval lead time is
+unknown and reportedly slow. It is the one open item whose clock we do not
+control, so starting it costs nothing and finishing it late blocks a module.
+
+**Do:** create/choose a Google Cloud project, request Business Profile API
+access, and note the case number here.
+
+### 123 — One live Stripe subscription, end to end ⛔ founder action
+Also from `SPEC.md` section 8, also never carried into this file. Distinct from
+issue 63, which is Stripe CONNECT - the payouts side, money reaching a
+tradesperson. This is the BILLING side: money reaching MakerBay.
+
+The webhook endpoint and its events are registered and the handler is proven in
+test mode, but no live subscription has ever been created on this account. The
+first one should not happen by accident with a real customer's card.
+
+**Do:** subscribe once with a real card, confirm Billing shows the event and
+the mode, then refund it. Billing displays when the last Stripe event arrived
+and whether it was test or live.
