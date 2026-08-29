@@ -2599,3 +2599,30 @@ review asks as "one invitation after a completed job", true of the Reviews
 module but not of the manual ask.
 
 Ship this, rewrite the appeal to describe it, then send.
+
+### 134 — send caps ✅ shipped and deployed 2026-08-29
+Tier on verification rather than payment; 25/day and **zero** review invites
+for an unverified workspace, 200/50 verified, 1000/250 after fourteen clean
+days. One choke point in `sendEmail`, so all nine customer paths are covered
+and a tenth is covered on the day it is written. Reminders and deposit-paid
+confirmations exempt. Counter in MailLog under `cap#`, so **no new
+CloudFormation resources** - stack unchanged at 492. Complaint brake at 3 in
+24 hours restricts sending rather than suspending, because the authorizer
+refuses suspended tenants and would lock the owner out of the explanation.
+
+Checked against the live account before deploying: of six workspaces three
+land on tier 0 and all three are test accounts.
+
+### 76 — SES appeal ✅ rewritten, NOT submitted
+The do-not-send warning is gone. The appeal now owns the correction rather
+than hiding it: it says plainly that the earlier draft's "no mechanism for
+uploading a list or sending in bulk" was not accurate, explains why CSV import
+exists, and describes the caps built in response. Four categories became five
+(request replies were missing) and the review-ask description no longer claims
+every invitation follows a completed job.
+
+**Founder submits this**, to case 178755823800807 by replying, not as a new
+case. Run the four pre-send checks at the top of the file first.
+
+**After it is granted:** flip `SES_LEFT_THE_SANDBOX` in the stack to move
+Cognito auth mail back onto SES (issue 137).
