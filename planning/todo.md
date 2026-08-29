@@ -2472,3 +2472,55 @@ The review was accurate when written. Its most valuable property turned out to
 be the verification pass rather than the findings: re-checking a four-day-old
 review found a live signup outage that neither the review nor the tracker knew
 about.
+
+### 136 items — worked through 2026-08-29 ✅
+All five live defects fixed and deployed (137-142), plus every DO and Maybe
+item from the triage board.
+
+- **139** compare page in the sitemap and linked from the homepage footer.
+- **140** default quote terms no longer state a validity that can contradict
+  the quote's own expiry; the settings field carries the same guard the notes
+  field got under issue 82.
+- **141** a failed review invite returns its URL and the screen offers it, the
+  way issue 118 did for quotes.
+- **142** dead `#modules` anchor removed; the setup diff table wrapped.
+- **138** overage is genuinely opt-in: `TenantRow.overageOptIn`, off by
+  default, a toggle on the billing screen, and the Stripe webhook no longer
+  decides on the customer's behalf. Five tests pin it, including that a comp
+  is never billed.
+- **143** trade-aware placeholders from the field onboarding has collected
+  since issue 83 and nothing had ever read.
+- Homepage proof band, computed from the repo so the numbers cannot become a
+  lie. Comparison table on /pricing. A trust card for the zero payment fee.
+  "Smoko" and the .com.au placeholder gone.
+- CHANGELOG brought up to date (2.26, 2.27, 2.28) - it was 25 commits behind,
+  which mattered more once the new band claimed every change is written up.
+- **Home is the front door for everyone now**, leading with what is waiting.
+  `landingPath` deleted.
+
+**Also fixed in passing:** booking confirmation emails hardcoded 'AUD', so a
+Manchester salon's deposit read as A$50.00. Issue 114 fixed this everywhere
+except booking, which never read the field.
+
+**Not done, deliberately:** vertical landing pages (/for/plumbers). The review
+and I agree: learn on one page before cloning it. It also pairs with 143, so
+the per-trade content now has a home when it happens.
+
+### 144 — DPA and sub-processors page 📝 drafted, awaiting founder review
+`site/src/dpa/index.html` and a `/subprocessors` page generated from
+`legal/subprocessors.json`. Built and verified locally; **deliberately excluded
+from the site publish** so neither is live.
+
+Written against what the code does, so Annex II splits security measures into
+in-place and planned-with-a-date, including that staff roles are recorded and
+audited but not enforced per action (131a). Does not promise 24-hour breach
+notification (48 from confirmation), on-demand audit, SOC 2, or deletion of
+backups inside 30 days.
+
+The build FAILS if a current sub-processor starts less than 30 days after its
+notice date - the DPA's own promise enforced rather than hoped for.
+
+**Still needs a solicitor on:** the December 2026 automated decision-making
+commencement and whether Genie is in scope; whether an Art 27 representative
+is needed in the EU and UK; whether TOLA makes us a designated communications
+provider; Stripe's role for Connect; and Ireland as the SCC governing law.
