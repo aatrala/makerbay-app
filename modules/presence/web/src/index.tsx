@@ -3,7 +3,7 @@ import { Link, Navigate, Route } from 'react-router-dom'
 import SharePage from './SharePage'
 import { StyleSections } from './StylePage'
 import PreviewPane from './PreviewPane'
-import QrBlock from './Qr'
+import { QrBlock } from '@makerbay/web-kit'
 import GenieDraftBar from './GenieDraftBar'
 import {
   Notice,

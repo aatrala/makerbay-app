@@ -15,7 +15,9 @@
   `packages/core` — never hand-roll table access in module code.
 - Usage metering events on EventBridge bus `makerbay` are a stable contract:
   `{ tenantId, moduleId, metric, quantity, idempotencyKey, ts }`.
-- SPEC.md is the source of truth for milestones and acceptance criteria.
+- `planning/SPEC.md` is the source of truth for milestones and acceptance
+  criteria, and its section 8 holds founder-only items with long lead times.
+  Those are mirrored as issues in `planning/todo.md`; keep the two in step.
   `modules/*/module.json` is the source of truth for the modules themselves -
   it generates the marketing pages, the roadmap and the version endpoint.
 - Run `npm run typecheck` before any deploy. CDK bundles Lambda code with

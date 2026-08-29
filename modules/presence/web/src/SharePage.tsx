@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Notice, type Me } from '@makerbay/web-kit'
-import QrBlock from './Qr'
+import { QrBlock } from '@makerbay/web-kit'
 
 /**
  * Put your links where your customers already are. Every network gets plain

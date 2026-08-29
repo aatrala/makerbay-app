@@ -3,7 +3,7 @@
 > **Where work is tracked.** This file is the working list. Two other places
 > hold items and are easy to miss:
 >
-> - `SPEC.md` section 8 - things only the founder can do, with long lead
+> - `SPEC.md` (in this folder) section 8 - things only the founder can do, with long lead
 >   times. Reconciled 2026-08-29; its three items are issues 76, 122 and 123
 >   here. Check it when asking "what is open", because nothing in this file
 >   surfaces it.
@@ -2184,7 +2184,7 @@ Verified live: the page names the business, one-click POST returns 200, and the
 suppression is recorded.
 
 ### 122 — Google Business Profile API access ⛔ founder action, long lead time
-Untracked until 2026-08-29: it lives in `SPEC.md` section 8 as a founder item
+Untracked until 2026-08-29: it lives in `planning/SPEC.md` section 8 as a founder item
 and had never been carried into this file, so it was invisible to every "what
 is open" question asked here.
 
@@ -2200,7 +2200,7 @@ control, so starting it costs nothing and finishing it late blocks a module.
 access, and note the case number here.
 
 ### 123 — One live Stripe subscription, end to end ⛔ founder action
-Also from `SPEC.md` section 8, also never carried into this file. Distinct from
+Also from `planning/SPEC.md` section 8, also never carried into this file. Distinct from
 issue 63, which is Stripe CONNECT - the payouts side, money reaching a
 tradesperson. This is the BILLING side: money reaching MakerBay.
 
