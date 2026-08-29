@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "The single source of truth for who else touches customer data (issue 133).",
+    "",
+    "The list used to exist in three places: prose in the privacy policy, a table",
+    "in the DPA annex, and reality. Three copies drift, and the one that drifts",
+    "is always the published one. site/build.mjs generates the page from this",
+    "file and fails the build if a required field is missing, the same way it",
+    "already validates modules/*/module.json.",
+    "",
+    "Removed entries stay, with status 'removed' and a removedAt date, because",
+    "procurement asks what changed and when - a page that can only show the",
+    "present tense cannot answer that.",
+    "",
+    "noticeSentAt is the date customers were told. The DPA promises 30 days'",
+    "notice before a new sub-processor starts, so a 'current' entry whose",
+    "addedAt is less than 30 days after its noticeSentAt is a broken promise,",
+    "and the build refuses it."
+  ],
+  "subprocessors": [
+    {
+      "name": "Amazon Web Services, Inc.",
+      "purpose": "Hosting, databases, file storage, email and SMS delivery, AI inference, and sign-in",
+      "dataCategories": [
+        "account details",
+        "your customers' contact records",
+        "quotes, invoices and bookings",
+        "message and conversation content"
+      ],
+      "processingLocation": "United States",
+      "safeguard": "Standard contractual clauses in the AWS data processing addendum",
+      "safeguardUrl": "https://aws.amazon.com/compliance/gdpr-center/",
+      "role": "sub-processor",
+      "status": "current",
+      "addedAt": "2026-01-01",
+      "noticeSentAt": null,
+      "removedAt": null
+    },
+    {
+      "name": "Stripe, Inc.",
+      "purpose": "Subscription billing for your MakerBay plan, and card payments from your customers to you",
+      "dataCategories": [
+        "your billing contact and subscription history",
+        "for Connect payments: your customer's name, email and payment details, handled by Stripe directly"
+      ],
+      "processingLocation": "United States and Ireland",
+      "safeguard": "Standard contractual clauses in the Stripe data processing agreement",
+      "safeguardUrl": "https://stripe.com/legal/dpa",
+      "role": "sub-processor for subscription billing; independent controller for Connect payments under its own agreement with you",
+      "status": "current",
+      "addedAt": "2026-01-01",
+      "noticeSentAt": null,
+      "removedAt": null
+    }
+  ]
+}

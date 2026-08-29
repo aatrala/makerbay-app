@@ -41,6 +41,37 @@ for (const m of modules) {
 
 modules.sort((a, b) => a.roadmap.order - b.roadmap.order)
 
+/*
+ * Sub-processors, validated the same way modules are (issue 133).
+ *
+ * The list is legally load-bearing: the DPA promises 30 days' notice before a
+ * new one starts processing, and the privacy policy claims the published list
+ * is complete. Both claims are only as good as this file, so a missing field
+ * fails the build rather than shipping a page with a hole in it.
+ */
+const subprocessors = JSON.parse(
+  await readFile(join(repo, 'legal/subprocessors.json'), 'utf8'),
+).subprocessors
+
+const DAY = 24 * 60 * 60 * 1000
+for (const sp of subprocessors) {
+  for (const field of ['name', 'purpose', 'processingLocation', 'safeguard', 'status', 'addedAt']) {
+    if (!sp[field]) throw new Error(`legal/subprocessors.json: "${sp.name ?? '?'}" is missing ${field}.`)
+  }
+  // The 30-day promise, enforced rather than hoped for. A sub-processor added
+  // less than 30 days after customers were told about it is a broken
+  // contractual commitment, and it should not be possible to publish one.
+  if (sp.status === 'current' && sp.noticeSentAt) {
+    const gap = Date.parse(sp.addedAt) - Date.parse(sp.noticeSentAt)
+    if (gap < 30 * DAY) {
+      throw new Error(
+        `legal/subprocessors.json: "${sp.name}" starts ${Math.round(gap / DAY)} days after `
+        + 'notice was sent. The DPA promises at least 30. Move addedAt, or send notice earlier.',
+      )
+    }
+  }
+}
+
 const isFree = (m) => m.core || m.pricing === 'free'
 // Tier pricing, not module pricing: paid capability lives in the Trade plan -
 // except Genie, whose full allowance is its own $99 tier (Free/Trade get a
@@ -737,11 +768,60 @@ for (const m of modules) {
   generated++
 }
 
+const subprocessorsPage = () => page({
+  title: 'Sub-processors — MakerBay',
+  description: 'Every company that can touch your data, what they do, and where.',
+  path: '/subprocessors',
+  body: `<section class="legal"><div class="wrap">
+    <h1>Sub-processors</h1>
+    <p class="legal-date">Last updated ${new Date().toISOString().slice(0, 10)}.</p>
+    <div class="legal-summary">
+      <p style="margin:0">
+        These are the companies that can touch data you or your customers put into
+        MakerBay. It is the complete list. We give at least 30 days' notice by email
+        before adding one, and you can object &mdash; see clause 6 of the
+        <a href="/dpa">Data Processing Agreement</a>.
+      </p>
+    </div>
+    ${subprocessors.filter((s) => s.status === 'current').map((s) => `
+      <h2>${esc(s.name)}</h2>
+      <p>${esc(s.purpose)}.</p>
+      <dl class="facts">
+        <dt>Where</dt><dd>${esc(s.processingLocation)}</dd>
+        <dt>Data</dt><dd>${s.dataCategories.map(esc).join('; ')}</dd>
+        <dt>Role</dt><dd>${esc(s.role ?? 'sub-processor')}</dd>
+        <dt>Transfer basis</dt><dd>${s.safeguardUrl
+          ? `<a href="${esc(s.safeguardUrl)}" rel="noopener">${esc(s.safeguard)}</a>`
+          : esc(s.safeguard)}</dd>
+        <dt>Since</dt><dd>${esc(s.addedAt)}</dd>
+      </dl>`).join('')}
+    ${subprocessors.some((s) => s.status === 'removed') ? `
+      <h2>No longer used</h2>
+      ${subprocessors.filter((s) => s.status === 'removed').map((s) => `
+        <p><strong>${esc(s.name)}</strong> — ${esc(s.purpose)}. Removed ${esc(s.removedAt)}.</p>`).join('')}`
+      : ''}
+    <h2>What about the AI?</h2>
+    <p>
+      The assistant uses a Claude model from Anthropic, run inside our own Amazon
+      Web Services account. Anthropic never receives your data, so they are not a
+      sub-processor &mdash; but the honest answer to &ldquo;whose model is
+      it?&rdquo; is more useful than silence, so it is here.
+    </p>
+    <h2>Fonts, analytics and trackers</h2>
+    <p>
+      None. The site sets no cookies, runs no analytics, and the fonts on your
+      booking page are served from our own servers rather than Google's, so
+      loading one of your pages tells nobody but us that it happened.
+    </p>
+  </div></section>`,
+})
+
 await write('roadmap', roadmapPage())
 await write('pricing', pricingPage())
 
 await write('changelog', changelogPage(releases))
 await write('compare/jobber', comparePage())
+await write('subprocessors', subprocessorsPage())
 
 // Inject the generated module grid wherever a page asks for it.
 const marker = '<!--modules-grid-->'
