@@ -1,4 +1,4 @@
-import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { ddb } from './db'
 import { ulid } from './ids'
 import type { ContactEventRow, ContactRow, ContactStatus } from './types'
@@ -207,9 +207,18 @@ export async function updateContact(
   return merged
 }
 
-export async function deleteContact(tenantId: string, contactId: string): Promise<void> {
-  await ddb.send(new DeleteCommand({ TableName: Tables.contacts(), Key: { tenantId, contactId } }))
-}
+/*
+ * deleteContact used to live here. It removed one row from the contacts table
+ * and nothing else, while contactId is written onto quotes, bookings,
+ * enquiries, reviews, invoices and payments, and the whole interaction history
+ * sits in contactEvents. An owner who pressed the delete button believed they
+ * had served an erasure request and had not.
+ *
+ * It is gone rather than deprecated, because an exported function that quietly
+ * does a tenth of what its name promises is a trap the next caller will fall
+ * into. Use eraseContact from ./erasure, which cascades and reports what it
+ * kept and why (issue 133).
+ */
 
 /**
  * The contract every other module uses. Find this person by email or phone,

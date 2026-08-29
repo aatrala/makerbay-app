@@ -38,6 +38,19 @@ const HOSTED_ZONE_ID = 'Z0426429227N069XCDM8M'
 const EMBEDDING_MODEL = 'amazon.titan-embed-text-v2:0'
 const CHAT_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
 
+/**
+ * Whether SES has been granted production access (issue 76).
+ *
+ * This gates one thing: who sends Cognito's sign-up and password-reset codes.
+ * While it is false those go through Cognito's own sender, because the SES
+ * sandbox authorises the recipient and a new customer is never a verified
+ * identity - see the comment on the user pool below for what that cost us.
+ *
+ * Verify before flipping, do not assume:
+ *   aws sesv2 get-account --profile makerbay --query ProductionAccessEnabled
+ */
+const SES_LEFT_THE_SANDBOX = false
+
 export class MakerbayStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props)
@@ -602,17 +615,42 @@ export class MakerbayStack extends cdk.Stack {
       selfSignUpEnabled: true,
       signInAliases: { email: true },
       autoVerify: { email: true },
-      email: cognito.UserPoolEmail.withSES({
-        fromEmail: `hello@${DOMAIN}`,
-        fromName: 'MakerBay',
-        sesRegion: this.region,
-        // The identity SES already verifies for the rest of our mail.
-        sesVerifiedDomain: DOMAIN,
-        // Same config set as everything else, so a bounced signup code shows
-        // up in the same event stream and the same alarms rather than being
-        // the one category of mail we are blind to (issue 107).
-        configurationSetName: emailConfigSet.configurationSetName,
-      }),
+      /*
+       * Cognito's own sender, NOT SES, until SES leaves the sandbox
+       * (issues 104, 137).
+       *
+       * Issue 104 moved these onto SES for a good reason: branded templates, a
+       * real From address, and signup codes visible in the same bounce stream
+       * as everything else. It also silently welded the front door shut.
+       *
+       * In the SES sandbox, SES authorises the RECIPIENT as well as the
+       * sender, and a person signing up has by definition never been verified.
+       * So every real signup got MessageRejected, the six-digit code was never
+       * sent, and the account could never be confirmed. Proven against the
+       * live account on 2026-08-29: sending to an unverified address returns
+       * "Email address is not verified". Nobody could create an account
+       * between 27 and 29 August.
+       *
+       * withCognito() has no such restriction. The cost is a no-reply From
+       * address, no config-set visibility for auth mail, and a 50/day ceiling
+       * instead of 200 - all of which are survivable, and none of which matter
+       * if nobody can sign up. The branded templates are unaffected: the
+       * userVerification block below and the CustomMessage trigger both still
+       * apply.
+       *
+       * Flip SES_LEFT_THE_SANDBOX to true when production access is granted
+       * (issue 76). Do not flip it hopefully - check with
+       * `aws sesv2 get-account --query ProductionAccessEnabled`.
+       */
+      email: SES_LEFT_THE_SANDBOX
+        ? cognito.UserPoolEmail.withSES({
+            fromEmail: `hello@${DOMAIN}`,
+            fromName: 'MakerBay',
+            sesRegion: this.region,
+            sesVerifiedDomain: DOMAIN,
+            configurationSetName: emailConfigSet.configurationSetName,
+          })
+        : cognito.UserPoolEmail.withCognito(`hello@${DOMAIN}`),
       userVerification: {
         emailSubject: verifyMail.subject,
         emailBody: verifyMail.html,
@@ -678,7 +716,27 @@ export class MakerbayStack extends cdk.Stack {
     })
     coreFn.addToRolePolicy(sesSendPolicy)
     tickets.grantReadWriteData(coreFn)
-    const contactsFn = fn('ContactsApiFn', 'modules/contacts/api/src/handler.ts', tableEnv, {
+    const contactsFn = fn('ContactsApiFn', 'modules/contacts/api/src/handler.ts', {
+      ...tableEnv,
+      /*
+       * Erasing a person reaches across six modules (issue 133).
+       *
+       * contactId is written onto quotes, bookings, enquiries, reviews,
+       * invoices and payments, so deleting only the contacts row left almost
+       * everything behind while telling the owner the person was gone. The
+       * cascade needs to see those tables to count them and to remove them.
+       *
+       * Invoices and payments are READ ONLY below, deliberately: they are
+       * kept as tax records and the code refuses to delete them, so the IAM
+       * should refuse too rather than trusting the code to keep its promise.
+       */
+      TABLE_QUOTES: quotes.tableName,
+      TABLE_BOOKINGS: bookings.tableName,
+      TABLE_REQUESTS: requests.tableName,
+      TABLE_REVIEWS: reviews.tableName,
+      TABLE_INVOICES: invoices.tableName,
+      TABLE_PAYMENTS: payments.tableName,
+    }, {
       // A CSV import writes one row at a time; give it room for a real list.
       timeoutSeconds: 29,
       memorySize: 512,
@@ -1238,6 +1296,12 @@ export class MakerbayStack extends cdk.Stack {
     bus.grantPutEventsTo(coreFn)
 
     for (const t of [contacts, contactEvents]) t.grantReadWriteData(contactsFn)
+    // The erasure cascade (issue 133). Write, because these are deleted with
+    // the person.
+    for (const t of [quotes, bookings, requests, reviews]) t.grantReadWriteData(contactsFn)
+    // Read only. These are kept as tax records, so the role should not be able
+    // to delete them even if a future bug asks it to.
+    for (const t of [invoices, payments]) t.grantReadData(contactsFn)
     // Each module writes its own tables plus Contacts, and may send email.
     for (const f of [requestsFn, bookingFn, quotesFn]) {
       for (const t of [contacts, contactEvents, tenants, users, apiKeys, entitlements, grants]) {

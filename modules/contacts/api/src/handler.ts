@@ -5,7 +5,8 @@ import {
   appendContactEvent,
   contactsToCsv,
   createContact,
-  deleteContact,
+  contactFootprint,
+  eraseContact,
   getContact,
   importContactsCsv,
   json,
@@ -33,6 +34,12 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && path === '/v1/contacts') return await create(tenantId, event)
     if (method === 'GET' && path === '/v1/contacts/export') return await exportCsv(tenantId)
     if (method === 'POST' && path === '/v1/contacts/import') return await importCsv(tenantId, event)
+
+    // What a delete would actually remove, asked before the delete happens.
+    // A destructive action reaching across six modules has to state its blast
+    // radius first (issue 133).
+    const fp = path.match(/^\/v1\/contacts\/([0-9A-Z]{26})\/footprint$/)
+    if (method === 'GET' && fp) return await footprint(tenantId, fp[1])
 
     const one = path.match(/^\/v1\/contacts\/([0-9A-Z]{26})$/)
     if (method === 'GET' && one) return await detail(tenantId, one[1])
@@ -133,9 +140,28 @@ async function patch(tenantId: string, contactId: string, event: Event): Promise
   return json(200, { contact })
 }
 
+async function footprint(tenantId: string, contactId: string): Promise<APIGatewayProxyResultV2> {
+  const f = await contactFootprint(tenantId, contactId)
+  if (!f) return json(404, { error: 'not_found' })
+  return json(200, f)
+}
+
+/**
+ * Erase the person, not just their name (issue 133).
+ *
+ * This used to call deleteContact, which removed one row from the contacts
+ * table and left the quotes, bookings, enquiries, reviews and the entire
+ * interaction history in place. An owner who pressed it believed they had
+ * served an erasure request and had not, which made THEM non-compliant.
+ *
+ * The response says what went and what stayed, because an owner who told a
+ * customer "you have been removed" needs to be able to say what that actually
+ * meant when the invoice is still on file.
+ */
 async function remove(tenantId: string, contactId: string): Promise<APIGatewayProxyResultV2> {
-  await deleteContact(tenantId, contactId)
-  return json(200, { deleted: contactId })
+  if (!(await getContact(tenantId, contactId))) return json(404, { error: 'not_found' })
+  const report = await eraseContact(tenantId, contactId)
+  return json(200, report)
 }
 
 async function addNote(tenantId: string, contactId: string, event: Event): Promise<APIGatewayProxyResultV2> {
