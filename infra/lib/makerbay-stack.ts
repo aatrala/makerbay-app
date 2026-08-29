@@ -30,6 +30,7 @@ import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-ap
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 import { authEmail } from '@makerbay/email'
 import { MonitoringStack } from './monitoring-stack'
+import { LogRetentionStack } from './log-retention-stack'
 import { SetupStack } from './setup-stack'
 
 const repoRoot = path.join(__dirname, '..', '..')
@@ -664,13 +665,25 @@ export class MakerbayStack extends cdk.Stack {
     })
 
     // ── Functions ────────────────────────────────────────────────────────
+    /*
+     * Every Lambda this stack creates, so log retention can be applied to all
+     * of them at the end (issue 135). Collected rather than listed, because a
+     * hand-maintained list is exactly what let hero-setup.js ship without a
+     * cache-buster.
+     */
+    const allFunctions: lambda.IFunction[] = []
+    const record = <T extends lambda.IFunction>(f: T): T => {
+      allFunctions.push(f)
+      return f
+    }
+
     const fn = (
       name: string,
       entry: string,
       env: Record<string, string>,
       opts?: { timeoutSeconds?: number; memorySize?: number },
     ) =>
-      new NodejsFunction(this, name, {
+      record(new NodejsFunction(this, name, {
         entry: path.join(repoRoot, entry),
         runtime: lambda.Runtime.NODEJS_22_X,
         architecture: lambda.Architecture.ARM_64,
@@ -679,7 +692,7 @@ export class MakerbayStack extends cdk.Stack {
         depsLockFilePath: path.join(repoRoot, 'package-lock.json'),
         bundling: { minify: false, target: 'node22' },
         environment: env,
-      })
+      }))
 
     const tableEnv = {
       TABLE_TENANTS: tenants.tableName,
@@ -2510,5 +2523,26 @@ function handler(event) {
     new cdk.CfnOutput(this, 'StripeSecretArn', { value: stripeSecret.secretArn })
     new cdk.CfnOutput(this, 'WebhookUrl', { value: `https://api.${DOMAIN}/v1/billing/webhook` })
     new cdk.CfnOutput(this, 'DataSourceId', { value: dataSource.attrDataSourceId })
+
+    /*
+     * Twelve-month log retention, in infrastructure at last (issue 135).
+     *
+     * The privacy policy promises logs are kept twelve months and deleted.
+     * That was true only because it had been applied by hand, with a note in
+     * CLAUDE.md asking whoever added the next Lambda to remember - and a
+     * published commitment that depends on somebody remembering is not a
+     * commitment.
+     *
+     * It goes in a nested stack because CDK's logRetention prop costs one
+     * resource per function, and thirty-odd of those against 493 of a hard
+     * 500 is what forced the manual workaround in the first place. The nested
+     * stack costs the parent ONE and brings its own budget.
+     *
+     * Every function is collected as it is built rather than listed here, so
+     * a new Lambda is covered on the day it is written.
+     */
+    new LogRetentionStack(this, 'LogRetention', {
+      functionNames: allFunctions.map((f) => f.functionName),
+    })
   }
 }

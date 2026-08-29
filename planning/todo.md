@@ -2254,7 +2254,7 @@ routes, so today every staff member can suspend tenants and grant
 entitlements. A writable legal-identity control cannot be gated until that is
 real. Filed as its own item rather than folded in here.
 
-### 131a — Staff roles are plumbed but enforced nowhere ⛔ P1
+### 131a — Staff roles are plumbed but enforced nowhere ✅ superseded, see below
 `authorizer.ts` reads `role`, the handler types it and writes it to the
 audit row, and no route checks it. Every staff member can suspend a tenant,
 grant an entitlement and remove a suppression. Blocks making 131 editable.
@@ -2716,7 +2716,7 @@ the gaps between numbers are 232/231/232 - sub-pixel rounding. Two columns at
 800px, one at 375px, no horizontal scroll at any width.
 
 
-### 149 — Erasing a contact gives no warning before it happens ⛔ mine, small
+### 149 — Erasing a contact gives no warning before it happens ✅ fixed 2026-08-29
 The cascade from issue 133 works and is deployed: erasing a contact removes
 their history, quotes, bookings, enquiries and reviews, and reports what it
 kept. `GET /v1/contacts/{id}/footprint` returns those counts BEFORE the
@@ -2732,7 +2732,7 @@ Not a data-loss bug; the right rows are removed either way. It is a
 consent bug: a destructive action reaching that far must state its blast
 radius first, and the endpoint that does it is already live and unused.
 
-### 131a — Staff roles enforced nowhere ⛔ P1, and now a published commitment
+### 131a — Staff roles enforced nowhere ✅ enforced 2026-08-29
 `requireRole` does not exist: zero of the admin routes check the role the
 authorizer reads and the audit row records. Any staff member can suspend a
 tenant, grant an entitlement, reset an owner's password and read any
@@ -2800,3 +2800,46 @@ the card returned null one branch earlier - introduced when the checklist was
 made to retire itself.
 
 No new endpoints and no new CloudFormation resources; the stack stays at 493.
+
+
+### 131a, 135, 149 — closed 2026-08-29
+
+**131a, staff roles.** Eight routes now check a role: grant create, grant
+revoke and tenant suspend need `owner`; password reset, unsuppress,
+conversations, the audit log and the SES test need `admin`. Reading
+platform-level lists stays open to support, because that is support work.
+Refusals are written to the same append-only audit as successes - "who tried
+and was stopped" is what an access log is for.
+
+Conversations sit at admin rather than owner deliberately: it is the screen a
+support person needs most for "the assistant answered wrong", and every view
+is already audited individually.
+
+Checked the live staff table before deploying - the single row carries
+`role: owner`, so enforcement could not lock the founder out.
+
+`roles.test.ts` reads the route table and fails if a state-changing handler
+is called without a guard in the same branch. **The first version of that test
+could not fail:** a 400-character lookback reached back into the previous
+route's guard, so deleting one still passed. Caught by trying it. Now anchored
+to the nearest preceding `if (method ===`, and verified to fail.
+
+**135, log retention.** Now in a `LogRetention` nested stack. Every function
+built through the `fn()` helper is collected as it is created, so a new
+Lambda is covered on the day it is written rather than when somebody
+remembers. The parent grew by one resource, 493 to 494; the 34 retention
+resources live in the nested stack's own budget.
+
+First deploy covered 33 of 34 groups. The miss was the signup canary, which is
+built inside the monitoring nested stack and is therefore invisible to the
+parent's sweep - so both nested stacks now carry their own retention. **37 of
+37 groups retained, zero without**, verified against the live account.
+CLAUDE.md's manual instruction has been replaced, since following it would now
+be wrong.
+
+**149, erasure consent.** The Contacts screen now asks the footprint endpoint
+first and shows what goes and what stays, with the reason for each thing that
+stays, before offering "Erase, permanently". It also surfaces the two honest
+caveats the API already returns: a do-not-email record is kept because
+deleting it would mean emailing somebody who asked us to stop, and anonymous
+chat is not linked to a contact so it is not covered.

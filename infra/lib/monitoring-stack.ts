@@ -6,6 +6,7 @@ import * as events from 'aws-cdk-lib/aws-events'
 import * as eventsTargets from 'aws-cdk-lib/aws-events-targets'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
+import * as logs from 'aws-cdk-lib/aws-logs'
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as sns from 'aws-cdk-lib/aws-sns'
 import { Construct } from 'constructs'
@@ -70,6 +71,18 @@ export class MonitoringStack extends cdk.NestedStack {
     )
     // No PutMetricData permission needed: the canary emits its metric in
     // CloudWatch's embedded format, so the log line IS the metric.
+
+    /*
+     * This function is built here rather than through the parent's fn()
+     * helper, so the parent's log-retention sweep does not see it (issue 135).
+     * A nested stack's functions have to carry their own retention or the
+     * twelve-month promise quietly excludes them - which is exactly what
+     * happened: 33 of 34 groups were covered and this was the one.
+     */
+    new logs.LogRetention(this, 'CanaryLogs', {
+      logGroupName: `/aws/lambda/${canary.functionName}`,
+      retention: logs.RetentionDays.ONE_YEAR,
+    })
 
     new events.Rule(this, 'SignupCanarySchedule', {
       schedule: events.Schedule.rate(cdk.Duration.minutes(15)),

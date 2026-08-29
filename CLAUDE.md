@@ -34,17 +34,18 @@
   cache-control and invalidates. `--check` reports drift and exits non-zero.
   This bit issue 118 phase 2: the server-rendered shell shipped correct while
   the script it loads was two days stale.
-- **Lambda log retention is NOT in CDK, and cannot be.** The privacy policy
-  promises logs are kept 12 months, so every `/aws/lambda/Makerbay-*` group
-  is set to 365 days. It is applied with `aws logs put-retention-policy`
-  rather than the `logRetention` prop because that prop adds one
-  `Custom::LogRetention` resource per function: 32 functions against 492 of a
-  hard 500 would put the stack at 524 and fail to deploy. **After adding a new
-  Lambda, set retention on its log group** or the policy becomes untrue again:
-  `aws logs put-retention-policy --log-group-name /aws/lambda/<name>
-  --retention-in-days 365 --profile makerbay`. Note Git Bash mangles the
-  leading slash - prefix the command with `MSYS_NO_PATHCONV=1`. The proper
-  fix is a nested stack holding the retention resources (issue 135).
+- **Lambda log retention IS in CDK now** (issue 135), in the `LogRetention`
+  nested stack. Every function built through the `fn()` helper is collected
+  as it is created and covered automatically, so a new Lambda needs nothing.
+  The prop could not go in the main stack - it costs one
+  `Custom::LogRetention` per function, and thirty-odd against a hard 500
+  would fail to deploy - so the nested stack carries them and costs the parent
+  one resource. **A function created OUTSIDE that helper** (anything in a
+  nested stack, like the setup handler or the signup canary) **must add its
+  own `logs.LogRetention`**: the parent's sweep cannot see it, and that is
+  exactly how the canary ended up as the one uncovered group out of 34.
+  The privacy policy promises twelve months, so this is a published
+  commitment, not housekeeping.
 - Contacts is core: always on, `entitlementKey: null`. Other modules attach
   customers with `upsertContact` and `appendContactEvent` from `packages/core`
   rather than keeping their own list.

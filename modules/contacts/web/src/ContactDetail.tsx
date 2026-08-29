@@ -3,6 +3,21 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Empty, Notice, Skeleton, api, explain, when } from '@makerbay/web-kit'
 import type { Contact } from './ContactsList'
 
+interface FootprintEntry {
+  label: string
+  count: number
+  keptReason?: string
+  unknown?: boolean
+}
+
+interface Footprint {
+  name?: string
+  email?: string
+  erase: FootprintEntry[]
+  keep: FootprintEntry[]
+  notes: string[]
+}
+
 interface TimelineEvent {
   sk: string
   moduleId: string
@@ -22,6 +37,7 @@ const STATUSES = ['new', 'contacted', 'active', 'won', 'lost']
 export default function ContactDetail() {
   const { contactId = '' } = useParams()
   const navigate = useNavigate()
+  const [footprint, setFootprint] = useState<Footprint | null>(null)
   const [data, setData] = useState<Detail | null>(null)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
@@ -86,10 +102,31 @@ export default function ContactDetail() {
     })
   }
 
-  const remove = () => {
-    if (!confirm('Delete this contact and their history? This cannot be undone.')) return
+  /*
+   * Two steps, because erasing a contact reaches across six modules (149).
+   *
+   * The cascade has been correct since issue 133 - it removes the history,
+   * quotes, bookings, enquiries and reviews, and keeps invoices and payments
+   * as tax records. What was missing was telling anyone. This screen fired a
+   * DELETE behind a browser confirm, so an owner served what they believed
+   * was an erasure request without being shown what would go or what would
+   * stay, and only learned invoices survive afterwards - if anything had
+   * displayed the response, which nothing did.
+   *
+   * The footprint endpoint was built for exactly this and had no caller.
+   */
+  const askToErase = () => {
+    setError('')
+    setBusy(true)
+    void api('GET', `/v1/contacts/${contactId}/footprint`)
+      .then((f) => setFootprint(f as Footprint))
+      .catch((e) => setError(explain(e)))
+      .finally(() => setBusy(false))
+  }
+
+  const confirmErase = () => {
+    setBusy(true)
     void (async () => {
-      setBusy(true)
       try {
         await api('DELETE', `/v1/contacts/${contactId}`)
         navigate('/contacts')
@@ -232,9 +269,59 @@ export default function ContactDetail() {
       </div>
 
       <div className="card">
-        <h2>Delete contact</h2>
-        <p>Removes this person and their whole history. Export first if you might want them back.</p>
-        <button className="danger" onClick={remove} disabled={busy}>Delete contact</button>
+        <h2>Erase this person</h2>
+        {!footprint ? (
+          <>
+            <p>
+              Removes them and everything about them, across bookings, quotes,
+              enquiries and reviews. Some records have to stay, and the next
+              screen names each one and why.
+            </p>
+            <button className="danger" onClick={askToErase} disabled={busy}>
+              {busy ? 'Checking…' : 'Show me what this removes'}
+            </button>
+          </>
+        ) : (
+          <>
+            <p>
+              <strong>This removes {footprint.erase.reduce((n, e) => n + e.count, 0)} records</strong>
+              {footprint.name ? ` about ${footprint.name}` : ''}:
+            </p>
+            <ul className="checklist">
+              {footprint.erase.map((e) => (
+                <li key={e.label}>
+                  {e.unknown
+                    ? `${e.label} — could not be counted just now`
+                    : `${e.count} ${e.label}`}
+                </li>
+              ))}
+            </ul>
+            {footprint.keep.some((k) => k.count > 0) && (
+              <>
+                <p className="mt"><strong>These stay, and here is why:</strong></p>
+                <ul className="checklist">
+                  {footprint.keep.filter((k) => k.count > 0).map((k) => (
+                    <li key={k.label}>
+                      {k.count} {k.label}
+                      <span className="meta block">{k.keptReason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {footprint.notes.map((n) => (
+              <p className="meta mt" key={n.slice(0, 24)}>{n}</p>
+            ))}
+            <div className="row mt" style={{ alignItems: 'center' }}>
+              <button className="danger" onClick={confirmErase} disabled={busy}>
+                {busy ? 'Erasing…' : 'Erase, permanently'}
+              </button>
+              <button className="ghost" onClick={() => setFootprint(null)} disabled={busy}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </>
   )

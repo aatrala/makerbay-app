@@ -46,6 +46,51 @@ interface StaffContext {
 }
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<StaffContext>
 
+/**
+ * Staff roles, finally enforced (issue 131a).
+ *
+ * The authorizer has always read `role` and this handler has always written
+ * it to the audit row, and not one route ever checked it. Every staff member
+ * could suspend a tenant, grant an entitlement, reset an owner's password and
+ * read any workspace's customer conversations.
+ *
+ * The risk was bounded only by there being one of us. It stopped being purely
+ * an internal matter when Annex II of the published DPA committed to
+ * role-based limits by 31 October 2026 - it is now a statement customers can
+ * read, and it needed to be true.
+ *
+ * Three tiers, because three is what the work actually divides into:
+ *   support  read, and reply to tickets. Nothing that changes state.
+ *   admin    the operational writes a support person legitimately needs.
+ *   owner    anything that moves money or can end a business's access.
+ *
+ * The authorizer defaults an absent role to 'support', so a staff row written
+ * without one lands on least privilege rather than most.
+ */
+const ROLES: Record<string, number> = { support: 0, admin: 1, owner: 2 }
+
+const hasRole = (staff: StaffContext, min: keyof typeof ROLES): boolean =>
+  (ROLES[staff.staffRole] ?? 0) >= (ROLES[min] ?? 0)
+
+/**
+ * Refuse, and record the refusal.
+ *
+ * A denial is written to the same append-only audit as a success, because
+ * "who tried to do what and was stopped" is exactly what an access log is
+ * for - and the one thing a review after an incident will ask.
+ */
+async function denyRole(
+  staff: StaffContext,
+  min: string,
+  action: string,
+): Promise<APIGatewayProxyResultV2> {
+  await audit(staff, action, '-', { required: min, had: staff.staffRole }, 'denied')
+  return json(403, {
+    error: 'role_required',
+    message: `This needs the ${min} role. You have ${staff.staffRole}.`,
+  })
+}
+
 const PLANS: Record<string, Record<string, number>> = {
   free: { messagesPerMonth: 200, sources: 20, sourceBytes: 25 * 1024 * 1024 },
   pro: { messagesPerMonth: 100000, sources: 500, sourceBytes: 2 * 1024 * 1024 * 1024 },
@@ -69,31 +114,60 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'GET' && detail) return await tenantDetail(detail[1])
 
     const grantPath = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/grants$/)
-    if (method === 'POST' && grantPath) return await createGrant(staff, grantPath[1], event)
+    if (method === 'POST' && grantPath) {
+      if (!hasRole(staff, 'owner')) return await denyRole(staff, 'owner', 'grant.create')
+      return await createGrant(staff, grantPath[1], event)
+    }
 
     const revokePath = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/grants\/revoke$/)
-    if (method === 'POST' && revokePath) return await revoke(staff, revokePath[1], event)
+    if (method === 'POST' && revokePath) {
+      if (!hasRole(staff, 'owner')) return await denyRole(staff, 'owner', 'grant.revoke')
+      return await revoke(staff, revokePath[1], event)
+    }
 
-    if (method === 'POST' && path === '/admin/v1/email/test') return await sendTestEmail(staff, event)
+    if (method === 'POST' && path === '/admin/v1/email/test') {
+      if (!hasRole(staff, 'admin')) return await denyRole(staff, 'admin', 'email.test')
+      return await sendTestEmail(staff, event)
+    }
 
     if (method === 'GET' && path === '/admin/v1/lookup') return await lookupByEmail(staff, event)
 
     const reset = path.match(/^\/admin\/v1\/users\/([A-Za-z0-9-]+)\/reset-password$/)
-    if (method === 'POST' && reset) return await resetPassword(staff, reset[1], event)
+    if (method === 'POST' && reset) {
+      if (!hasRole(staff, 'admin')) return await denyRole(staff, 'admin', 'user.reset_password')
+      return await resetPassword(staff, reset[1], event)
+    }
 
     const susp = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/(suspend|unsuspend)$/)
-    if (method === 'POST' && susp) return await setSuspension(staff, susp[1], susp[2] === 'suspend', event)
+    if (method === 'POST' && susp) {
+      if (!hasRole(staff, 'owner')) return await denyRole(staff, 'owner', 'tenant.suspend')
+      return await setSuspension(staff, susp[1], susp[2] === 'suspend', event)
+    }
 
     if (method === 'GET' && path === '/admin/v1/platform') return platformIdentity()
 
-    if (method === 'GET' && path === '/admin/v1/audit') return await auditLog(event)
+    // A support contractor should not be able to browse every other staff
+    // member's actions.
+    if (method === 'GET' && path === '/admin/v1/audit') {
+      if (!hasRole(staff, 'admin')) return await denyRole(staff, 'admin', 'audit.read')
+      return await auditLog(event)
+    }
 
     if (method === 'GET' && path === '/admin/v1/email/suppression') return await suppressionLookup(staff, event)
     const unsup = path.match(/^\/admin\/v1\/email\/suppression\/(.+)$/)
-    if (method === 'DELETE' && unsup) return await suppressionRemove(staff, decodeURIComponent(unsup[1]))
+    if (method === 'DELETE' && unsup) {
+      if (!hasRole(staff, 'admin')) return await denyRole(staff, 'admin', 'email.unsuppress')
+      return await suppressionRemove(staff, decodeURIComponent(unsup[1]))
+    }
 
+    // Customer content. Admin rather than owner: it is the screen a support
+    // person needs most for "the assistant answered wrong", and every view is
+    // already audited individually.
     const convs = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/conversations$/)
-    if (method === 'GET' && convs) return await conversations(staff, convs[1], event)
+    if (method === 'GET' && convs) {
+      if (!hasRole(staff, 'admin')) return await denyRole(staff, 'admin', 'conversations.list')
+      return await conversations(staff, convs[1], event)
+    }
 
     if (method === 'GET' && path === '/admin/v1/overview') return await overview()
     if (method === 'GET' && path === '/admin/v1/tickets') return await listAllTickets()

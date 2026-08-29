@@ -5,6 +5,7 @@ import * as events from 'aws-cdk-lib/aws-events'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as logs from 'aws-cdk-lib/aws-logs'
 import type { Construct } from 'constructs'
 
 /**
@@ -113,6 +114,12 @@ export class SetupStack extends cdk.NestedStack {
       resources: ['*'],
     }))
 
+    // Its own retention, for the same reason as the canary: a nested stack's
+    // functions are invisible to the parent's sweep (issue 135).
+    new logs.LogRetention(this, 'HandlerLogs', {
+      logGroupName: `/aws/lambda/${fn.functionName}`,
+      retention: logs.RetentionDays.ONE_YEAR,
+    })
     this.jobs = jobs
     this.handler = fn
     new cdk.CfnOutput(this, 'SetupJobsTable', { value: jobs.tableName })
