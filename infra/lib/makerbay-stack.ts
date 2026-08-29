@@ -1452,6 +1452,15 @@ export class MakerbayStack extends cdk.Stack {
      */
     setupStack.jobs.grantReadData(presenceFn)
     presenceFn.addEnvironment('TABLE_SETUPJOBS', setupStack.jobs.tableName)
+    /*
+     * First-party page counting (issue 145). The rate-limit table is a
+     * generic (pk, sk) counter with a TTL, which is exactly the shape of a
+     * daily page-view bucket; its name is about its first use, not its only
+     * one. Reusing it costs no CloudFormation resource, which matters at 492
+     * of a hard 500.
+     */
+    rateLimit.grantReadWriteData(presenceFn)
+    presenceFn.addEnvironment('TABLE_RATELIMIT', rateLimit.tableName)
     bus.grantPutEventsTo(presenceFn)
     for (const t of [sources, conversations, assistantConfig, configVersions]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)

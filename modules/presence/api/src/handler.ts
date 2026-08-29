@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { GetCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import {
   ddb,
   getEffectiveEntitlement,
@@ -132,6 +132,28 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
    * Always noindex: this is a proposal about somebody else's business, built
    * from their public website, and it must never appear in a search result.
    */
+  /*
+   * First-party page counting (issue 145).
+   *
+   * There was no analytics on this platform at all, so nothing about the
+   * marketing site could be measured or checked. A hosted script was not an
+   * option: the privacy policy promises no third-party trackers and a
+   * build-failing test enforces it, so the beacon is ours.
+   *
+   * It lives on this route for the same reason the preview does - a new route
+   * is a CloudFormation resource and the stack is at 492 of a hard 500 - and
+   * because this is already the public edge Lambda.
+   *
+   * A daily count per path. No cookie, no identifier, nothing that could
+   * follow one person between two requests.
+   */
+  const statPath = String(event.queryStringParameters?.stat ?? '').trim()
+  if (statPath) {
+    await countPageView(statPath, String(event.queryStringParameters?.ref ?? ''))
+    // 204 with no body: the caller is a beacon and reads nothing.
+    return { statusCode: 204, headers: { 'cache-control': 'no-store' }, body: '' }
+  }
+
   const previewToken = String(event.queryStringParameters?.preview ?? '').trim()
   if (previewToken) {
     const draft = await getProspectPreview(previewToken)
@@ -472,3 +494,48 @@ async function photoConfirm(tenantId: string, event: Event): Promise<APIGatewayP
 
 // Re-exported so the module's own defaults are the single source in tests.
 export { DEFAULT_PRESENCE }
+
+/**
+ * One page view, counted into a daily bucket.
+ *
+ * Uses the rate-limit table, which is a generic (pk, sk) counter with a TTL -
+ * exactly this shape. The name is about its first use, not its only one.
+ *
+ * Fails silently on purpose: a counter that can break a page render is worse
+ * than no counter, and there is nobody to tell.
+ */
+async function countPageView(rawPath: string, rawRef: string): Promise<void> {
+  const table = process.env.TABLE_RATELIMIT
+  if (!table) return
+  // Bounded and normalised, so a hostile caller cannot write unbounded keys.
+  const path = rawPath.replace(/[^a-zA-Z0-9/_-]/g, '').slice(0, 80) || '/'
+  const ref = rawRef.replace(/[^a-zA-Z0-9.-]/g, '').slice(0, 60)
+  const day = new Date().toISOString().slice(0, 10)
+  try {
+    await ddb.send(new UpdateCommand({
+      TableName: table,
+      Key: { pk: `stat#${day}`, sk: path },
+      UpdateExpression: 'ADD #n :one SET #exp = if_not_exists(#exp, :exp)',
+      ExpressionAttributeNames: { '#n': 'n', '#exp': 'expiresAt' },
+      ExpressionAttributeValues: {
+        ':one': 1,
+        // 400 days, so a year-on-year comparison is possible later.
+        ':exp': Math.floor(Date.now() / 1000) + 400 * 24 * 60 * 60,
+      },
+    }))
+    if (ref) {
+      await ddb.send(new UpdateCommand({
+        TableName: table,
+        Key: { pk: `statref#${day}`, sk: ref },
+        UpdateExpression: 'ADD #n :one SET #exp = if_not_exists(#exp, :exp)',
+        ExpressionAttributeNames: { '#n': 'n', '#exp': 'expiresAt' },
+        ExpressionAttributeValues: {
+          ':one': 1,
+          ':exp': Math.floor(Date.now() / 1000) + 400 * 24 * 60 * 60,
+        },
+      }))
+    }
+  } catch (err) {
+    console.warn('page view not counted', { path, err: String(err) })
+  }
+}

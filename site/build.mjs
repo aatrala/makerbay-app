@@ -113,6 +113,7 @@ const page = ({ title, description, path, body }) => `<!doctype html>
 ${header()}
 ${body}
 ${footer()}
+<script src="/assets/stat.js" defer></script>
 <script src="https://widget.makerbay.app/widget.js" data-slug="makerbay-hq" data-color="#c2410c" defer></script>
 </body>
 </html>

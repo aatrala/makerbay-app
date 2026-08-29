@@ -24,7 +24,7 @@
       <h2>The short version</h2>
       <ul>
         <li>We sell nothing to anybody. No advertising, no data brokers, no tracking across the web.</li>
-        <li>The website sets <strong>no cookies at all</strong>, and there is no Google Analytics or similar on it.</li>
+        <li>The website sets <strong>no cookies at all</strong>. We count page views ourselves, without cookies and without any third party.</li>
         <li>Your data is stored in the United States, on Amazon Web Services. If that matters to you, read section 5.</li>
         <li>Two companies can touch it: Amazon Web Services, and Stripe for payments. That is the whole list.</li>
         <li>The AI assistant runs inside our own AWS account. Nothing you or your customers type is used to train anybody&rsquo;s model.</li>
@@ -202,6 +202,18 @@
       Analytics, no advertising pixel, and no third-party tracker of any kind
       on it. That is why you have not been shown a cookie banner: there is
       nothing to consent to.
+    </p>
+    <p>
+      <strong>We do count page views</strong>, and it would be dishonest to
+      leave that out. A small script of our own records which page was opened
+      and the website you came from &mdash; just the site, never the full
+      address. It sets no cookie, stores nothing on your device, and creates no
+      identifier, so it cannot tell one visitor from another or follow anyone
+      between two pages. What it produces is a daily total per page. If your
+      browser sends a Do Not Track signal we skip it entirely. You can read the
+      whole script at
+      <a href="/assets/stat.js">makerbay.app/assets/stat.js</a> &mdash; it is
+      about forty lines.
     </p>
     <p>
       When you sign in to the app, your browser stores a sign-in token so you
