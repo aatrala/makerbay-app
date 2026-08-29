@@ -13,6 +13,14 @@ import { api, Skeleton, type Me } from '@makerbay/web-kit'
  * Six parallel reads of existing endpoints; no API of its own.
  */
 
+interface Waiting {
+  openRequests: number
+  todayBookings: Array<{ time: string; who: string }>
+  quotesWaiting: number
+  quotesStale: number
+  invoicesUnpaid: number
+}
+
 interface Step {
   key: string
   label: string
@@ -29,6 +37,58 @@ export const isSetupDismissed = (tenantId: string): boolean =>
 export default function Home({ me, onDismiss }: { me: Me; onDismiss?: () => void }) {
   const tenantId = me.tenant?.tenantId ?? ''
   const [steps, setSteps] = useState<Step[] | null>(null)
+  const [waiting, setWaiting] = useState<Waiting | null>(null)
+
+  /*
+   * What needs you today (issue 136).
+   *
+   * The checklist below answers "how do I set this up", which stops being the
+   * question after the first week. This answers "what needs me now", which is
+   * the question every morning after that - and it is why an owner would open
+   * the dashboard at all rather than only when something breaks.
+   *
+   * Four reads of endpoints that already exist, filtered here rather than
+   * server-side: adding an aggregate route would cost a CloudFormation
+   * resource against a hard 500 limit, and at one workspace's volume the
+   * client can do this arithmetic itself.
+   */
+  useEffect(() => {
+    void (async () => {
+      const [reqs, books, quotes, invoices] = await Promise.all([
+        api('GET', '/v1/requests').catch(() => ({})),
+        api('GET', '/v1/booking/bookings').catch(() => ({})),
+        api('GET', '/v1/quotes').catch(() => ({})),
+        api('GET', '/v1/quotes/invoices').catch(() => ({})),
+      ])
+      const today = new Date().toISOString().slice(0, 10)
+      const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString()
+
+      const sent = (quotes.quotes ?? []).filter((q: { status?: string }) => q.status === 'sent')
+      setWaiting({
+        openRequests: (reqs.requests ?? []).filter(
+          (r: { status?: string }) => r.status !== 'closed' && r.status !== 'archived',
+        ).length,
+        todayBookings: (books.bookings ?? [])
+          .filter((b: { startsAt?: string; status?: string }) =>
+            (b.startsAt ?? '').slice(0, 10) === today
+            && b.status !== 'cancelled' && b.status !== 'pending_payment')
+          .sort((a: { startsAt?: string }, b: { startsAt?: string }) =>
+            String(a.startsAt).localeCompare(String(b.startsAt)))
+          .map((b: { startsAt?: string; name?: string; serviceName?: string }) => ({
+            time: new Date(String(b.startsAt)).toLocaleTimeString(undefined, {
+              hour: 'numeric', minute: '2-digit',
+            }),
+            who: b.name || b.serviceName || 'Booking',
+          })),
+        quotesWaiting: sent.length,
+        // Sent, unanswered, and going cold. The nudge the review asked for.
+        quotesStale: sent.filter((q: { sentAt?: string }) => (q.sentAt ?? '') < threeDaysAgo).length,
+        invoicesUnpaid: (invoices.invoices ?? []).filter(
+          (i: { status?: string }) => i.status === 'sent' || i.status === 'overdue',
+        ).length,
+      })
+    })()
+  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -93,14 +153,68 @@ export default function Home({ me, onDismiss }: { me: Me; onDismiss?: () => void
   return (
     <>
       <h1>Welcome{me.tenant?.name ? `, ${me.tenant.name}` : ''}</h1>
-      <p>
-        Your assistant, booking diary and review requests are already switched on.
-        Six small steps make them yours.
-      </p>
+      {steps && !steps.every((s) => s.done) && (
+        <p>
+          Your assistant, booking diary and review requests are already switched on.
+          Six small steps make them yours.
+        </p>
+      )}
+
+      {waiting && (
+        (waiting.openRequests + waiting.todayBookings.length
+          + waiting.quotesWaiting + waiting.invoicesUnpaid) === 0 ? (
+          <div className="card">
+            <h2>Nothing needs you right now</h2>
+            <p className="meta">
+              No one waiting, nothing booked today, no quote or invoice outstanding.
+              This is the screen doing its job.
+            </p>
+          </div>
+        ) : (
+          <div className="card">
+            <h2>What needs you</h2>
+            <ul className="checklist mt">
+              {waiting.openRequests > 0 && (
+                <li>
+                  <Link to="/requests">
+                    <strong>{waiting.openRequests}</strong>{' '}
+                    {waiting.openRequests === 1 ? 'person is' : 'people are'} waiting to hear back
+                  </Link>
+                </li>
+              )}
+              {waiting.todayBookings.length > 0 && (
+                <li>
+                  <Link to="/booking">
+                    <strong>Today:</strong>{' '}
+                    {waiting.todayBookings.map((b) => `${b.time} ${b.who}`).join(' · ')}
+                  </Link>
+                </li>
+              )}
+              {waiting.quotesWaiting > 0 && (
+                <li>
+                  <Link to="/quotes">
+                    <strong>{waiting.quotesWaiting}</strong>{' '}
+                    {waiting.quotesWaiting === 1 ? 'quote is' : 'quotes are'} out and unanswered
+                    {waiting.quotesStale > 0 && ` — ${waiting.quotesStale} sent over three days ago`}
+                  </Link>
+                </li>
+              )}
+              {waiting.invoicesUnpaid > 0 && (
+                <li>
+                  <Link to="/quotes/invoices">
+                    <strong>{waiting.invoicesUnpaid}</strong>{' '}
+                    {waiting.invoicesUnpaid === 1 ? 'invoice is' : 'invoices are'} unpaid
+                  </Link>
+                </li>
+              )}
+            </ul>
+          </div>
+        )
+      )}
 
       {!steps ? (
         <div className="card"><Skeleton rows={6} /></div>
-      ) : (
+      ) : steps.every((s) => s.done) ? null : (
         <div className="card">
           <div className="row baseline">
             <h2 className="grow">Getting started</h2>

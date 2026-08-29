@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { getBillingSummary, getMe, isLoggedIn, type Me } from '@makerbay/web-kit'
-import { enabledModules, landingPath } from './modules'
+import { enabledModules } from './modules'
 import Login from './pages/Login'
 import Onboarding from './pages/Onboarding'
 import Shell from './pages/Shell'
@@ -10,7 +10,7 @@ import UsagePage from './pages/UsagePage'
 import WorkspacePage from './pages/WorkspacePage'
 import ActivityPage from './pages/ActivityPage'
 import Support from './pages/Support'
-import Home, { isSetupDismissed } from './pages/Home'
+import Home from './pages/Home'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -38,11 +38,18 @@ export default function App() {
 
   if (!me?.tenant) return <Onboarding onDone={() => { setLoading(true); void reload() }} />
 
-  // Until the six setup steps are done (or the owner hides them), Home is
-  // the front door - it shows the shape of the whole product (issue 74).
+  /*
+   * Home is the front door, always (issues 74, 136).
+   *
+   * It began as a first-run setup checklist and reverted to a module once
+   * that was done, which meant that from week two the dashboard opened on
+   * whichever module happened to be registered first rather than on anything
+   * that needed the owner. Home now leads with what is waiting - people to
+   * reply to, today's diary, quotes out, invoices unpaid - and hides the
+   * checklist once it is finished, so it stays worth landing on.
+   */
   sessionStorage.removeItem('mb.justOnboarded')
-  const setupDone = isSetupDismissed(me.tenant.tenantId)
-  const landing = setupDone ? landingPath(me, false) : '/home'
+  const landing = '/home'
 
   const modules = enabledModules(me)
 

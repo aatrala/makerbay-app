@@ -47,20 +47,11 @@ const CORE = new Set(['contacts', 'setup'])
 export const enabledModules = (me: Me): DashboardModule[] =>
   ALL.filter((m) => CORE.has(m.id) || me.entitlements?.modules[m.id]?.enabled)
 
-/**
- * Where to send someone after they land, preferring their first module.
- * First-run routing moved to /home (issue 74), so this is only ever the
- * settled-workspace landing now.
+/*
+ * landingPath lived here. It picked the first non-core, non-taster module to
+ * land on, and issue 136 replaced it: everyone now lands on /home, which
+ * leads with what is actually waiting instead of with whichever module
+ * happened to sort first. Deleted rather than left unused - the CORE and
+ * taster rules it encoded were only ever about choosing a landing module, and
+ * nothing chooses one any more.
  */
-export const landingPath = (me: Me, _firstRun: boolean): string => {
-  const modules = enabledModules(me)
-  // Core modules are always present, so they must never win the landing slot
-  // over the module the customer actually signed up for. Neither may a
-  // taster: Genie is "enabled" for everyone as a teaser, which made every
-  // settled workspace land on the upsell chat (issue 81).
-  const owned = (m: DashboardModule) =>
-    !CORE.has(m.id) && me.entitlements?.modules[m.id]?.plan !== 'taster'
-  const first = modules.find(owned) ?? modules.find((m) => !CORE.has(m.id)) ?? modules[0]
-  if (!first) return '/usage'
-  return first.nav[0].to
-}
