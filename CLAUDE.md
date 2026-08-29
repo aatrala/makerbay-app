@@ -34,6 +34,17 @@
   cache-control and invalidates. `--check` reports drift and exits non-zero.
   This bit issue 118 phase 2: the server-rendered shell shipped correct while
   the script it loads was two days stale.
+- **Lambda log retention is NOT in CDK, and cannot be.** The privacy policy
+  promises logs are kept 12 months, so every `/aws/lambda/Makerbay-*` group
+  is set to 365 days. It is applied with `aws logs put-retention-policy`
+  rather than the `logRetention` prop because that prop adds one
+  `Custom::LogRetention` resource per function: 32 functions against 492 of a
+  hard 500 would put the stack at 524 and fail to deploy. **After adding a new
+  Lambda, set retention on its log group** or the policy becomes untrue again:
+  `aws logs put-retention-policy --log-group-name /aws/lambda/<name>
+  --retention-in-days 365 --profile makerbay`. Note Git Bash mangles the
+  leading slash - prefix the command with `MSYS_NO_PATHCONV=1`. The proper
+  fix is a nested stack holding the retention resources (issue 135).
 - Contacts is core: always on, `entitlementKey: null`. Other modules attach
   customers with `upsertContact` and `appendContactEvent` from `packages/core`
   rather than keeping their own list.

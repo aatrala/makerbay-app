@@ -26,10 +26,14 @@ const { ListTablesCommand } = await import('@aws-sdk/client-dynamodb')
 const tables = (await raw.send(new ListTablesCommand({}))).TableNames.filter((t) => t.startsWith('makerbay-'))
 
 /** A row belongs to the tenant when any of its id-shaped fields says so. */
+// Matches privacy-delete.mjs: unsubscribe tokens live under a reserved
+// 'unsub-token' partition with the real workspace in `forTenant`, so without
+// the third test an export silently omits them.
 const owns = (item) =>
-  item.tenantId === tenantId ||
-  (typeof item.pk === 'string' && item.pk.startsWith(tenantId)) ||
-  (typeof item.targetTenantId === 'string' && item.targetTenantId === tenantId)
+  item.tenantId === tenantId
+  || (typeof item.pk === 'string' && item.pk.startsWith(tenantId))
+  || (typeof item.targetTenantId === 'string' && item.targetTenantId === tenantId)
+  || item.forTenant === tenantId
 
 const out = { tenantId, exportedAt: new Date().toISOString(), tables: {}, knowledgeObjects: [] }
 let total = 0

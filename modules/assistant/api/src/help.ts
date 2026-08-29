@@ -91,7 +91,36 @@ const titleOf = (source: SourceRow): string => {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
-const GOOGLE_FONT_RE = /^[A-Za-z0-9 ]{2,40}$/
+/**
+ * Heading faces a Genie tenant may choose, and the stylesheet each lives in.
+ *
+ * This used to accept any family name matching /^[A-Za-z0-9 ]{2,40}$/ and
+ * interpolate it into a fonts.googleapis.com URL. That made Google a recipient
+ * of every help-centre reader's IP address, on a page belonging to a
+ * tradesperson whose customers have never heard of us (issue 133). The faces
+ * are now served from our own bucket, which means the choice has to be from a
+ * list rather than open - a real constraint, and the right trade.
+ */
+const VENDORED_FONTS: Record<string, string> = {
+  'Archivo': 'archivo',
+  'Fraunces': 'fraunces',
+  'Source Sans 3': 'fraunces',
+  'Source Serif 4': 'sourceserif4',
+  'IBM Plex Sans': 'ibmplexsans',
+  'IBM Plex Mono': 'ibmplexsans',
+  'Zilla Slab': 'zillaslab',
+  'Public Sans': 'zillaslab',
+  'Inter': 'inter',
+  'Nunito': 'nunito',
+  'Nunito Sans': 'nunito',
+  'Playfair Display': 'playfairdisplay',
+  'Lora': 'playfairdisplay',
+}
+
+const vendoredFont = (name?: string): string | undefined =>
+  name && Object.prototype.hasOwnProperty.call(VENDORED_FONTS, name)
+    ? VENDORED_FONTS[name]
+    : undefined
 
 // ── Theme definitions ────────────────────────────────────────────────────
 
@@ -107,25 +136,25 @@ const THEME_FONTS: Record<HelpTheme, ThemeDef> = {
     bodyFont: "'Segoe UI', system-ui, -apple-system, sans-serif",
   },
   bold: {
-    fontHref: 'https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&display=swap',
+    fontHref: 'https://chat.makerbay.app/fonts/archivo.css',
     headFont: "'Archivo', 'Segoe UI', sans-serif",
     bodyFont: "'Archivo', 'Segoe UI', sans-serif",
   },
   editorial: {
     fontHref:
-      'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Source+Sans+3:wght@400;600&display=swap',
+      'https://chat.makerbay.app/fonts/sourceserif4.css',
     headFont: "'Source Serif 4', Georgia, serif",
     bodyFont: "'Source Sans 3', 'Segoe UI', sans-serif",
   },
   ledger: {
     fontHref:
-      'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap',
+      'https://chat.makerbay.app/fonts/ibmplexsans.css',
     headFont: "'IBM Plex Sans', 'Segoe UI', sans-serif",
     bodyFont: "'IBM Plex Sans', 'Segoe UI', sans-serif",
   },
   signwriter: {
     fontHref:
-      'https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600&family=Public+Sans:wght@400;600;700&display=swap',
+      'https://chat.makerbay.app/fonts/zillaslab.css',
     headFont: "'Zilla Slab', Georgia, serif",
     bodyFont: "'Public Sans', 'Segoe UI', sans-serif",
   },
@@ -152,7 +181,7 @@ export const resolveTheme = (
 const styles = (theme: HelpTheme, brand: string, opts: HelpRenderOpts, fontHeadOverride?: string): string => {
   const def = THEME_FONTS[theme]
   const headFont =
-    opts.tier === 'genie' && fontHeadOverride && GOOGLE_FONT_RE.test(fontHeadOverride)
+    opts.tier === 'genie' && vendoredFont(fontHeadOverride)
       ? `'${fontHeadOverride}', ${def.headFont}`
       : def.headFont
   const dark = shade(brand, 0.42)
@@ -472,10 +501,8 @@ const chrome = (o: {
   jsonLd?: string
 }): string => {
   const def = THEME_FONTS[o.theme]
-  const genieFont =
-    o.opts.tier === 'genie' && o.config?.helpFontHead && GOOGLE_FONT_RE.test(o.config.helpFontHead)
-      ? `https://fonts.googleapis.com/css2?family=${encodeURIComponent(o.config.helpFontHead).replace(/%20/g, '+')}:wght@500;600;700&display=swap`
-      : undefined
+  const genieSlug = o.opts.tier === 'genie' ? vendoredFont(o.config?.helpFontHead) : undefined
+  const genieFont = genieSlug ? `https://chat.makerbay.app/fonts/${genieSlug}.css` : undefined
   const fontLinks = [def.fontHref, genieFont]
     .filter(Boolean)
     .map((href) => `<link rel="stylesheet" href="${href}" />`)
@@ -500,7 +527,7 @@ ${o.noindex ? '<meta name="robots" content="noindex" />' : ''}
 <meta property="og:description" content="${esc(o.description)}" />
 <meta property="og:url" content="${esc(o.canonical)}" />
 <meta property="og:type" content="article" />
-${fontLinks ? '<link rel="preconnect" href="https://fonts.googleapis.com" />\n' + fontLinks : ''}
+${fontLinks ? '<link rel="preconnect" href="https://chat.makerbay.app" crossorigin />\n' + fontLinks : ''}
 ${o.jsonLd ? `<script type="application/ld+json">${o.jsonLd}</script>` : ''}
 <style>${styles(o.theme, o.brand, o.opts, o.config?.helpFontHead)}</style>
 </head>

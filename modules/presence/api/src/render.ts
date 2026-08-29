@@ -50,29 +50,34 @@ export type SubPage = 'services' | 'faq' | 'reviews'
 export const SUB_PAGES: SubPage[] = ['services', 'faq', 'reviews']
 
 /**
- * Curated font pairings (Genie). Each maps to Google-hosted faces loaded
- * only when chosen - taste and speed over an endless font menu.
+ * Curated font pairings (Genie), loaded only when chosen.
+ *
+ * Served from our own bucket, not Google's. These pages are read by
+ * homeowners with no relationship to MakerBay, and while the faces came from
+ * fonts.googleapis.com every one of those visits handed the reader's IP
+ * address to a third party (issue 133). Regenerate with
+ * scripts/vendor-fonts.mjs; publish with scripts/publish-embed.mjs.
  */
 const FONT_PAIR_DEFS: Record<Exclude<FontPair, 'system'>, { head: string; body: string; href: string }> = {
   classic: {
     head: "'Playfair Display', Georgia, serif",
     body: "'Lora', Georgia, serif",
-    href: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Lora:wght@400;600&display=swap',
+    href: 'https://chat.makerbay.app/fonts/playfairdisplay.css',
   },
   modern: {
     head: "'Inter', 'Segoe UI', sans-serif",
     body: "'Inter', 'Segoe UI', sans-serif",
-    href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap',
+    href: 'https://chat.makerbay.app/fonts/inter.css',
   },
   editorial: {
     head: "'Fraunces', Georgia, serif",
     body: "'Source Sans 3', 'Segoe UI', sans-serif",
-    href: 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600&display=swap',
+    href: 'https://chat.makerbay.app/fonts/fraunces.css',
   },
   friendly: {
     head: "'Nunito', 'Segoe UI', sans-serif",
     body: "'Nunito Sans', 'Segoe UI', sans-serif",
-    href: 'https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&family=Nunito+Sans:wght@400;600&display=swap',
+    href: 'https://chat.makerbay.app/fonts/nunito.css',
   },
 }
 
@@ -639,7 +644,7 @@ ${directive === 'noindex' ? '<meta name="robots" content="noindex, follow" />' :
 <meta property="og:url" content="${esc(canonical)}" />
 <meta property="og:type" content="website" />
 ${config.photoKey ? `<meta property="og:image" content="${PHOTO_ORIGIN}/${esc(config.photoKey)}" />` : ''}
-${config.fontPair && config.fontPair !== 'system' ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="stylesheet" href="${FONT_PAIR_DEFS[config.fontPair].href}" />` : ''}
+${config.fontPair && config.fontPair !== 'system' ? `<link rel="preconnect" href="https://chat.makerbay.app" crossorigin /><link rel="stylesheet" href="${FONT_PAIR_DEFS[config.fontPair].href}" />` : ''}
 <script type="application/ld+json">${localBusinessJsonLd(input)}</script>
 ${(!sub || sub === 'faq') && blockOrder.includes('faq') ? faqJsonLd : ''}
 <style>${styles(brand, theme, config)}</style>

@@ -24,8 +24,15 @@ const ddb = DynamoDBDocumentClient.from(raw)
 const s3 = new S3Client({ region })
 
 const tables = (await raw.send(new ListTablesCommand({}))).TableNames.filter((t) => t.startsWith('makerbay-'))
+// The third test is not decoration. Unsubscribe tokens are stored in MailLog
+// under a RESERVED partition - tenantId is the literal string 'unsub-token'
+// and the owning workspace is in `forTenant` - so a row holding a customer's
+// email address matched neither of the first two tests and survived a delete
+// that reported success. See packages/core/src/unsubscribe.ts.
 const owns = (item) =>
-  item.tenantId === tenantId || (typeof item.pk === 'string' && item.pk.startsWith(tenantId))
+  item.tenantId === tenantId
+  || (typeof item.pk === 'string' && item.pk.startsWith(tenantId))
+  || item.forTenant === tenantId
 
 let deleted = 0
 for (const table of tables) {

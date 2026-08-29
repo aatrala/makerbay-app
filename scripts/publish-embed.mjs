@@ -35,16 +35,38 @@ const TYPES = {
   '.js': 'text/javascript',
   '.css': 'text/css',
   '.html': 'text/html; charset=utf-8',
+  '.woff2': 'font/woff2',
 }
 /** Short, because the shell references these unversioned. */
 const CACHE = 'public, max-age=300, must-revalidate'
+/**
+ * Fonts are different: the filename carries a hash of the source URL, so a
+ * given file's bytes never change. A year is the point of vendoring them -
+ * the reader fetches each face once instead of on every visit.
+ */
+const CACHE_IMMUTABLE = 'public, max-age=31536000, immutable'
+const cacheFor = (name) => (name.endsWith('.woff2') ? CACHE_IMMUTABLE : CACHE)
 
 const s3 = new S3Client({ region: REGION })
 const cf = new CloudFrontClient({ region: REGION })
 
 const md5 = (buf) => createHash('md5').update(buf).digest('hex')
 
-const files = (await readdir(SRC)).filter((f) => TYPES[path.extname(f)])
+/**
+ * Recursive, so the vendored fonts under fonts/ are published too. The key
+ * keeps the subdirectory, because the stylesheets reference the woff2 files
+ * relatively and would 404 against a flattened bucket.
+ */
+const walk = async (dir, prefix = '') => {
+  const out = []
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${e.name}` : e.name
+    if (e.isDirectory()) out.push(...(await walk(path.join(dir, e.name), rel)))
+    else if (TYPES[path.extname(e.name)]) out.push(rel)
+  }
+  return out
+}
+const files = await walk(SRC)
 if (files.length === 0) {
   console.error(`No publishable files in ${SRC}`)
   process.exit(2)
@@ -74,7 +96,7 @@ for (const name of files) {
     Key: name,
     Body: body,
     ContentType: TYPES[path.extname(name)],
-    CacheControl: CACHE,
+    CacheControl: cacheFor(name),
   }))
 }
 

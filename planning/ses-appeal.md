@@ -1,5 +1,29 @@
 # SES production access appeal (issue 76)
 
+> ## DO NOT SEND THIS YET (2026-08-29)
+>
+> The paragraph beginning "There is no marketing mail" claims the product has
+> "no mechanism anywhere for uploading a list or sending in bulk". **That is
+> not true.** `importContactsCsv` accepts 2,000 rows per call
+> (`packages/core/src/contacts.ts:368`) and `POST /v1/visibility/ask`
+> emails a pasted Google review link to any one of those contacts with no
+> entitlement check, no cap and no rate limit
+> (`modules/visibility/api/src/handler.ts`). That is a list upload and a bulk
+> send, two API calls apart, available on a free workspace.
+>
+> The appeal offers AWS "sample messages of any of the four categories". A
+> reviewer who looks will catch the misstatement, and being caught overstating
+> a control is far more damaging than describing a weak one honestly.
+>
+> Also wrong: the four categories omit request replies, and describe review
+> asks as "one review invitation after a completed job", which is true of the
+> Reviews module but not of the manual ask, which has no completed-job
+> precondition.
+>
+> Fix the product first (per-tenant daily send caps, review asks gated on a
+> verified business), then rewrite this to describe what was built, then send.
+> Tracked as issue 134.
+
 **Where it goes:** AWS Console → Support → Your support cases → case
 **178755823800807** → *Reply*. A previous request was denied, and after a
 denial the API refuses re-submission, so replying to the existing case is the
