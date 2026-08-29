@@ -49,7 +49,12 @@ export interface SetupStackProps extends cdk.NestedStackProps {
 
 export class SetupStack extends cdk.NestedStack {
   /** The parent attaches the API route to this. */
-  public readonly handler: lambda.IFunction
+  /**
+   * The setup Lambda. Concrete rather than IFunction so the parent can add
+   * the Chromium renderer to it after both exist - the renderer is defined
+   * further down the parent stack than this nested one (issue 146).
+   */
+  public readonly handler: NodejsFunction
   /**
    * The jobs table, exposed so the parent can grant read access.
    *

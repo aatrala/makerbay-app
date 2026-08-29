@@ -491,12 +491,39 @@ header nav .signin { font-weight: 600; }
    have stacked into a column. Centred here because `.band` centres its text,
    and the links need lifting off the dark ground - the default accent is a
    dark orange that all but disappears on near-black. */
+/*
+ * The band centres its text, but .sec-head sets a max-width with no auto side
+ * margins - so the heading and lede CENTRED THEIR TEXT inside a block that was
+ * still hard against the left edge, while the stats spanned the full width
+ * beside them. Two different centres in one section (issue 147).
+ */
+.band .sec-head { margin-left: auto; margin-right: auto; }
+
+/*
+ * A grid, not a flex row. As a row each stat was only as wide as its own
+ * label, and the four labels run from two words to eight - so the numbers
+ * above them landed at irregular intervals and the whole row read as ragged.
+ * Equal columns put the numbers on a regular rhythm regardless of what is
+ * written underneath them.
+ */
 .band .cl-stats {
-  display: flex; gap: 40px; flex-wrap: wrap;
-  justify-content: center; margin: 30px 0 0;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 26px; max-width: 900px; margin: 34px auto 0;
+  align-items: start;
 }
-.band .cl-stats b { font-size: 30px; }
+.band .cl-stats div { text-align: center; }
+.band .cl-stats b { font-size: 32px; margin-bottom: 6px; }
+.band .cl-stats span { display: block; text-wrap: balance; line-height: 1.45; }
 .band .meta { color: #a8a29e; max-width: 62ch; margin-left: auto; margin-right: auto; }
+
+@media (max-width: 860px) {
+  /* Two up rather than four: at four, an eight-word label wraps to three
+     lines and the row stops reading as a row. */
+  .band .cl-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 20px; }
+}
+@media (max-width: 420px) {
+  .band .cl-stats { grid-template-columns: 1fr; }
+}
 .band a { color: #fdba74; text-decoration: underline; text-underline-offset: 2px; }
 .band a:hover { color: #fed7aa; }
 

@@ -2670,3 +2670,47 @@ page.
 without consent is misleading-conduct exposure in Australia), referral or
 affiliate programme, community hub, team seats, multi-location, or five to ten
 templated vertical pages.
+
+### 146 — Building a page from a JS-built site failed ✅ fixed 2026-08-29
+Founder pasted https://greenlightyourapp.com into the homepage and got "there
+was not enough on that page to work from" - which reads like a judgement about
+their website rather than a missing capability of ours.
+
+**Root cause: issue 43's fix never reached this path.** That issue taught the
+scraper to fall back to headless Chromium for pages whose HTML arrives empty,
+and wired `RENDER_FN_NAME` to `assistantFn` alone. The setup module shipped
+later and never got it, and `renderedFallback` returns `undefined` the moment
+that variable is unset - silently, with no log and no error. So every
+JavaScript-built site pasted into the hero failed, and the same site issue 43
+was originally about was still broken through a different door.
+
+Fixed by giving the setup Lambda the env var and invoke permission. The nested
+stack now exposes its handler as a concrete NodejsFunction so the parent can
+wire the renderer after both exist.
+
+**Verified against production:** the reported URL now returns a real draft
+("AI QA Platform", with a real intro) and the page preview renders.
+
+**Worth noting for next time:** a capability wired per-Lambda by an env var is
+invisible when it is missing. Nothing failed loudly; the fallback simply did
+not exist. Any future consumer of scrapePage has the same trap waiting.
+
+### 147 — Alignment in the proof band ✅ fixed 2026-08-29
+Founder screenshot: the heading and lede sat left of centre while the four
+stats spanned the full width, and the numbers were irregularly spaced.
+
+Two causes. `.sec-head` sets `max-width: 62ch` with no auto side margins, so
+inside a centred band the TEXT centred while the BLOCK stayed hard left - two
+different centres in one section. And `.cl-stats` was a flex row, so each stat
+was only as wide as its own label; with labels running from two words to
+eight, the numbers landed at irregular intervals.
+
+Now a four-column grid with equal columns, so the numbers sit on a regular
+rhythm regardless of what is written underneath. Two columns under 860px, one
+under 420px - at four, an eight-word label wraps to three lines and the row
+stops reading as a row.
+
+**Measured on the live page rather than eyeballed:** at 1440px the heading,
+the stats and the wrap all share one centre, all four columns are 206px, and
+the gaps between numbers are 232/231/232 - sub-pixel rounding. Two columns at
+800px, one at 375px, no horizontal scroll at any width.

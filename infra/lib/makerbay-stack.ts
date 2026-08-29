@@ -1022,6 +1022,23 @@ export class MakerbayStack extends cdk.Stack {
       },
     })
     assistantFn.addEnvironment('RENDER_FN_NAME', scrapeRenderFn.functionName)
+    /*
+     * The hero flow needs the renderer too (issue 146).
+     *
+     * Issue 43 taught the scraper to fall back to headless Chromium for pages
+     * whose HTML arrives empty, and wired it to the assistant. The setup
+     * module shipped later and never got it, so scrapePage there had no
+     * fallback at all - and renderedFallback returns undefined the moment
+     * RENDER_FN_NAME is unset, silently.
+     *
+     * The result: every JavaScript-built site pasted into the homepage came
+     * back "there was not enough on that page to work from", which reads like
+     * a judgement about their website rather than a missing capability of
+     * ours. Reported for greenlightyourapp.com, the same site issue 43 was
+     * originally about.
+     */
+    setupStack.handler.addEnvironment('RENDER_FN_NAME', scrapeRenderFn.functionName)
+    scrapeRenderFn.grantInvoke(setupStack.handler)
     scrapeRenderFn.grantInvoke(assistantFn)
     // Streaming chat. API Gateway cannot stream a response, so this runs
     // behind a Lambda Function URL in RESPONSE_STREAM mode and is fronted by
