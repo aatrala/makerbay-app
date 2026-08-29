@@ -17,6 +17,15 @@ export interface TenantRow {
    * but a wrong one that looks deliberate gets quoted in.
    */
   currency?: string
+  /**
+   * Whether this workspace has asked to be billed for message overage
+   * instead of stopping at its included allowance (issue 138).
+   *
+   * Absent means no, and that is the promise the pricing page makes: "opt-in
+   * - the default is a polite stop". Do not default it to true for paid
+   * plans; that is exactly the bug this field exists to close.
+   */
+  overageOptIn?: boolean
   slug: string
   plan: string
   status: 'active' | 'suspended'

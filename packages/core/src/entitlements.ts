@@ -1,5 +1,5 @@
 import { DeleteCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import { ddb, getEntitlements } from './db'
+import { ddb, getEntitlements, getTenant } from './db'
 import { ulid } from './ids'
 import { freeModuleLimits, isFreeModule } from './version'
 
@@ -87,6 +87,20 @@ export function resolveEntitlement(
   grants: Grant[],
   enabledBaseline: boolean,
   now = new Date().toISOString(),
+  /**
+   * Whether the workspace has ASKED to be billed for overage (issue 138).
+   *
+   * Defaults to false, and that default is the whole point. The pricing page
+   * promises "$0.02 each, opt-in - the default is a polite stop" and the FAQ
+   * promises "never a surprise bill", while this function used to return
+   * 'billed' for every Stripe-backed paid grant the moment the webhook
+   * landed. Nobody had opted in to anything; there was no opt-in to make.
+   *
+   * Opaque billing is the loudest complaint in this market and the reason
+   * that sentence is on the page. Charging against it was the one promise we
+   * could least afford to break.
+   */
+  overageOptIn = false,
 ): EffectiveEntitlement {
   const live = grants.filter((g) => g.moduleId === moduleId && isLive(g, now))
   const baseline = FREE_BASELINE[moduleId]?.limits ?? {}
@@ -104,7 +118,12 @@ export function resolveEntitlement(
     enabled: enabledBaseline || live.length > 0,
     planTier,
     limits,
-    overage: live.some((g) => g.source === 'stripe' && g.planTier !== 'free') ? 'billed' : 'block',
+    // Both halves required: a paid Stripe grant CAN be billed for overage,
+    // and only an explicit opt-in means it will be.
+    overage:
+      overageOptIn && live.some((g) => g.source === 'stripe' && g.planTier !== 'free')
+        ? 'billed'
+        : 'block',
     sources: [...new Set(live.map((g) => g.source))],
   }
 }
@@ -136,7 +155,14 @@ export async function putStripeGrant(params: {
         planTier: params.planTier,
         limits: params.limits,
         status: params.active ? 'active' : 'inactive',
-        overage: 'billed',
+        /*
+         * Not 'billed' (issue 138). This row records that a subscription
+         * exists, and it is not the place to decide whether the customer
+         * agreed to overage - they express that on their own billing screen,
+         * and resolveEntitlement reads it from the tenant. Writing 'billed'
+         * here was how every paid workspace ended up billed without asking.
+         */
+        overage: 'block',
         grantedBy: 'stripe-webhook',
         stripeSubscriptionId: params.stripeSubscriptionId,
         stripeEventCreated: params.stripeEventCreated,
@@ -231,11 +257,18 @@ export async function getEffectiveEntitlement(
     }
   }
 
-  const [enabledMap, grants] = await Promise.all([
+  const [enabledMap, grants, tenant] = await Promise.all([
     getEntitlements(tenantId),
     listGrants(tenantId, moduleId),
+    getTenant(tenantId),
   ])
-  return resolveEntitlement(moduleId, grants, Boolean(enabledMap.modules[moduleId]?.enabled))
+  return resolveEntitlement(
+    moduleId,
+    grants,
+    Boolean(enabledMap.modules[moduleId]?.enabled),
+    undefined,
+    tenant?.overageOptIn === true,
+  )
 }
 
 /**

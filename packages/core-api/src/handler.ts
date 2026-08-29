@@ -29,6 +29,7 @@ import {
   slugCandidates,
   currencyForLocale,
   ulid,
+  setOverageOptIn,
   updateTenantName,
   updateTenantSlug,
   type ApiKeyRow,
@@ -341,6 +342,13 @@ async function patchWorkspace(ctx: CallerContext, event: Event): Promise<APIGate
   const tenantId = await requireOwner(ctx)
   if (!tenantId) return json(403, { error: 'owner_required' })
   const body = JSON.parse(event.body ?? '{}')
+
+  // The customer's own answer to "bill me past the allowance, or stop?"
+  // (issue 138). Nothing else may set it - not the Stripe webhook, which used
+  // to decide this on their behalf.
+  if (body.overageOptIn !== undefined) {
+    await setOverageOptIn(tenantId, body.overageOptIn === true)
+  }
 
   if (body.name !== undefined) {
     const name = String(body.name).trim().slice(0, 80)

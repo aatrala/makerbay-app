@@ -193,6 +193,28 @@ export async function updateTenantSlug(tenantId: string, slug: string): Promise<
   )
 }
 
+/**
+ * Whether this workspace wants to be billed past its included allowance, or
+ * stopped politely at it (issue 138).
+ *
+ * Every attribute name is aliased. `overageOptIn` is not a reserved word
+ * today, but the reserved list is long and the failure mode is a runtime
+ * ValidationException that unit tests with mocked DynamoDB cannot see - which
+ * is exactly how issue 107's `at` shipped.
+ */
+export async function setOverageOptIn(tenantId: string, optIn: boolean): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Tables.tenants(),
+      Key: { tenantId },
+      UpdateExpression: 'SET #o = :o',
+      ExpressionAttributeNames: { '#o': 'overageOptIn' },
+      ExpressionAttributeValues: { ':o': optIn },
+      ConditionExpression: 'attribute_exists(tenantId)',
+    }),
+  )
+}
+
 export async function updateTenantName(tenantId: string, name: string): Promise<void> {
   await ddb.send(
     new UpdateCommand({

@@ -15,6 +15,7 @@ interface Summary {
   usage: { messages: number; includedMessages: number; overageMessages: number; estimatedOverageCents: number }
   subscription: { status: string; currentPeriodEnd: string | null; hasCustomer: boolean }
   webhook: { lastAt: string | null; lastType: string | null; lastLive: boolean | null }
+  entitlement: { planTier: string; overage: 'billed' | 'block'; sources: string[] }
   billingConfigured: boolean
   testMode: boolean | null
 }
@@ -29,6 +30,16 @@ export default function Billing() {
   const [busy, setBusy] = useState(false)
   const [resetMsg, setResetMsg] = useState('')
   const [resetTone, setResetTone] = useState<'ok' | 'err'>('ok')
+
+  const [savingOverage, setSavingOverage] = useState(false)
+
+  const setOverage = (on: boolean) => {
+    setSavingOverage(true)
+    void api('PATCH', '/v1/core/workspace', { overageOptIn: on })
+      .then(() => api('GET', '/v1/core/billing/summary').then(setData))
+      .catch((err) => setError(explain(err)))
+      .finally(() => setSavingOverage(false))
+  }
 
   useEffect(() => {
     api('GET', '/v1/core/billing/summary')
@@ -108,7 +119,7 @@ export default function Billing() {
     </>
   )
 
-  const { plan, plans, usage, subscription, webhook, testMode } = data
+  const { plan, plans, usage, subscription, webhook, testMode, entitlement } = data
   // A live workspace still hearing test-mode events has its webhook pointed
   // at the wrong endpoint, which is silent until an invoice goes missing.
   const modeMismatch = webhook.lastLive !== null && testMode !== null && webhook.lastLive === testMode
@@ -142,11 +153,46 @@ export default function Billing() {
           <span className="meta">{pct}% used</span>
         </div>
         <div className="bar"><div className={pct >= 90 ? 'over' : ''} style={{ width: `${pct}%` }} /></div>
-        {usage.overageMessages > 0 && (
+        {usage.overageMessages > 0 && entitlement?.overage === 'billed' && (
           <p className="hint mt">
             {usage.overageMessages.toLocaleString()} messages beyond your plan — estimated additional
             charge <strong>{money(usage.estimatedOverageCents)}</strong> on your next invoice.
           </p>
+        )}
+        {usage.overageMessages > 0 && entitlement?.overage !== 'billed' && (
+          <p className="hint mt">
+            You reached your included messages and we stopped there, as agreed. Nothing extra has
+            been charged. Turn on pay-as-you-go below if you would rather keep going.
+          </p>
+        )}
+
+        {/*
+          * The opt-in the pricing page has always promised (issue 138).
+          *
+          * "$0.02 each, opt-in — the default is a polite stop" was on the page
+          * while the code billed every paid workspace automatically. This is
+          * the control that makes the sentence true, and it defaults to off.
+          */}
+        {entitlement?.planTier && entitlement.planTier !== 'free' && (
+          <div className="card mt">
+            <label className="pick">
+              <input
+                type="checkbox"
+                checked={entitlement.overage === 'billed'}
+                disabled={savingOverage}
+                onChange={(e) => setOverage(e.target.checked)}
+              />
+              <span>
+                <strong>Keep going past my included messages</strong>
+                <br />
+                <span className="meta">
+                  {money(plan.overageCentsPerMessage)} per extra message, added to your next
+                  invoice. Leave this off and we stop at your allowance and tell you — never a
+                  surprise bill.
+                </span>
+              </span>
+            </label>
+          </div>
         )}
         {subscription.status !== 'none' && (
           <p className="meta mt">
