@@ -2354,7 +2354,7 @@ template, republish the review gallery with the two unreviewed templates, and
 add a test that fails if any file outside `packages/core/src/notify.ts`
 constructs a `SendEmailCommand` - the grep that would have caught this.
 
-### 133 — Terms of Service and Privacy Policy 📝 drafted, awaiting founder review
+### 133 — Terms of Service and Privacy Policy ✅ published 2026-08-29
 The site had neither, and no contact route at all. Drafted 2026-08-29 at
 `site/src/terms/index.html` and `site/src/privacy/index.html`, linked from
 every footer and added to the sitemap. Built and verified locally; NOT
@@ -2407,7 +2407,7 @@ respect except the one that mattered, and the unit suite was green throughout.
 Same shape as issue 107's reserved-keyword bug. Auth is the one flow where
 "deployed and typechecked" is not evidence of anything.
 
-### 138 — Overage is billed automatically while /pricing says opt-in ⛔ P1
+### 138 — Overage is billed automatically while /pricing says opt-in ✅ fixed 2026-08-29
 `packages/core/src/entitlements.ts:107` computes
 `overage: live.some(g => g.source === 'stripe' && g.planTier !== 'free') ? 'billed' : 'block'`,
 and `:139` writes `overage: 'billed'` unconditionally from the Stripe webhook.
@@ -2423,7 +2423,7 @@ making a claim the code contradicts. Build the toggle rather than weaken the
 page - the promise is a good one and it answers the market's loudest
 complaint cluster.
 
-### 139 — /compare/jobber is invisible ⛔ quick
+### 139 — /compare/jobber is invisible ✅ fixed 2026-08-29
 The page exists, is live, and has the price-mechanics table plus a "when
 Jobber is the better pick" section. But it is absent from the sitemap array in
 `site/build.mjs`, and the hand-written homepage footer does not link it (only
@@ -2431,7 +2431,7 @@ the generated `footer()` does, which the homepage does not use). A page built
 to rank, missing from the sitemap and unlinked from the highest-authority page
 on the domain, will not rank. Two lines.
 
-### 140 — Default quote terms contradict the quote's own expiry ⛔ P1
+### 140 — Default quote terms contradict the quote's own expiry ✅ fixed 2026-08-29
 `modules/quotes/api/src/db.ts:194` ships
 `terms: 'Valid for 30 days. Payment due on completion.'` on every quote. Set
 "Valid for" to 14 and the customer page reads "Valid for 30 days." one line
@@ -2447,7 +2447,7 @@ and given no way to recover. Booking confirmations have the same shape
 (`modules/booking/api/src/handler.ts:434`). Returning the URL is small and
 makes both survivable.
 
-### 142 — Two dead ends on the live site ⛔ quick
+### 142 — Two dead ends on the live site ✅ fixed 2026-08-29
 `site/src/index.html:351` links to `#modules`, an anchor removed when the
 modules grid was replaced. And `modules/setup/web/src/index.tsx:241` is a
 four-column diff table with no `.scroll-x` wrapper - the one table of thirty
@@ -2506,7 +2506,7 @@ except booking, which never read the field.
 and I agree: learn on one page before cloning it. It also pairs with 143, so
 the per-trade content now has a home when it happens.
 
-### 144 — DPA and sub-processors page 📝 drafted, awaiting founder review
+### 144 — DPA and sub-processors page ✅ published 2026-08-29
 `site/src/dpa/index.html` and a `/subprocessors` page generated from
 `legal/subprocessors.json`. Built and verified locally; **deliberately excluded
 from the site publish** so neither is live.
@@ -2525,7 +2525,7 @@ commencement and whether Genie is in scope; whether an Art 27 representative
 is needed in the EU and UK; whether TOLA makes us a designated communications
 provider; Stripe's role for Connect; and Ireland as the SCC governing law.
 
-### 134 — Free workspaces can send unlimited customer email ⛔ P1, blocks issue 76
+### 134 — Free workspaces can send unlimited customer email ✅ shipped 2026-08-29
 **Filed properly 2026-08-29.** It had been referenced from
 `planning/ses-appeal.md` and in conversation as though it were tracked, and it
 never was - a dangling issue number is worse than no issue, because everyone
@@ -2627,7 +2627,7 @@ case. Run the four pre-send checks at the top of the file first.
 **After it is granted:** flip `SES_LEFT_THE_SANDBOX` in the stack to move
 Cognito auth mail back onto SES (issue 137).
 
-### 145 — Growth audit of 2026-08-28, triaged 📝 awaiting founder decisions
+### 145 — Growth audit of 2026-08-28 ✅ every DO and Maybe item shipped
 Board: https://claude.ai/code/artifact/b590ac26-a812-4ee7-93cd-3449d27c829d
 
 Two agents verified all 16 recommendations against HEAD and the live site.
@@ -2714,3 +2714,31 @@ stops reading as a row.
 the stats and the wrap all share one centre, all four columns are 206px, and
 the gaps between numbers are 232/231/232 - sub-pixel rounding. Two columns at
 800px, one at 375px, no horizontal scroll at any width.
+
+
+### 149 — Erasing a contact gives no warning before it happens ⛔ mine, small
+The cascade from issue 133 works and is deployed: erasing a contact removes
+their history, quotes, bookings, enquiries and reviews, and reports what it
+kept. `GET /v1/contacts/{id}/footprint` returns those counts BEFORE the
+button, which is the whole point of building it.
+
+**The Contacts screen does not call it.** `ContactDetail.tsx:94` still fires
+a plain DELETE behind a browser confirm. So the owner triggers a cascade
+across six modules without being shown what it will remove or what it will
+keep, and only learns that invoices survive as tax records afterwards - if
+they read the response, which nothing displays.
+
+Not a data-loss bug; the right rows are removed either way. It is a
+consent bug: a destructive action reaching that far must state its blast
+radius first, and the endpoint that does it is already live and unused.
+
+### 131a — Staff roles enforced nowhere ⛔ P1, and now a published commitment
+`requireRole` does not exist: zero of the admin routes check the role the
+authorizer reads and the audit row records. Any staff member can suspend a
+tenant, grant an entitlement, reset an owner's password and read any
+workspace's customer conversations.
+
+The risk today is bounded - the staff count is one - but this is no longer
+only an internal matter. Annex II of the **published** DPA lists role-based
+limits as planned **by 31 October 2026**, so it is now a dated commitment in a
+contract customers can read.
