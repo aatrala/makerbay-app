@@ -2524,3 +2524,78 @@ notice date - the DPA's own promise enforced rather than hoped for.
 commencement and whether Genie is in scope; whether an Art 27 representative
 is needed in the EU and UK; whether TOLA makes us a designated communications
 provider; Stripe's role for Connect; and Ireland as the SCC governing law.
+
+### 134 — Free workspaces can send unlimited customer email ⛔ P1, blocks issue 76
+**Filed properly 2026-08-29.** It had been referenced from
+`planning/ses-appeal.md` and in conversation as though it were tracked, and it
+never was - a dangling issue number is worse than no issue, because everyone
+assumes somebody else wrote it down.
+
+**The finding that reframes it: "paid module" does not mean "paid workspace".**
+`MODULE_CATALOG` (`packages/core-api/src/handler.ts:50`) gives `assistant`,
+`booking` and `reviews` a free baseline and `createWorkspace` writes all three
+into every new workspace. `enableModule` has no payment check. So gating on
+`entitlementKey` would be a no-op - the check itself is the work.
+
+**Nine customer-bound send paths, none gated by a paid entitlement:**
+
+| Path | Capped? |
+|---|---|
+| Booking confirmation / reminder / cancellation | 20 bookings/mo |
+| Quote sent, invoice sent | **Uncapped.** `quotes` is a free module, so `freeLimits.quotesPerMonth: 200` is never read |
+| Request reply | Request *creation* capped at 500/mo; replies uncapped |
+| Review ask (Reviews module) | 20/mo |
+| Review ask (Get-found fallback) | **Uncapped** |
+| Google review ask (`POST /v1/visibility/ask`) | **Uncapped, free, no entitlement check** |
+
+**The worst path.** `importContactsCsv` takes 2,000 rows a call
+(`packages/core/src/contacts.ts:368`) and `/v1/visibility/ask` emails a pasted
+Google review link to any one of them - re-verified today, `ask()` has no
+entitlement check, no cap, no rate limit. That is a list upload and a bulk
+send two API calls apart, on a free workspace. It is also the mail flagged
+`optional: true`, i.e. the mail we already know people complain about.
+
+The free/paid split is inverted: the *paid, capped* Reviews module does the
+safe thing, and the *free, uncapped* visibility module does the risky one.
+
+**There is no send-rate limit of any kind.** `ratelimit.ts` is a good
+primitive with exactly one caller: wrong PIN guesses on quote accept
+(`modules/quotes/api/src/handler.ts:495`). `claimDocumentProbe` is defined and
+never called.
+
+**Do NOT gate transactional mail behind payment.** The booking confirmation is
+the only delivery mechanism for the cancel token (`booking/handler.ts:421`,
+`reminder.ts:39`) and SMS is unprovisioned - a free tier that books people and
+never confirms produces no-shows and phone calls, not fewer complaints. Gate
+the recipient supply, not the message.
+
+**Proposed design (needs founder sign-off before building):**
+- Tier by *verified business*, not by payment: `payoutsEnabled` (Stripe did
+  the KYC for free) or any live grant.
+- Tier 0 unverified: 25 transactional/day, **0 optional**. That alone closes
+  the bulk vector and costs a real sole trader nothing, since free bookings
+  cap at 20/mo anyway.
+- Tier 1 verified: 200/day and 50 optional. Tier 2, after 14 clean days:
+  1,000 and 250.
+- Counter in **MailLog** under a reserved `cap#YYYY-MM-DD` key, not the
+  RateLimit table: MailLog is already granted to every Lambda that sends, so
+  **zero infra change**. RateLimit is granted to quotes only.
+- One choke point in `sendEmail`, after the `emailBlocked` check. No call site
+  changes.
+- Auto-brake on complaints in `mail-events.ts`. Do **not** use
+  `setTenantStatus('suspended')` - the authorizer refuses suspended tenants, so
+  it locks the owner out of the screen explaining why.
+- Fail open on transactional, closed on optional, matching `emailBlocked`.
+- Exempt booking reminders and deposit-paid confirmations from the cap in the
+  first commit, not a follow-up: both fire later, and a reminder for a
+  confirmed appointment must not die because the day's cap is spent.
+
+**Why it blocks issue 76.** The appeal says the product has "no mechanism
+anywhere for uploading a list or sending in bulk". That is false as written,
+and the appeal offers AWS sample messages - a reviewer who looks catches the
+misstatement, which is far worse than describing a weak control honestly. The
+appeal also omits request replies from its four categories and describes
+review asks as "one invitation after a completed job", true of the Reviews
+module but not of the manual ask.
+
+Ship this, rewrite the appeal to describe it, then send.
