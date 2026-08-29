@@ -107,6 +107,8 @@ const page = ({ title, description, path, body }) => `<!doctype html>
 <meta property="og:url" content="${ORIGIN}${path}" />
 <meta property="og:type" content="website" />
 <link rel="canonical" href="${ORIGIN}${path}" />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/icon-192.png" />
 <link rel="stylesheet" href="/assets/mb.css" />
 </head>
 <body>

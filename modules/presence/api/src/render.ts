@@ -652,7 +652,18 @@ ${(!sub || sub === 'faq') && blockOrder.includes('faq') ? faqJsonLd : ''}
 <body>
 ${body}
 <footer>
-  <div class="wrap"><p>Page by <a href="${PAGE_ORIGIN}">MakerBay</a></p></div>
+  <div class="wrap"><p>Page by <a href="${PAGE_ORIGIN}">MakerBay</a>${
+    // On the demo page only, the byline becomes an invitation (issue 145).
+    //
+    // Every tenant page already carries this line, and it is the cheapest
+    // traffic this product will ever get. But a real tradesperson's page is
+    // THEIR page: turning their footer into an advert for us would be taking
+    // something that is not ours, on a page their customer is reading. The
+    // demo workspace is ours, so the ask goes there and nowhere else.
+    slug === 'makerbay-demo'
+      ? ` &middot; <a href="${PAGE_ORIGIN}/#top">Want one like this? Build yours in a minute</a>`
+      : ''
+  }</p></div>
 </footer>
 ${overlayScript}
 </body>

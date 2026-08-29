@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MakerBay</title>
     <meta name="description" content="MakerBay — be found, answered and booked, without lifting a finger. AI assistant, bookings, quotes and reviews for trade businesses." />
+    <!--
+      Installable on a phone (issue 145). The whole premise is somebody
+      holding a tool rather than a laptop, and the dashboard could not be
+      added to a home screen. start_url is /home so a tap opens on what needs
+      them, not on a router redirect.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1c1917" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="MakerBay" />
   </head>
   <body>
     <div id="root"></div>
