@@ -2626,3 +2626,47 @@ case. Run the four pre-send checks at the top of the file first.
 
 **After it is granted:** flip `SES_LEFT_THE_SANDBOX` in the stack to move
 Cognito auth mail back onto SES (issue 137).
+
+### 145 — Growth audit of 2026-08-28, triaged 📝 awaiting founder decisions
+Board: https://claude.ai/code/artifact/b590ac26-a812-4ee7-93cd-3449d27c829d
+
+Two agents verified all 16 recommendations against HEAD and the live site.
+Five were already built - three of them shipped on 26 August, two days BEFORE
+the audit was written: the interactive hero demo, the pre-signup draft
+endpoint, the founding-member mechanic, the "Page by MakerBay" badge on every
+tenant page, and the support widget on every marketing page.
+
+**The finding the audit missed entirely: there is no analytics anywhere**, and
+no synthetic monitoring. Not one of its experiments can be run, and the
+three-day signup outage was found by a review pass rather than an alarm.
+
+**Two live errors found and fixed today** (see the commit): every Jobber price
+on /pricing and /compare/jobber was wrong, on a page that invites readers to
+check; and `hero-setup.js` shipped without a cache-buster.
+
+**Eight recommendations cannot be implemented honestly** because they
+contradict something already published - the DPA's "we are not SOC 2 or ISO
+27001 certified", the proof band's "we are not going to invent customer
+quotes", and the privacy policy's "no cookies, no third-party tracker", the
+last of which is enforced by a build-failing test.
+
+**Two of nine market statistics survive.** The load-bearing error is "free
+plans convert 25-30%" - real freemium medians are ~2.6%, so it is wrong by
+roughly 10x, and both the referral programme and the "strong free plan, just
+add viral loops" reasoning rest on it.
+
+**Strategic read, and I agree with it:** PLG is the wrong motion at zero
+customers. It converts traffic you already have. For customers 1-30 the
+correct motion is hand-sold - which makes the $99 concierge, sitting 45
+minutes from live, the actual strategy.
+
+**Worth doing, in order:** hero returns a page rather than a diff table
+(2-3 days); finish the concierge (45 min, founder); analytics + a signup
+canary (hours); demo-to-signup path (hours); extract opening hours (~1 day);
+annual toggle (half a day); PWA manifest (half a day); ONE hand-written trade
+page.
+
+**Would not build:** claim-your-business for non-customers (pre-creating pages
+without consent is misleading-conduct exposure in Australia), referral or
+affiliate programme, community hub, team seats, multi-location, or five to ten
+templated vertical pages.
