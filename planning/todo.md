@@ -2211,3 +2211,40 @@ first one should not happen by accident with a real customer's card.
 **Do:** subscribe once with a real card, confirm Billing shows the event and
 the mode, then refund it. Billing displays when the last Stripe event arrived
 and whether it was test or live.
+
+### 131 — Platform Owner settings in the Admin Portal 💬 consulting, awaiting founder sign-off
+Founder: the platform's own identity should be configurable from the Admin
+Portal rather than compiled in.
+
+**The trigger is a live defect, not a preference.**
+`packages/email/src/footers.ts:12` holds
+
+    MakerBay Pty Ltd, 14 Wilson Street, Newtown NSW 2042, Australia
+
+and it is simply wrong. The legal entity is **Appa Technologies Pty Ltd**;
+MakerBay is the product. The correct form the founder gave is
+
+    MakerBay (a product by Appa Technologies Pty Ltd), 4 Greenwood Place,
+    Freshwater, NSW 2096, Australia
+
+That string is in the footer of EVERY email the platform sends, owner-bound and
+customer-bound, as the sender of record - so a wrong company name and a wrong
+address are going out on live mail today. It was written as a placeholder in
+the issue 94 work and never replaced.
+
+**Already known before the consults report:**
+- Only one definition exists (`POSTAL_ADDRESS`), used by both `ownerFooter` and
+  `customerFooter`, so the blast radius is contained - but two tests assert
+  `'Newtown NSW'` and will need to move with it.
+- The email package is deliberately PURE - everything arrives as arguments so
+  the rules can be unit tested - so the address must reach it without giving it
+  a database.
+- The marketing site has no legal pages at all: `site/src/` contains only
+  `index.html` and `404.html`. No terms, no privacy policy, no entity
+  statement. Worth deciding whether that belongs in this issue or its own.
+- `planning/ses-appeal.md` has not been sent yet. If the address is wrong in
+  mail AWS may sample, fixing it first costs a day and removes an own goal.
+
+Two agents consulted: one on where the setting should live and what belongs in
+it, one on the compliance question - including who counts as the sender when
+MakerBay mails a tradesperson's customer on their behalf.
