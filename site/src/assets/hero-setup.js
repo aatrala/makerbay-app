@@ -77,17 +77,25 @@
           return
         }
 
-        var rows = r.body.draft.diff.map(function (d) {
-          return '<tr><th>' + esc(d.label) + '</th><td>' + esc(d.to) + '</td></tr>'
-        }).join('')
+        // The page itself, not a list of the fields that went into it.
+        //
+        // The headline above this promises "get a page back", and for months
+        // what came back was a table of extracted values. It is rendered by
+        // the same function that serves every live MakerBay page, in an
+        // iframe so its styles cannot touch this one, and scaled down so a
+        // desktop-width page fits the column.
+        var preview = 'https://api.makerbay.app/v1/public/presence?preview=' +
+          encodeURIComponent(r.body.token)
 
         out.innerHTML =
           '<h2 class="hero-built">Here is your page</h2>' +
           '<p class="hero-note">Read from ' + esc(r.body.draft.url) +
           '. Nothing is public and nobody can see this but you.</p>' +
-          '<table class="hero-diff">' + rows + '</table>' +
-          '<p class="hero-note">Keep this link to pick it up where you left off. ' +
-          'It works for two weeks.</p>' +
+          '<div class="hero-preview"><iframe title="A preview of your page" ' +
+          'loading="lazy" sandbox="allow-same-origin" src="' + esc(preview) + '"></iframe></div>' +
+          '<p class="hero-note">Everything on it is editable, and nothing is ' +
+          'published until you say so. Keep this link to pick it up where you ' +
+          'left off - it works for two weeks.</p>' +
           '<p><a class="btn lg" href="https://app.makerbay.app/setup?claim=' +
           encodeURIComponent(r.body.token) + '">Make it mine</a></p>' +
           '<p><small>You can do all of this yourself in the app too. It takes about ten minutes.</small></p>'

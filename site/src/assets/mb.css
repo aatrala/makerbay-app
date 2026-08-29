@@ -499,3 +499,25 @@ header nav .signin { font-weight: 600; }
 .band .meta { color: #a8a29e; max-width: 62ch; margin-left: auto; margin-right: auto; }
 .band a { color: #fdba74; text-decoration: underline; text-underline-offset: 2px; }
 .band a:hover { color: #fed7aa; }
+
+/* The pre-signup page preview (issue 145). A real page, rendered by the same
+   function that serves every live one, shown in an iframe so its styles
+   cannot reach this page. Scaled because it is a desktop-width document in a
+   narrow column: the transform keeps proportions honest rather than reflowing
+   it into something the visitor will not actually get. */
+.hero-preview {
+  position: relative; width: 100%; height: 420px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 12px; background: #fff;
+  box-shadow: 0 10px 30px rgba(28, 25, 23, 0.10);
+  margin: 18px 0 6px;
+}
+.hero-preview iframe {
+  position: absolute; top: 0; left: 0; border: 0;
+  width: 1180px; height: 1400px;
+  transform: scale(0.34); transform-origin: 0 0;
+  pointer-events: none;
+}
+@media (max-width: 720px) {
+  .hero-preview { height: 340px; }
+  .hero-preview iframe { transform: scale(0.27); }
+}

@@ -7,6 +7,7 @@ import {
   getEffectiveEntitlement,
   getSlugAlias,
   getTenant,
+  getProspectPreview,
   getTenantBySlug,
   getUser,
   type CallerContext,
@@ -114,6 +115,47 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
   const rawSub = String(event.queryStringParameters?.sub ?? '').trim().toLowerCase()
   const sub = SUB_PAGES.includes(rawSub as SubPage) ? (rawSub as SubPage) : undefined
   if (rawSub && !sub) return html(404, renderNotFound())
+
+  /*
+   * A page for somebody who does not have an account yet (issue 145).
+   *
+   * The homepage promises "Show us your business. Get a page back." It was
+   * handing back a table of extracted fields, which is a spreadsheet, not a
+   * page. This renders the real thing from the same function that serves
+   * every live page, so what a stranger sees is what they would get.
+   *
+   * It lives on this route rather than a new one because a new route is a
+   * CloudFormation resource and the stack is at 492 of a hard 500. The draft
+   * is read through packages/core, which is where cross-module data access
+   * belongs.
+   *
+   * Always noindex: this is a proposal about somebody else's business, built
+   * from their public website, and it must never appear in a search result.
+   */
+  const previewToken = String(event.queryStringParameters?.preview ?? '').trim()
+  if (previewToken) {
+    const draft = await getProspectPreview(previewToken)
+    if (!draft) return html(404, renderNotFound())
+    const name = draft.businessName?.trim() || 'Your business'
+    const page = renderPage({
+      config: {
+        tenantId: 'preview',
+        ...DEFAULT_PRESENCE,
+        ...draft.proposed,
+        // Never indexed, and never treated as live.
+        published: false,
+      } as never,
+      businessName: name,
+      slug: 'preview',
+      services: [],
+      assistant: { greeting: '', tone: 'friendly' } as never,
+      hasKnowledge: false,
+      // Nothing behind it yet, so neither control would work.
+      bookingEnabled: false,
+      now: new Date(),
+    })
+    return html(200, page)
+  }
 
   // A custom-domain distribution identifies the tenant by host, not slug.
   const domain = String(event.queryStringParameters?.domain ?? '').trim().toLowerCase()

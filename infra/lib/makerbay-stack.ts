@@ -1443,6 +1443,15 @@ export class MakerbayStack extends cdk.Stack {
     // Copy drafting meters as Genie messages, so presence reads usage and
     // emits its own events.
     usage.grantReadData(presenceFn)
+    /*
+     * The pre-signup page preview (issue 145). The homepage says "get a page
+     * back"; presence renders that page from the draft the setup module wrote,
+     * so it needs read access to the draft and nothing else. Read only, and
+     * the reader in packages/core returns only the fields a public renderer
+     * needs - never the scraped excerpt.
+     */
+    setupStack.jobs.grantReadData(presenceFn)
+    presenceFn.addEnvironment('TABLE_SETUPJOBS', setupStack.jobs.tableName)
     bus.grantPutEventsTo(presenceFn)
     for (const t of [sources, conversations, assistantConfig, configVersions]) t.grantReadWriteData(assistantFn)
     for (const t of [users, tenants, apiKeys, entitlements, grants, usage]) t.grantReadData(assistantFn)

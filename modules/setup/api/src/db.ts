@@ -133,6 +133,12 @@ export interface ProspectDraft {
   pk: string
   sk: 'draft'
   url: string
+  /**
+   * Stored separately from `proposed` because the business name is not a
+   * presence config field, and the preview renderer needs it to put a name on
+   * the page (issue 145). A page headed "(no name)" is not a page.
+   */
+  businessName?: string
   excerpt: string
   proposed: Record<string, unknown>
   diff: JobArtifact['diff']

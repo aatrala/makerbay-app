@@ -148,6 +148,7 @@ async function publicDraft(event: Event): Promise<APIGatewayProxyResultV2> {
     pk: `prospect#${token}`,
     sk: 'draft',
     url,
+    businessName: facts.businessName,
     excerpt,
     proposed: draft.proposed,
     diff: draft.diff,

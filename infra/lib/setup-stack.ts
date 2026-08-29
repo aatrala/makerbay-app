@@ -48,6 +48,15 @@ export interface SetupStackProps extends cdk.NestedStackProps {
 export class SetupStack extends cdk.NestedStack {
   /** The parent attaches the API route to this. */
   public readonly handler: lambda.IFunction
+  /**
+   * The jobs table, exposed so the parent can grant read access.
+   *
+   * Presence renders the pre-signup page preview and therefore needs the
+   * prospect draft that lives here (issue 145). The read itself goes through
+   * packages/core, which is where cross-module data access belongs; this only
+   * exposes the table so the grant can be written.
+   */
+  public readonly jobs: dynamodb.ITable
 
   constructor(scope: Construct, id: string, props: SetupStackProps) {
     super(scope, id, props)
@@ -96,6 +105,7 @@ export class SetupStack extends cdk.NestedStack {
       resources: ['*'],
     }))
 
+    this.jobs = jobs
     this.handler = fn
     new cdk.CfnOutput(this, 'SetupJobsTable', { value: jobs.tableName })
   }
