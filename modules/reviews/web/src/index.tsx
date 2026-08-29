@@ -167,13 +167,19 @@ function AskCard({ onSent }: { onSent: () => Promise<void> }) {
       .catch(() => setContacts([]))
   }, [])
 
+  const [manualUrl, setManualUrl] = useState('')
+
   const ask = (e: FormEvent) => {
     e.preventDefault()
     if (!contactId) return
     setBusy(true); setError(''); setNote('')
+    setManualUrl('')
     void api('POST', '/v1/reviews/invite', { contactId })
       .then(async (r) => {
-        setNote(r.sent ? 'Asked — the email is on its way.' : 'Invite created, but the email could not be sent yet.')
+        setNote(r.sent ? 'Asked — the email is on its way.' : '')
+        // The invite exists either way. If the email did not go, hand over the
+        // link rather than reporting a dead end (issue 141).
+        setManualUrl(r.sent ? '' : String(r.url ?? ''))
         setContactId('')
         await onSent()
       })
@@ -186,6 +192,16 @@ function AskCard({ onSent }: { onSent: () => Promise<void> }) {
       <h2>Ask someone now</h2>
       <p className="meta">For a job that finished outside the diary. One email, one polite ask.</p>
       {note && <Notice tone="ok" onClose={() => setNote('')}>{note}</Notice>}
+      {manualUrl && (
+        <Notice tone="warn" onClose={() => setManualUrl('')}>
+          <p style={{ margin: '0 0 8px' }}>
+            The invite is ready, but we could not email it from here yet. Send them this link
+            yourself and it works exactly the same:
+          </p>
+          <input readOnly value={manualUrl} onFocus={(e) => e.currentTarget.select()}
+            style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 13 }} />
+        </Notice>
+      )}
       {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
       <form onSubmit={ask}>
         <div className="row">

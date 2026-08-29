@@ -783,7 +783,13 @@ for (const file of await walk(dist)) {
 
 await writeFile(
   join(dist, 'sitemap.xml'),
-  sitemap(['/', '/pricing', '/roadmap', '/changelog', '/terms', '/privacy', ...modules.map((m) => `/modules/${m.id}`)]),
+  // /compare/jobber was written to rank for "jobber alternative" and then left
+  // out of here, so no crawler was ever told it exists (issue 139).
+  sitemap([
+    '/', '/pricing', '/roadmap', '/changelog', '/terms', '/privacy',
+    '/compare/jobber',
+    ...modules.map((m) => `/modules/${m.id}`),
+  ]),
   'utf8',
 )
 

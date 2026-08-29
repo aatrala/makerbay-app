@@ -238,7 +238,12 @@ function SetupPage({ me }: { me: Me }) {
             Read from {job.plan.sourceUrls[0]}. Nothing is on your page yet.
           </p>
 
-          <table className="mt">
+          {/* Four columns of URLs and suggested copy: the one table in the
+              app without a scroll wrapper, so it pushed the whole page
+              sideways on a phone. This screen shipped after the mobile
+              pass that wrapped the other 28 (issue 142). */}
+          <div className="scroll-x mt">
+          <table>
             <thead>
               <tr><th>On your page</th><th>Now</th><th>We suggest</th><th /></tr>
             </thead>
@@ -268,6 +273,7 @@ function SetupPage({ me }: { me: Me }) {
               ))}
             </tbody>
           </table>
+          </div>
 
           {untouched.length > 0 && (
             <p className="meta mt">

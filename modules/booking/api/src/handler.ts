@@ -419,6 +419,16 @@ async function confirmSideEffects(
 ): Promise<boolean> {
   const view = publicView(row, timezone)
   const brand = await getTenantBrand(tenantId)
+  /*
+   * The tenant's own currency, not a hardcoded 'AUD' (issue 114 fallout).
+   *
+   * These two money() calls passed the literal string, so a Manchester salon
+   * taking a fifty pound deposit told the customer "A$50.00" in the
+   * confirmation email and told the owner the same in their notification.
+   * Issue 114 fixed this across quotes, invoices and the business page and
+   * did not reach booking, because booking never read the field.
+   */
+  const currency = (await getTenant(tenantId))?.currency ?? 'AUD'
   const cancelUrl = `${CHAT}/booking/cancel?slug=${encodeURIComponent(await slugOf(tenantId))}&token=${row.cancelToken}`
   const confirmMail = bookingConfirmed({
     brand,
@@ -427,7 +437,7 @@ async function confirmSideEffects(
     service: row.serviceName,
     when: `${view.date} at ${view.time}`,
     deposit: row.depositPaidAt && row.depositCents
-      ? money(row.depositCents, 'AUD')
+      ? money(row.depositCents, currency)
       : undefined,
     cancelUrl,
   })
@@ -457,7 +467,7 @@ async function confirmSideEffects(
     who: row.name || row.email || row.phone || 'Someone',
     service: row.serviceName,
     when: `${view.date} at ${view.time}`,
-    deposit: row.depositPaidAt && row.depositCents ? money(row.depositCents, 'AUD') : undefined,
+    deposit: row.depositPaidAt && row.depositCents ? money(row.depositCents, currency) : undefined,
     note: row.note,
   })
   await sendEmail({

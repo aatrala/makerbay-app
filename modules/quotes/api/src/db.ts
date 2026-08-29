@@ -191,7 +191,19 @@ export const DEFAULT_QUOTES_CONFIG: Omit<QuotesConfigRow, 'tenantId'> = {
   taxRate: 0,
   taxLabel: 'GST',
   currency: 'AUD',
-  terms: 'Valid for 30 days. Payment due on completion.',
+  /*
+   * No validity sentence here, deliberately (issue 140).
+   *
+   * The quote states its own expiry from validDays, and the customer page
+   * prints it as "This price is good until <date>". A second validity claim
+   * in the terms was the SAME fact written twice, and the two drifted apart
+   * the moment an owner set "Valid for" to anything but 30: the customer read
+   * "Valid for 30 days." directly under "good until [14 days out]".
+   *
+   * Issue 82 caught this shape in the notes field and guarded it there. It
+   * shipped in the default terms, where it needed no typing at all.
+   */
+  terms: 'Payment due on completion.',
   validDays: 30,
   notifyEmail: '',
   nextNumber: 1,

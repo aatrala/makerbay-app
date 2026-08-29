@@ -212,7 +212,7 @@ async function invite(
 export async function createInvite(
   tenantId: string,
   who: { contactId: string; name?: string; email: string; serviceName?: string },
-): Promise<{ sent: boolean; emailError?: string; reviewId: string }> {
+): Promise<{ sent: boolean; emailError?: string; reviewId: string; url: string }> {
   const tenant = await getTenant(tenantId)
   const config = await getConfig(tenantId)
   const reviewId = ulid()
@@ -268,7 +268,16 @@ export async function createInvite(
     title: notice.sent ? 'Asked for a review' : 'Review ask written (email not sent)',
   })
   await emitUsage({ tenantId, moduleId: 'reviews', metric: 'review.requested', quantity: 1 })
-  return { sent: notice.sent, emailError: notice.error, reviewId }
+  /*
+   * The url comes back whether or not the email went (issue 141).
+   *
+   * Issue 118 made quotes survive an email outage by treating the share link
+   * as the primitive and the email as one way to deliver it. Review invites
+   * kept the old shape: email-only, and on failure the owner was told it
+   * failed and given nothing to do about it - the link existed, and we
+   * withheld it. While SES is sandboxed that is most sends.
+   */
+  return { sent: notice.sent, emailError: notice.error, reviewId, url }
 }
 
 /**

@@ -1159,6 +1159,17 @@ function PriceList({ me }: { me?: Me }) {
             <label htmlFor="terms">Terms shown on every quote</label>
             <textarea id="terms" rows={2} value={config.terms}
               onChange={(e) => setConfig({ ...config, terms: e.target.value })} />
+            {/* Same rule as the notes field, at the other place it can be
+                broken. Validity belongs to the quote's own expiry date, and
+                two statements of it on one document will eventually
+                disagree (issue 140). */}
+            {/valid|expir/i.test(config.terms ?? '') && (
+              <Notice tone="warn">
+                Every quote already prints its own &ldquo;good until&rdquo; date from the
+                &ldquo;Valid for&rdquo; setting. Saying it here too means the customer sees two
+                answers as soon as you change one of them.
+              </Notice>
+            )}
 
             <h2 className="mt">Invoices</h2>
             <div className="row">
