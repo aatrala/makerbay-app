@@ -158,7 +158,7 @@ const footer = () => `<footer>
     </div>
   </div>
   <div class="wrap foot-legal">
-    <p>&copy; 2026 Appa Technologies Pty Ltd &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>${LATEST ? ` &middot; <a href="/changelog">v${LATEST}</a>` : ''}</p>
+    <p>&copy; 2026 Appa Technologies Pty Ltd &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/dpa">DPA</a>${LATEST ? ` &middot; <a href="/changelog">v${LATEST}</a>` : ''}</p>
   </div>
 </footer>`
 
@@ -904,7 +904,7 @@ for (const file of ['index.html', ...modules.map((m) => `modules/${m.id}/index.h
   if (out.includes('<!--proof-stats-->')) out = out.replace('<!--proof-stats-->', proofStats())
   out = out.replace(
     '<p>© 2026 Appa Technologies Pty Ltd</p>',
-    `<p>© 2026 Appa Technologies Pty Ltd · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/changelog">v${LATEST}</a></p>`,
+    `<p>© 2026 Appa Technologies Pty Ltd · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/dpa">DPA</a> · <a href="/changelog">v${LATEST}</a></p>`,
   )
   if (out !== html) await writeFile(path, out, 'utf8')
 }
@@ -937,7 +937,8 @@ await writeFile(
   // /compare/jobber was written to rank for "jobber alternative" and then left
   // out of here, so no crawler was ever told it exists (issue 139).
   sitemap([
-    '/', '/pricing', '/roadmap', '/changelog', '/terms', '/privacy',
+    '/', '/pricing', '/roadmap', '/changelog',
+    '/terms', '/privacy', '/dpa', '/subprocessors',
     '/compare/jobber',
     ...modules.map((m) => `/modules/${m.id}`),
   ]),
