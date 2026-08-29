@@ -130,7 +130,15 @@ export async function api(method: string, path: string, body?: unknown, retried 
 
 export interface Me {
   user: { userId: string; email?: string; role?: string }
-  tenant: { tenantId: string; name: string; slug: string; plan: string } | null
+  /**
+   * The server returns the whole tenant row here. `trade` has been stored
+   * since issue 83 and undeclared ever since, which is why nothing could use
+   * it to pick placeholders that sound like the reader's own work.
+   */
+  tenant: {
+    tenantId: string; name: string; slug: string; plan: string
+    trade?: string; currency?: string
+  } | null
   entitlements?: { modules: Record<string, { enabled: boolean; plan: string; limits: Record<string, number> }> }
 }
 

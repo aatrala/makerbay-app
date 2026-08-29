@@ -10,6 +10,7 @@ import {
   when,
   type DashboardModule,
   type Me,
+  tradeExamples,
 } from '@makerbay/web-kit'
 
 interface PriceItem {
@@ -991,6 +992,10 @@ function ThemePreview({ theme, currency, taxLabel, docPrefix = '', accent = '#c2
 }
 
 function PriceList({ me }: { me?: Me }) {
+  // The reader's own trade, not a guess (issue 143). This form suggested
+  // "Labour, qualified electrician" to every business on the platform,
+  // including the salons.
+  const eg = tradeExamples(me?.tenant?.trade)
   const [items, setItems] = useState<PriceItem[] | null>(null)
   const [form, setForm] = useState({ description: '', unit: 'hour', dollars: '' })
   const [config, setConfig] = useState<any>(null)
@@ -1043,7 +1048,7 @@ function PriceList({ me }: { me?: Me }) {
         <h2>Add an item</h2>
         <form onSubmit={add}>
           <div className="row">
-            <input className="grow" value={form.description} required placeholder="Labour, qualified electrician"
+            <input className="grow" value={form.description} required placeholder={eg.quoteLine}
               onChange={(e) => setForm({ ...form, description: e.target.value })} aria-label="Description" />
             <input className="narrow" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}
               aria-label="Unit" placeholder="hour" />
@@ -1148,7 +1153,7 @@ function PriceList({ me }: { me?: Me }) {
             </div>
             <label htmlFor="q-footer">Identity line on every document</label>
             <input id="q-footer" maxLength={200} value={config.docFooter ?? ''}
-              placeholder="ABN 12 345 678 901 · Plumbing licence PL12345"
+              placeholder={eg.docFooter}
               onChange={(e) => setConfig({ ...config, docFooter: e.target.value })} />
             <p className="meta">ABN, licence number - whatever compliance asks for. Shown at the foot of quotes and invoices.</p>
             <label className="pick">

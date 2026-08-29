@@ -11,6 +11,80 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.28.0 - 2026-08-29
+
+> **The honesty pass** - four claims on the new legal pages turned out not to
+> be true, so the code changed until they were. And signup, it turns out, had
+> been broken for three days.
+
+- Fixed `platform` **Signing up worked again.** Moving login codes onto our
+  own mail provider on 27 August had a side effect nobody spotted: while that
+  provider is still in its approval sandbox it only delivers to addresses
+  already verified with it, and a person signing up never is. Every new
+  account since the 27th silently never received its code. Codes now come
+  from a sender with no such limit.
+- Fixed `platform` **Deleting a contact now deletes the person.** It used to
+  remove the contact row and leave their quotes, bookings, enquiries, reviews
+  and entire history in place - so an owner who believed they had erased
+  somebody had not. It now removes all of it and tells you plainly what it
+  kept and why: invoices and payments stay, because tax law requires seven
+  years.
+- Fixed `platform` **Nothing on your public pages calls a third party.** The
+  fonts on your booking page and help centre were loaded from Google, which
+  meant every customer who opened your page told Google they had. They now
+  come from our own servers. A test fails the build if any public page ever
+  reaches out to an outside host again.
+- Fixed `platform` **Pay-as-you-go is opt-in, as the pricing page always
+  said.** Paid workspaces were being billed for messages past their allowance
+  automatically. There is now a switch on your billing screen, it is off by
+  default, and with it off we stop at your allowance and tell you.
+- Added `platform` Terms of Service and a Privacy Policy, at
+  [/terms](https://makerbay.app/terms) and
+  [/privacy](https://makerbay.app/privacy).
+- Fixed `quotes` Quotes no longer carry a default "valid for 30 days" line
+  that could contradict their own expiry date once you changed it.
+- Fixed `reviews` If a review invite can't be emailed, you now get the link
+  so you can send it yourself, instead of just being told it failed.
+- Fixed `booking` Deposits show in your own currency in the confirmation
+  email. They were hardcoded to Australian dollars.
+- Changed `platform` Application logs are now kept 12 months and then
+  deleted, which is what the privacy policy says.
+
+## 2.27.0 - 2026-08-28
+
+> **Every email, written properly** - all 22 templated, all signed by a
+> company that actually exists.
+
+- Fixed `platform` Every email now names the real company and address.
+  They carried a placeholder that named a company that does not exist.
+- Fixed `platform` Bounces and complaints are consumed, so a message that
+  never arrived is shown against the quote or invoice that sent it, and we
+  stop emailing addresses that are dead.
+- Added `platform` One-click unsubscribe on review requests and the daily
+  digest, honoured immediately.
+- Added `platform` Customer mail sends from its own domain, so a spam
+  complaint about a review request cannot damage the domain your sign-in
+  codes arrive from.
+- Fixed `platform` Support replies from us go through the same path as every
+  other email, so they respect your suppression list and carry a real footer.
+- Added `platform` Currency follows your workspace across quotes, invoices,
+  your page and customer documents.
+
+## 2.26.0 - 2026-08-27
+
+> **Documents that work without email** - share a quote, revoke it, and let
+> anyone scan it off your phone.
+
+- Added `quotes` Quotes and invoices work without email: share a link, revoke
+  it, and see when it was opened.
+- Added `quotes` Readable document links on their own domain, with a preview
+  card when pasted into a message.
+- Added `quotes` A QR code on quotes and invoices, and both print properly.
+- Added `quotes` A document analytics view: what was sent, opened and
+  accepted.
+- Fixed `quotes` Counting a view could erase a signed acceptance.
+- Added `platform` A limit on wrong PIN guesses when accepting a quote.
+
 ## 2.25.0 - 2026-08-26
 
 > **The truth pass** - Genie learns your timezone, the login learns

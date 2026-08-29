@@ -485,3 +485,17 @@ header nav .signin { font-weight: 600; }
   .legal h1 { font-size: 31px; }
   .legal-summary { padding: 20px; }
 }
+
+/* The proof band (issue 136). `.cl-stats` was written for the changelog hero,
+   where the flex rule is scoped to `.hero`; reused on the homepage it would
+   have stacked into a column. Centred here because `.band` centres its text,
+   and the links need lifting off the dark ground - the default accent is a
+   dark orange that all but disappears on near-black. */
+.band .cl-stats {
+  display: flex; gap: 40px; flex-wrap: wrap;
+  justify-content: center; margin: 30px 0 0;
+}
+.band .cl-stats b { font-size: 30px; }
+.band .meta { color: #a8a29e; max-width: 62ch; margin-left: auto; margin-right: auto; }
+.band a { color: #fdba74; text-decoration: underline; text-underline-offset: 2px; }
+.band a:hover { color: #fed7aa; }

@@ -461,6 +461,37 @@ const pricingPage = () => {
   </div>
 </section>
 
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>What $29 replaces</h2>
+      <p>
+        The comparison the pitch line above is making, with the numbers on it.
+        Competitor prices are their published entry tiers; add-ons are theirs.
+      </p>
+    </div>
+    <div class="scroll-x">
+      <table class="pricing-table">
+        <thead>
+          <tr><th>&nbsp;</th><th>MakerBay Trade</th><th>Jobber Core</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Starting price</td><td><strong>$29/mo flat</strong></td><td>$39/mo</td></tr>
+          <tr><td>Free plan</td><td><strong>Yes, no clock</strong></td><td>14-day trial only</td></tr>
+          <tr><td>AI that answers customers</td><td><strong>Included</strong></td><td>Add-on, around $99/mo</td></tr>
+          <tr><td>Extra users</td><td><strong>Not charged per seat</strong></td><td>+$29/user/mo</td></tr>
+          <tr><td>Review requests</td><td><strong>Included</strong></td><td>Not included</td></tr>
+          <tr><td>Fee on your card payments</td><td><strong>None from us</strong></td><td>None from Jobber</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="meta mt">
+      We also wrote down <a href="/compare/jobber">when Jobber is the better
+      pick</a>, because for a team of eight with a warehouse, it is.
+    </p>
+  </div>
+</section>
+
 <section class="soft">
   <div class="wrap">
     <div class="sec-head">
@@ -824,6 +855,45 @@ await write('compare/jobber', comparePage())
 await write('subprocessors', subprocessorsPage())
 
 // Inject the generated module grid wherever a page asks for it.
+/*
+ * Proof, for a product with no customers yet (issue 136).
+ *
+ * The honest problem with a testimonial wall is that we do not have one, and
+ * the honest solution is not to fake it but to lead with the things a
+ * sceptical buyer can go and check themselves in about a minute. Every number
+ * here is computed from the repo - the release count from CHANGELOG.md, the
+ * module count from each module manifest, the refused-feature count from the
+ * roadmap - so none of them can drift into being a lie.
+ *
+ * Replace this with real customer numbers the moment there are any. Until
+ * then, checkable beats impressive.
+ */
+const proofStats = () => `<section class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>No testimonials yet. Here is what you can check instead.</h2>
+      <p>
+        We launched recently and we are not going to invent customer quotes.
+        These are all things you can verify yourself before you trust us with
+        anybody's phone number.
+      </p>
+    </div>
+    <div class="cl-stats">
+      <div><b>${releases.length}</b><span>releases, every one written up in public</span></div>
+      <div><b>${modules.filter((m) => m.status === 'live').length}</b><span>modules live today</span></div>
+      <div><b>${NEVER_ITEMS.length}</b><span>things we have publicly refused to build</span></div>
+      <div><b>$0</b><span>our cut of the money your customers pay you</span></div>
+    </div>
+    <p class="meta mt">
+      The <a href="/changelog">changelog</a> is the whole history.
+      The <a href="/roadmap">roadmap</a> names what we will not build and why.
+      Your contacts <a href="/pricing">export to CSV on every plan</a>, including
+      the free one, because a customer list you cannot take with you is not
+      yours.
+    </p>
+  </div>
+</section>`
+
 const marker = '<!--modules-grid-->'
 for (const file of ['index.html', ...modules.map((m) => `modules/${m.id}/index.html`)]) {
   const path = join(dist, file)
@@ -831,6 +901,7 @@ for (const file of ['index.html', ...modules.map((m) => `modules/${m.id}/index.h
   const html = await readFile(path, 'utf8')
   let out = html
   if (out.includes(marker)) out = out.replace(marker, moduleGrid())
+  if (out.includes('<!--proof-stats-->')) out = out.replace('<!--proof-stats-->', proofStats())
   out = out.replace(
     '<p>© 2026 Appa Technologies Pty Ltd</p>',
     `<p>© 2026 Appa Technologies Pty Ltd · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/changelog">v${LATEST}</a></p>`,

@@ -6,6 +6,7 @@ import {
   Skeleton,
   api,
   explain,
+  tradeExamples,
   type DashboardModule,
   type Me,
 } from '@makerbay/web-kit'
@@ -223,6 +224,10 @@ function Diary() {
 }
 
 function Services({ me }: { me: Me }) {
+  // Placeholders in the reader's own trade (issue 143). The trade has been
+  // collected at signup since issue 83 and read by nothing, so a hairdresser
+  // was shown a plumber's service at a plumber's price.
+  const eg = tradeExamples(me.tenant?.trade)
   const [services, setServices] = useState<Service[] | null>(null)
   const [form, setForm] = useState({ name: '', durationMinutes: '60', bufferMinutes: '0', priceCents: '', depositDollars: '' })
   const [payoutsEnabled, setPayoutsEnabled] = useState(false)
@@ -294,7 +299,7 @@ function Services({ me }: { me: Me }) {
             <div className="grow">
               <label htmlFor="s-name">Name</label>
               <input id="s-name" value={form.name} required
-                onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Standard service call" />
+                onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={eg.service} />
             </div>
             <div>
               <label htmlFor="s-dur">Minutes</label>
@@ -309,13 +314,13 @@ function Services({ me }: { me: Me }) {
             <div>
               <label htmlFor="s-price">Price</label>
               <input id="s-price" type="number" min={0} step="0.01" value={form.priceCents}
-                onChange={(e) => setForm({ ...form, priceCents: e.target.value })} className="narrow" placeholder="45.00" />
+                onChange={(e) => setForm({ ...form, priceCents: e.target.value })} className="narrow" placeholder={eg.servicePrice} />
             </div>
             <div>
               <label htmlFor="s-dep">Deposit</label>
               <input id="s-dep" type="number" min={0} step="0.01" value={form.depositDollars}
                 onChange={(e) => setForm({ ...form, depositDollars: e.target.value })}
-                className="narrow" placeholder="50.00" disabled={!payoutsEnabled}
+                className="narrow" placeholder={eg.deposit} disabled={!payoutsEnabled}
                 title={payoutsEnabled ? 'Paid up front to secure the booking' : 'Set up payments first'} />
             </div>
           </div>

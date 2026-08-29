@@ -3,5 +3,6 @@
 // it would couple two modules together through the shell.
 
 export * from './api'
+export * from './trades'
 export * from './ui'
 export { default as QrBlock } from './Qr'
