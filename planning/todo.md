@@ -2248,3 +2248,41 @@ the issue 94 work and never replaced.
 Two agents consulted: one on where the setting should live and what belongs in
 it, one on the compliance question - including who counts as the sender when
 MakerBay mails a tradesperson's customer on their behalf.
+
+### 132 — Email coverage audit: one path bypasses sendEmail entirely ⛔ P1
+Founder asked whether every module's email is templated and reviewable. The
+answer is no, and auditing it properly turned up a path I had missed.
+
+**My earlier "all call sites templated" was measured wrongly.** I grepped for
+`sendEmail({`, which finds the 20 calls that go through the shared sender. It
+does not find code that reaches for SES directly. Two places do:
+
+- `packages/admin-api/src/handler.ts:132` - a test email, refused unless the
+  recipient is the staff member's own address (`self_only`, audited). A
+  diagnostic, correctly not a template.
+- `packages/admin-api/src/handler.ts:435` - **the reply a tenant gets when
+  staff answer their support ticket.** This one is real owner-facing mail and
+  it bypasses `sendEmail()` altogether.
+
+**What bypassing costs, in order of seriousness:**
+1. No `emailBlocked` check, so it will happily send to an address that has hard
+   bounced - the one thing issue 107 exists to prevent.
+2. No `ref`, so it never reaches the MailLog: a bounced support reply is
+   invisible, and the tenant simply never hears back.
+3. No `headerSafe()` on the subject, which is interpolated from a
+   tenant-supplied ticket subject (issue 109's concern).
+4. Not templated, so it is plain text while every other owner email is not.
+
+**The true tally:** 22 email-sending paths. 18 templated, 4 not - two support
+notifications to MakerBay's own inbox (`audience: 'staff'`, correctly plain),
+the self-only test, and the ticket reply, which should be fixed.
+
+**Also outstanding from the 94 review:** `depositOnLapsedBooking` was added
+AFTER the founder approved the gallery, so one template has never been
+reviewed. The gallery showed 20 renderings of 16 distinct templates; there are
+17 now.
+
+**Fix:** route the ticket reply through `sendEmail` with a proper `ref` and a
+template, republish the review gallery with the two unreviewed templates, and
+add a test that fails if any file outside `packages/core/src/notify.ts`
+constructs a `SendEmailCommand` - the grep that would have caught this.
