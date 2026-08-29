@@ -155,11 +155,37 @@ describe('footers', () => {
     const f = customerFooter('Newtown Plumbing', { phone: '0412 555 908' }, 'You booked with Newtown Plumbing.')
     expect(f.join(' ')).not.toContain('settings/notifications')
     expect(f.join(' ')).toContain('You booked with Newtown Plumbing.')
-    expect(f.join(' ')).toContain('Sent for Newtown Plumbing by')
+  })
+
+  /**
+   * CASL - the strictest regime of the five markets this ships to - wants
+   * three things when you send on someone else's behalf: who sent it, who it
+   * was sent for, and how the two are related. "Sent for X by <address>"
+   * supplied one and a half of the three (issue 131).
+   */
+  it('names both parties and the relationship between them', () => {
+    const f = customerFooter('Newtown Plumbing', {}, 'r').join(' ')
+    expect(f).toContain('on behalf of Newtown Plumbing')  // who it is for
+    expect(f).toContain('by MakerBay')                     // who sent it
+    expect(f).toMatch(/booking software they use/)         // and why we are here
   })
 
   it('carries a postal address in both, which is legally load-bearing', () => {
-    expect(ownerFooter('X').join(' ')).toContain('Newtown NSW')
-    expect(customerFooter('X', {}, 'r').join(' ')).toContain('Newtown NSW')
+    for (const f of [ownerFooter('X'), customerFooter('X', {}, 'r')]) {
+      expect(f.join(' ')).toContain('Freshwater NSW 2096')
+      expect(f.join(' ')).toContain('Appa Technologies Pty Ltd')
+    }
+  })
+
+  /**
+   * The placeholder that shipped in every email for a week. It named a
+   * company that does not exist, at an address nobody occupies, and it sat
+   * directly under the tradesperson's own phone number where it read as
+   * theirs. Nothing caught it because the tests asserted the placeholder.
+   */
+  it('never names the placeholder entity again', () => {
+    const all = [...ownerFooter('X'), ...customerFooter('X', {}, 'r')].join(' ')
+    expect(all).not.toContain('MakerBay Pty Ltd')
+    expect(all).not.toContain('Wilson Street')
   })
 })

@@ -277,3 +277,42 @@ export const notificationsBroken = (n: { businessName: string; bounced: string }
     ),
     n.businessName,
   )
+
+// ── Support ──────────────────────────────────────────────────────────────
+
+export interface TicketReplyMail {
+  businessName: string
+  /** The subject the owner wrote, so the thread is recognisable. */
+  subject: string
+  /** What the staff member typed. Rendered as prose, never as HTML. */
+  reply: string
+}
+
+/**
+ * A staff answer to a support ticket (issue 132).
+ *
+ * This was the last email in the product still assembled by hand at the call
+ * site: a raw SendEmailCommand in the admin API that skipped the suppression
+ * check, carried no unsubscribe headers, had no postal address, and signed
+ * itself with an em dash and a bare URL. It reached a business owner who had
+ * just asked us for help, which is the worst possible audience for the least
+ * cared-for email in the system.
+ */
+export const ticketReply = (t: TicketReplyMail) =>
+  render(
+    doc(
+      `Re: ${t.subject}`,
+      'Your support request has an answer.',
+      'About your support request',
+      [
+        { t: 'para', text: t.reply },
+        { t: 'rule' },
+        {
+          t: 'para',
+          text: 'If that does not sort it, reply from your dashboard and it stays on the same thread.',
+        },
+        { t: 'button', label: 'Open the conversation', href: `${APP}/support` },
+      ],
+    ),
+    t.businessName,
+  )

@@ -31,7 +31,7 @@ export type MailState =
 export interface MailRef {
   tenantId: string
   moduleId: string
-  refType: 'booking' | 'quote' | 'invoice' | 'request' | 'review' | 'auth' | 'setup'
+  refType: 'booking' | 'quote' | 'invoice' | 'request' | 'review' | 'auth' | 'setup' | 'ticket'
   refId: string
 }
 

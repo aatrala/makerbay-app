@@ -23,10 +23,12 @@ import {
   MODULES,
   PLATFORM_VERSION,
   revokeGrant,
+  sendEmail,
   setTenantStatus,
   ulid,
   type Grant,
 } from '@makerbay/core'
+import { PLATFORM, customerFooter, ownerFooter, ticketReply } from '@makerbay/email'
 
 /**
  * Staff-facing admin API. Its purpose in v1 is narrow and worth stating:
@@ -81,6 +83,8 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
 
     const susp = path.match(/^\/admin\/v1\/tenants\/([A-Z0-9]+)\/(suspend|unsuspend)$/)
     if (method === 'POST' && susp) return await setSuspension(staff, susp[1], susp[2] === 'suspend', event)
+
+    if (method === 'GET' && path === '/admin/v1/platform') return platformIdentity()
 
     if (method === 'GET' && path === '/admin/v1/audit') return await auditLog(event)
 
@@ -431,30 +435,33 @@ async function staffReply(
   await ddb.send(new PutCommand({ TableName: process.env.TABLE_TICKETS!, Item: updated }))
 
   if (ticket.openedByEmail) {
-    try {
-      await ses.send(new SendEmailCommand({
-        FromEmailAddress: process.env.EMAIL_FROM!,
-        Destination: { ToAddresses: [String(ticket.openedByEmail)] },
-        ConfigurationSetName: process.env.EMAIL_CONFIG_SET,
-        Content: {
-          Simple: {
-            Subject: { Data: `Re: ${ticket.subject}` },
-            Body: {
-              Text: {
-                Data: [
-                  text,
-                  '',
-                  '—',
-                  'MakerBay support. Reply from your dashboard: https://app.makerbay.app/support',
-                ].join('\n'),
-              },
-            },
-          },
-        },
-      }))
-    } catch (err) {
-      console.warn('ticket reply email failed', { ticketId, err: String(err) })
-    }
+    /*
+     * Through sendEmail like every other message in the product (issue 132).
+     *
+     * This was a hand-rolled SendEmailCommand, and each thing it skipped was
+     * load-bearing: the per-tenant suppression check (so we mailed addresses
+     * we already knew were dead), the ref that writes delivery failure back
+     * onto the record, and the footer carrying the postal address. It is also
+     * the one email a business owner reads while already unhappy with us.
+     */
+    const tenant = await getTenant(tenantId)
+    const mail = ticketReply({
+      businessName: tenant?.name ?? 'your business',
+      subject: String(ticket.subject ?? 'your message'),
+      reply: text,
+    })
+    const r = await sendEmail({
+      to: String(ticket.openedByEmail),
+      audience: 'owner',
+      ref: { tenantId, moduleId: 'support', refType: 'ticket', refId: ticketId },
+      // A support answer is transactional: the owner asked us a question and
+      // is waiting for it. No unsubscribe.
+      optional: false,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+    })
+    if (!r.sent) console.warn('ticket reply email failed', { ticketId, error: r.error })
   }
   await audit(staff, 'ticket.replied', tenantId, { ticketId, subject: ticket.subject })
   return json(200, { ticket: updated })
@@ -697,4 +704,34 @@ async function revoke(staff: StaffContext, tenantId: string, event: Event): Prom
   await revokeGrant(tenantId, sk)
   await audit(staff, 'entitlement.revoke', tenantId, { sk, reason })
   return json(200, { revoked: sk })
+}
+
+/**
+ * Who the product says it is, and what that looks like in a footer (issue 131).
+ *
+ * Read-only, and the reason is worth stating: the sign-up email is rendered at
+ * CDK synth time and stored inside the Cognito user pool resource, so it is a
+ * build artifact that no runtime lookup can reach. If this were editable, that
+ * one email would sit on the old address until the next deploy while the other
+ * 21 moved - which is exactly the kind of quiet disagreement this page exists
+ * to make visible.
+ *
+ * The footers are rendered by calling the real functions rather than by
+ * describing them, so this page cannot drift from what actually ships. If it
+ * looks right here, it is right in the inbox.
+ */
+function platformIdentity(): APIGatewayProxyResultV2 {
+  return json(200, {
+    identity: PLATFORM,
+    editable: false,
+    note: 'Set in packages/email/src/platform.ts. Changing it is a deploy, which republishes all 22 templates together.',
+    footers: {
+      owner: ownerFooter('Newtown Plumbing'),
+      customer: customerFooter(
+        'Newtown Plumbing',
+        { phone: '0412 555 908', email: 'sam@newtownplumbing.com.au' },
+        'You are getting this because you asked for a quote.',
+      ),
+    },
+  })
 }

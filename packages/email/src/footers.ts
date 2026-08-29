@@ -1,3 +1,5 @@
+import { PLATFORM, platformLine, type PlatformIdentity } from './platform'
+
 /**
  * The two footers, defined once.
  *
@@ -8,12 +10,12 @@
  * tradesperson, not a link from us.
  */
 
-/** Replace before a single email ships. This is legally load-bearing. */
-export const POSTAL_ADDRESS = 'MakerBay Pty Ltd, 14 Wilson Street, Newtown NSW 2042, Australia'
-
-export const ownerFooter = (businessName: string): string[] => [
-  'MakerBay',
-  `You are getting this because you run ${businessName} on MakerBay.`,
+export const ownerFooter = (
+  businessName: string,
+  p: PlatformIdentity = PLATFORM,
+): string[] => [
+  p.productName,
+  `You are getting this because you run ${businessName} on ${p.productName}.`,
   /*
    * No preferences link. This used to point at
    * app.makerbay.app/settings/notifications, which does not exist and never
@@ -24,19 +26,34 @@ export const ownerFooter = (businessName: string): string[] => [
    * A security email would offer nothing here regardless: a preference link
    * in one is a phishing vector.
    */
-  POSTAL_ADDRESS,
-  'MakerBay will never ask you for your password or a sign-in code.',
+  platformLine(p),
+  `${p.productName} will never ask you for your password or a sign-in code.`,
 ]
 
 export const customerFooter = (
   businessName: string,
   contact: { phone?: string; email?: string },
   reason: string,
+  p: PlatformIdentity = PLATFORM,
 ): string[] => [
   businessName,
   [contact.phone, contact.email].filter(Boolean).join(' · '),
   reason,
-  // MakerBay is the sender of record and cannot publish an address it has not
-  // verified, so this carries ours rather than the tradesperson's.
-  `Sent for ${businessName} by ${POSTAL_ADDRESS}.`,
+  /*
+   * Two sentences, and both are load-bearing.
+   *
+   * The first names the sender, the business it is sending for, and the
+   * relationship between them. Canada's CASL requires all three when you send
+   * on someone else's behalf, and it is the strictest of the five markets this
+   * ships to, so satisfying it satisfies the rest. It also happens to be what
+   * an honest email would say.
+   *
+   * The second carries the postal address. It is separated from the first
+   * because when the address sat on the same line it read as the
+   * tradesperson's own - it appears directly under their name and phone
+   * number, and a homeowner in Sydney has no reason to think otherwise. An
+   * address that identifies the wrong company is worse than no address.
+   */
+  `Sent on behalf of ${businessName} by ${p.productName}, the booking software they use.`,
+  platformLine(p),
 ].filter((l) => l !== '')

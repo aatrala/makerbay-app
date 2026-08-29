@@ -17,7 +17,7 @@ import {
  * if a future template forgets it.
  */
 
-const brand = { name: 'Dunn Plumbing', accent: '#1d4ed8', footerNote: '' }
+const brand = { name: 'Dunn Plumbing', accent: '#1d4ed8' }
 const contact = { phone: '0412 345 678', email: 'sam@dunn.example' }
 const c = { brand, contact }
 const UNSUB = 'https://api.makerbay.app/v1/public/unsubscribe?t=abc123def456ghi789'

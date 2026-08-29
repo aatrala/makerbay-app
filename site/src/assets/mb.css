@@ -450,3 +450,38 @@ header nav .signin { font-weight: 600; }
 }
 .hero-diff tr:last-child th, .hero-diff tr:last-child td { border-bottom: 0; }
 .hero-diff th { width: 34%; font-weight: 600; color: var(--muted); }
+
+/* ── Legal pages ──────────────────────────────────────────────────────────
+   Terms and Privacy. These are read, not scanned, so the measure is narrower
+   than the rest of the site and the type is set for continuous reading. The
+   summary box at the top is the part most people will actually read, so it
+   gets the accent tint and sits above the fold. */
+.legal { padding: 64px 0 90px; }
+.legal .wrap { max-width: 720px; }
+.legal h1 { font-size: 40px; letter-spacing: -0.02em; }
+.legal-date { color: var(--muted); font-size: 14.5px; margin-top: 10px; }
+.legal h2 {
+  font-size: 22px; letter-spacing: -0.01em; margin: 44px 0 14px;
+  padding-top: 26px; border-top: 1px solid var(--line);
+}
+.legal p { color: var(--body); margin-bottom: 15px; }
+.legal ul { margin: 0 0 18px; padding-left: 22px; color: var(--body); }
+.legal li { margin-bottom: 9px; }
+.legal strong { color: var(--ink); }
+.legal em { font-style: normal; background: var(--accent-sub); padding: 1px 5px; border-radius: 4px; }
+
+/* The summary is a courtesy, not the agreement, so it is visually set apart
+   rather than blended in - nobody should mistake it for the binding text. */
+.legal-summary {
+  background: var(--soft); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 12px; padding: 24px 26px; margin: 34px 0 10px;
+}
+.legal-summary h2 { margin: 0 0 12px; padding: 0; border: 0; font-size: 18px; }
+.legal-summary ul { margin-bottom: 0; }
+.legal-summary li:last-child { margin-bottom: 0; }
+
+@media (max-width: 720px) {
+  .legal { padding: 44px 0 64px; }
+  .legal h1 { font-size: 31px; }
+  .legal-summary { padding: 20px; }
+}

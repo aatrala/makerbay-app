@@ -5,8 +5,8 @@ import { getTenant } from './db'
 /**
  * What a tenant's email should look like (issue 94).
  *
- * The four facts an email needs - business name, brand colour, logo, and
- * whether MakerBay is named as the sender - live in two module-owned tables.
+ * The two facts an email actually uses - business name and brand colour -
+ * live in two module-owned tables.
  * CLAUDE.md says data access goes through packages/core and is never
  * hand-rolled in module code, so this is the one place that reads both. The
  * booking Lambda asks for a brand; it does not reach into the presence table.
@@ -22,9 +22,6 @@ export interface TenantBrand {
   /** What the inbox list shows, which on a phone is all it shows. */
   name: string
   accent: string
-  logoUrl?: string
-  /** Under the rule. Empty for MakerBay's own mail to an owner. */
-  footerNote: string
 }
 
 /** MakerBay's own colour, used when a tenant has not chosen one. */
@@ -47,12 +44,6 @@ export async function getTenantBrand(tenantId: string): Promise<TenantBrand> {
   return {
     name: tenant?.name ?? 'MakerBay',
     accent,
-    // The presence hero photo, which is the only image a tenant has today.
-    ...(p?.photoKey ? { logoUrl: `https://chat.makerbay.app/${p.photoKey}` } : {}),
-    // Names us as the sender of record on customer-bound mail. A homeowner has
-    // never heard of MakerBay, so the footer is where that is explained rather
-    // than the From line, which stays the business.
-    footerNote: `Sent by ${tenant?.name ?? 'this business'} via MakerBay.`,
   }
 }
 
@@ -66,5 +57,4 @@ export async function getTenantBrand(tenantId: string): Promise<TenantBrand> {
 export const plainBrand = (name: string): TenantBrand => ({
   name,
   accent: DEFAULT_ACCENT,
-  footerNote: '',
 })

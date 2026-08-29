@@ -145,9 +145,16 @@ export function renderEmail(doc: EmailDoc, footerLines: string[]): Rendered {
     '---',
     // The text part spells the address out: there is no anchor to click in a
     // plain-text client, so a bare label would be a dead end.
-    ...(doc.unsubscribe
+    //
+    // Footer prose is wrapped like body prose, but a line carrying a URL is
+    // left alone: a URL broken across two lines cannot be copied out of a
+    // plain-text client, which is worse than a long line. This was latent
+    // while the longest footer line was 67 characters and the limit was 72.
+    ...(
+      doc.unsubscribe
       ? [...footerLines, `Stop getting these emails: ${doc.unsubscribe.url}`]
-      : footerLines),
+      : footerLines
+    ).map((l) => (l.includes('http') ? l : wrap(l))),
   ].join('\n').replace(/\n{3,}/g, '\n\n')
 
   const html = `<!doctype html>

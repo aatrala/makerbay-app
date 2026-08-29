@@ -3,3 +3,10 @@
 .modebadge.staff { background: #450a0a; color: #fca5a5; }
 .side { background: #1c1917; box-shadow: inset -3px 0 0 #7f1d1d; }
 select { appearance: auto; }
+
+/* Used on every page of this console and defined nowhere until now, so the
+   supporting text under a heading rendered at full body contrast and competed
+   with the thing it was explaining. `.meta` is the equivalent in web-kit;
+   this keeps the existing call sites working rather than renaming them all. */
+.muted { color: var(--muted); }
+.block { display: block; }

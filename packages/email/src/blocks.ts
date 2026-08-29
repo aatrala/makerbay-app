@@ -28,9 +28,19 @@ export interface EmailBrand {
   /** What the inbox list shows, which on a phone is all it shows. */
   name: string
   accent: string
-  logoUrl?: string
-  /** The line under the rule. Empty for MakerBay's own mail. */
-  footerNote: string
+  /*
+   * There is deliberately no logoUrl or footerNote here (issue 131).
+   *
+   * Both were declared, computed on every send by getTenantBrand, and read by
+   * nothing - renderEmail never referenced either. footerNote had gone further
+   * than dead: it held "Sent by X via MakerBay", which now contradicts the
+   * real footer rather than merely being ignored.
+   *
+   * A logo is worth having, but the field pointed at the presence hero photo,
+   * which is a wide banner shot of a van or a shopfront. That is not a logo,
+   * and putting it in an email header would look like a mistake. Real logo
+   * support needs a real logo upload, which is issue 90.
+   */
 }
 
 export interface EmailDoc {
@@ -48,5 +58,4 @@ export interface EmailDoc {
 export const MAKERBAY_BRAND: EmailBrand = {
   name: 'MakerBay',
   accent: '#c2410c',
-  footerNote: '',
 }

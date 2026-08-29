@@ -2276,13 +2276,36 @@ function handler(event) {
       apiName: 'makerbay-admin',
       corsPreflight: {
         allowOrigins: [`https://admin.${DOMAIN}`],
-        allowMethods: [apigwv2.CorsHttpMethod.GET, apigwv2.CorsHttpMethod.POST],
+        allowMethods: [
+          apigwv2.CorsHttpMethod.GET,
+          apigwv2.CorsHttpMethod.POST,
+          // Removing an address from the suppression list is a DELETE, and
+          // without it here the browser preflight fails before the request is
+          // ever made (issue 131).
+          apigwv2.CorsHttpMethod.DELETE,
+        ],
         allowHeaders: ['authorization', 'content-type'],
       },
     })
     adminApi.addRoutes({
       path: '/admin/v1/{proxy+}',
-      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+      /*
+       * ANY, not a list (issue 131).
+       *
+       * This was [GET, POST] while the handler served a DELETE and the admin
+       * console called it: "remove from the suppression list" - the documented
+       * answer to "my customer never got the email" - was a dead button. The
+       * request never reached the Lambda, so there was nothing in its logs
+       * either.
+       *
+       * Listing methods here means every route has to be added in two places
+       * and the second one is invisible when you forget it. The handler ends
+       * in a 404 fallthrough and every method passes the same authorizer, so
+       * ANY does not widen access - it moves the routing decision to the one
+       * place that can see the whole route table. It also costs one
+       * CloudFormation resource instead of two, which matters at 492 of 500.
+       */
+      methods: [apigwv2.HttpMethod.ANY],
       integration: new HttpLambdaIntegration('AdminIntegration', adminApiFn),
       authorizer: new HttpLambdaAuthorizer('StaffAuthorizer', adminAuthorizerFn, {
         responseTypes: [HttpLambdaResponseType.SIMPLE],

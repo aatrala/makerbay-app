@@ -6,6 +6,7 @@ import Tenants from './pages/Tenants'
 import TenantDetail from './pages/TenantDetail'
 import Email from './pages/Email'
 import Audit from './pages/Audit'
+import Platform from './pages/Platform'
 import Dashboard from './pages/Dashboard'
 import Tickets from './pages/Tickets'
 
@@ -55,6 +56,7 @@ export default function App() {
             <Link className={location.pathname === '/tickets' ? 'active' : ''} to="/tickets">Tickets</Link>
             <Link className={location.pathname === '/email' ? 'active' : ''} to="/email">Email</Link>
             <Link className={location.pathname === '/audit' ? 'active' : ''} to="/audit">Audit log</Link>
+            <Link className={location.pathname === '/platform' ? 'active' : ''} to="/platform">Platform</Link>
           </nav>
           <div className="spacer" />
           <div className="modebadge staff">STAFF CONSOLE</div>
@@ -87,6 +89,7 @@ export default function App() {
           <Route path="/tickets" element={<Tickets />} />
           <Route path="/email" element={<Email staffEmail={who?.staff.staffEmail} />} />
           <Route path="/audit" element={<Audit />} />
+          <Route path="/platform" element={<Platform />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

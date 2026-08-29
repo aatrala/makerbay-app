@@ -127,7 +127,7 @@ const footer = () => `<footer>
     </div>
   </div>
   <div class="wrap foot-legal">
-    <p>&copy; 2026 Appa Technologies Pty Ltd${LATEST ? ` &middot; <a href="/changelog">v${LATEST}</a>` : ''}</p>
+    <p>&copy; 2026 Appa Technologies Pty Ltd &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>${LATEST ? ` &middot; <a href="/changelog">v${LATEST}</a>` : ''}</p>
   </div>
 </footer>`
 
@@ -753,7 +753,7 @@ for (const file of ['index.html', ...modules.map((m) => `modules/${m.id}/index.h
   if (out.includes(marker)) out = out.replace(marker, moduleGrid())
   out = out.replace(
     '<p>© 2026 Appa Technologies Pty Ltd</p>',
-    `<p>© 2026 Appa Technologies Pty Ltd · <a href="/changelog">v${LATEST}</a></p>`,
+    `<p>© 2026 Appa Technologies Pty Ltd · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/changelog">v${LATEST}</a></p>`,
   )
   if (out !== html) await writeFile(path, out, 'utf8')
 }
@@ -783,7 +783,7 @@ for (const file of await walk(dist)) {
 
 await writeFile(
   join(dist, 'sitemap.xml'),
-  sitemap(['/', '/pricing', '/roadmap', '/changelog', ...modules.map((m) => `/modules/${m.id}`)]),
+  sitemap(['/', '/pricing', '/roadmap', '/changelog', '/terms', '/privacy', ...modules.map((m) => `/modules/${m.id}`)]),
   'utf8',
 )
 
