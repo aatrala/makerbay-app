@@ -29,6 +29,7 @@ import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers'
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 import { authEmail } from '@makerbay/email'
+import { MonitoringStack } from './monitoring-stack'
 import { SetupStack } from './setup-stack'
 
 const repoRoot = path.join(__dirname, '..', '..')
@@ -1622,6 +1623,25 @@ export class MakerbayStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     })
     apiSpike.addAlarmAction(alarmEmail)
+
+    /*
+     * Does the front door still open? (issue 145)
+     *
+     * Every alarm above watches spend or deliverability; none watches whether
+     * a customer can do anything. Signup was broken for three days and found
+     * by a code review. This signs up for real, every fifteen minutes.
+     *
+     * In a nested stack because it costs six resources and the parent is at
+     * 492 of a hard 500 - a NestedStack costs the parent ONE and brings its
+     * own budget, the pattern issue 111 established.
+     */
+    new MonitoringStack(this, 'Monitoring', {
+      repoRoot,
+      userPoolId: userPool.userPoolId,
+      userPoolClientId: userPoolClient.userPoolClientId,
+      userPoolArn: userPool.userPoolArn,
+      alerts: abuseAlerts,
+    })
 
     // Mail health (issue 107). Deliberately absolute counts, NOT the rate
     // metrics AWS suggests: at our volume a rate is noise. Ten sends and one
