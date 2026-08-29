@@ -27,6 +27,7 @@ export type JobStatus =
 export type JobKind =
   | 'presence.page'
   | 'booking.services'
+  | 'booking.hours'
   | 'assistant.knowledge'
   | 'help.centre'
   | 'quotes.documents'

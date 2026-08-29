@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Security — MakerBay</title>
+<meta name="description" content="How MakerBay protects your data, and what it does not have. Written to be checked." />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="stylesheet" href="/assets/mb.css" />
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/">Maker<span>Bay</span></a>
+    <nav><a class="btn" href="https://app.makerbay.app">Get started</a></nav>
+  </div>
+</header>
+
+<section class="legal">
+  <div class="wrap">
+    <h1>Security</h1>
+    <p class="legal-date">Last reviewed 29 August 2026.</p>
+
+    <div class="legal-summary">
+      <h2>The short version</h2>
+      <ul>
+        <li>Everything is encrypted, every workspace is separated, and passwords never reach us.</li>
+        <li><strong>We hold no SOC 2 and no ISO 27001.</strong> Amazon Web Services, who host everything, hold both.</li>
+        <li>We have never commissioned a penetration test. We will before we reach 250 paying businesses.</li>
+        <li>Three things are not in place yet, and they are named below with dates.</li>
+      </ul>
+    </div>
+
+    <h2>Why this page names what is missing</h2>
+    <p>
+      Most security pages are a row of badges. Ours is not, for a reason that
+      is easy to check: our
+      <a href="/dpa">Data Processing Agreement</a> already states that we hold
+      no certification, so a page implying otherwise would contradict a
+      document you can read in the next tab. If you are evaluating MakerBay for
+      a business that handles other people&rsquo;s data, the second list is the
+      one worth your time.
+    </p>
+
+    <h2>In place today</h2>
+    <ul>
+      <li><strong>Encrypted in transit and at rest</strong>, across databases and file storage.</li>
+      <li><strong>Every record is scoped to one workspace</strong>, enforced in a single shared data layer with automated tests covering it. There is no code path that reads across workspaces.</li>
+      <li><strong>Point-in-time recovery</strong> on customer data, and tables configured so that tearing down our own infrastructure cannot delete yours.</li>
+      <li><strong>Passwords are handled by Amazon Cognito</strong> and never seen or stored by us. Two-factor authentication is available.</li>
+      <li><strong>The staff console runs on a separate identity system</strong> from the customer app, so a customer login cannot become a staff login even if something else goes wrong.</li>
+      <li><strong>Staff status is checked live on every request</strong>, so removing someone takes effect in about a minute rather than whenever their session happens to expire.</li>
+      <li><strong>An append-only staff audit log.</strong> The service that writes it has permission to add rows and no permission to change them.</li>
+      <li><strong>Rate limiting</strong> on public endpoints, and per-business daily caps on outbound email.</li>
+      <li><strong>Automatic expiry</strong>: assistant conversations after 90 days, call recordings after 30, application logs after 12 months.</li>
+      <li><strong>No third-party trackers anywhere</strong>, including on the pages your customers see. Fonts are served from our own servers rather than Google&rsquo;s. A test fails our build if that ever changes.</li>
+      <li><strong>A signup canary</strong> that creates an account every fifteen minutes and alarms if it cannot.</li>
+      <li><strong>AI inference runs inside our own cloud account.</strong> No customer content trains any model.</li>
+    </ul>
+
+    <h2>Not in place. Planned, with dates.</h2>
+    <ul>
+      <li>
+        <strong>Role-based limits on staff access &mdash; by 31 October 2026.</strong>
+        Staff roles are recorded and audited but not yet enforced per action, so
+        any staff member can currently reach any workspace. With one person that
+        is a smaller risk than it sounds, but it is not least privilege and we
+        will not describe it as such.
+      </li>
+      <li>
+        <strong>Infrastructure-level access logging and threat detection &mdash;
+        by 31 October 2026.</strong>
+      </li>
+      <li>
+        <strong>A written, tested incident response runbook &mdash; by 30
+        November 2026.</strong>
+      </li>
+      <li>
+        <strong>Independent penetration testing.</strong> Not scheduled. We will
+        commission one before we reach 250 paying businesses, and this page will
+        say so when we do.
+      </li>
+    </ul>
+
+    <h2>If something goes wrong</h2>
+    <p>
+      We will tell affected customers <strong>within 48 hours</strong> of
+      confirming a breach, and keep telling them as we learn more. Not 24 hours,
+      which is what most agreements promise: 48 is a number we can hit on a bad
+      weekend, and a commitment we would miss is worse than an honest one. The
+      full terms are in clause 8 of the <a href="/dpa">DPA</a>.
+    </p>
+
+    <h2>Telling us about a problem</h2>
+    <p>
+      Email <a href="mailto:support@makerbay.app">support@makerbay.app</a> before
+      you tell anyone else, and we will work with you on it. We have no bug
+      bounty budget and will not pretend otherwise, but we will credit you here
+      if you would like us to, and we will fix it.
+    </p>
+    <p>
+      Please do not test against a real business&rsquo;s workspace. Create your
+      own free workspace and test against that.
+    </p>
+  </div>
+</section>
+
+<footer><div class="wrap"><p>© 2026 Appa Technologies Pty Ltd · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/dpa">DPA</a></p></div></footer>
+<script src="/assets/stat.js" defer></script>
+</body>
+</html>

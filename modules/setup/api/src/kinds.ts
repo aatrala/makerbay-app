@@ -53,6 +53,8 @@ export interface CurrentState {
   assistant: Record<string, unknown>
   sources: Array<{ sourceId: string; name: string; url?: string }>
   quotes: Record<string, unknown>
+  /** The booking config row, for its hours. Empty when Bookings is untouched. */
+  booking: Record<string, unknown>
 }
 
 export interface StagedChange {
@@ -123,6 +125,44 @@ export const KINDS: Record<JobKind, KindDef> = {
           .join(', '),
       }))
       return { proposed: { services: additions }, diff }
+    },
+  },
+
+  /**
+   * Opening hours off the website (issue 145).
+   *
+   * The setup flow read services, prices, contact details and the assistant's
+   * knowledge, and stopped short of the one thing nearly every trade page
+   * states plainly. Without it a new workspace fell back to Monday to Friday,
+   * nine to five - wrong for most salons and for anybody working weekends,
+   * and wrong in the direction that loses bookings silently.
+   */
+  'booking.hours': {
+    label: 'When you are open',
+    read: 'page',
+    resources: ['booking.config'],
+    scopes: ['booking:config:write'],
+    fields: ['Opening hours'],
+    stage: ({ facts }, current) => {
+      if (!facts.hours) return { proposed: {}, diff: [] }
+      // Never overwrite hours the owner has already set. Everything this flow
+      // proposes is an addition to an empty field; the website is evidence,
+      // not an authority over what somebody typed themselves.
+      const existing = current.booking?.hours
+      if (existing && typeof existing === 'object' && Object.keys(existing).length > 0) {
+        return { proposed: {}, diff: [] }
+      }
+      const DAY_NAMES: Record<string, string> = {
+        mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+        fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
+      }
+      const diff: JobArtifact['diff'] = Object.entries(facts.hours).map(([day, ranges]) => ({
+        field: `hours:${day}`,
+        label: DAY_NAMES[day] ?? day,
+        from: '(not set)',
+        to: (ranges ?? []).map((r) => `${r.from} to ${r.to}`).join(', '),
+      }))
+      return { proposed: { hours: facts.hours }, diff }
     },
   },
 

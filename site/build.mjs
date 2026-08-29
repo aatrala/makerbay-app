@@ -947,7 +947,8 @@ await writeFile(
   // out of here, so no crawler was ever told it exists (issue 139).
   sitemap([
     '/', '/pricing', '/roadmap', '/changelog',
-    '/terms', '/privacy', '/dpa', '/subprocessors',
+    '/terms', '/privacy', '/dpa', '/subprocessors', '/security',
+    '/for/plumbers',
     '/compare/jobber',
     ...modules.map((m) => `/modules/${m.id}`),
   ]),

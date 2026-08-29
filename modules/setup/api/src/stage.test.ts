@@ -12,7 +12,7 @@ import type { JobKind } from './db'
 
 const facts = (over: Partial<ExtractedFacts> = {}): ExtractedFacts => ({ ...EMPTY, ...over })
 const state = (over: Partial<CurrentState> = {}): CurrentState =>
-  ({ presence: {}, services: [], assistant: {}, sources: [], quotes: {}, ...over })
+  ({ presence: {}, services: [], assistant: {}, sources: [], quotes: {}, booking: {}, ...over })
 
 const stage = (
   f: ExtractedFacts,

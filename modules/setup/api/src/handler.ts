@@ -134,7 +134,7 @@ async function publicDraft(event: Event): Promise<APIGatewayProxyResultV2> {
   // business, no licence numbers or insurance off a scrape.
   const draft = KINDS['presence.page'].stage(
     { facts, pages: [] },
-    { presence: {}, services: [], assistant: {}, sources: [], quotes: {} },
+    { presence: {}, services: [], assistant: {}, sources: [], quotes: {}, booking: {} },
   )
   if (draft.diff.length === 0) {
     return json(200, {
@@ -384,14 +384,15 @@ async function readCurrent(tenantId: string): Promise<CurrentState> {
       return []
     }
   }
-  const [presence, services, assistant, sources, quotes] = await Promise.all([
+  const [presence, services, assistant, sources, quotes, booking] = await Promise.all([
     get(process.env.TABLE_PRESENCECONFIG),
     list<CurrentState['services'][number]>(process.env.TABLE_BOOKINGSERVICES),
     get(process.env.TABLE_ASSISTANT_CONFIG),
     list<CurrentState['sources'][number]>(process.env.TABLE_SOURCES),
     get(process.env.TABLE_QUOTESCONFIG),
+    get(process.env.TABLE_BOOKINGCONFIG),
   ])
-  return { presence, services, assistant, sources, quotes }
+  return { presence, services, assistant, sources, quotes, booking }
 }
 
 export function stageArtifact(

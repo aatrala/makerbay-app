@@ -809,6 +809,7 @@ export class MakerbayStack extends cdk.Stack {
         assistantConfig,
         sources,
         quotesConfig,
+        bookingConfig,
       },
       coreTableEnv: tableEnv,
       coreTables: [tenants, users, apiKeys, entitlements, grants, usage],

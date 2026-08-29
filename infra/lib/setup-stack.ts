@@ -39,6 +39,8 @@ export interface SetupStackProps extends cdk.NestedStackProps {
     assistantConfig: dynamodb.ITable
     sources: dynamodb.ITable
     quotesConfig: dynamodb.ITable
+    /** For its opening hours, which the setup flow now reads (issue 145). */
+    bookingConfig: dynamodb.ITable
   }
   /** Tenancy, entitlements and usage, shared with every other module. */
   coreTableEnv: Record<string, string>
@@ -90,6 +92,7 @@ export class SetupStack extends cdk.NestedStack {
         TABLE_ASSISTANT_CONFIG: props.readTables.assistantConfig.tableName,
         TABLE_SOURCES: props.readTables.sources.tableName,
         TABLE_QUOTESCONFIG: props.readTables.quotesConfig.tableName,
+        TABLE_BOOKINGCONFIG: props.readTables.bookingConfig.tableName,
         API_BASE: `https://api.${props.domain}`,
       },
     })

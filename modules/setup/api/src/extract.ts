@@ -27,12 +27,27 @@ export interface ExtractedFacts {
   email?: string
   serviceAreas: string[]
   services: Array<{ name: string; priceCents?: number; durationMinutes?: number }>
+  /**
+   * Opening hours, as 24-hour ranges per weekday (issue 145).
+   *
+   * The setup flow already read services, prices, contact details and the
+   * assistant's knowledge off a real website, and stopped short of the one
+   * thing every trade page states plainly. Without it a new workspace fell
+   * back to Monday-Friday nine to five, which is wrong for most salons and
+   * for anybody doing weekends.
+   */
+  hours?: Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun',
+    Array<{ from: string; to: string }>>>
 }
 
 /** Facts a scrape may never establish. The owner types these or they do not exist. */
 const FORBIDDEN = /\b(licence|license|licensed|insured|insurance|certified|certification|accredited|ABN|ACN|guarantee[ds]?|warrant(y|ies)|award[- ]winning|\d+\s*years?\s+(of\s+)?(experience|in business))\b/i
 
 export const EMPTY: ExtractedFacts = { serviceAreas: [], services: [] }
+
+const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
+/** 24-hour HH:MM and nothing else. "9am" is the model's job to convert. */
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
 const SYSTEM = [
   'You read one web page and report what it says about a business.',
@@ -42,6 +57,10 @@ const SYSTEM = [
   'invent. If a fact is not there, leave it out.',
   'Do not report licence numbers, ABNs, insurance, certifications, guarantees,',
   'awards, or years in business even when the page states them.',
+  'For opening hours, use 24-hour HH:MM and the weekday keys mon to sun.',
+  'Convert "9am - 5.30pm" to 09:00 and 17:30. Omit any day the page does not',
+  'state, and omit hours entirely if the page does not give them. A day that',
+  'is closed is simply absent. Never assume a Monday to Friday week.',
 ].join(' ')
 
 const SCHEMA = {
@@ -53,6 +72,19 @@ const SCHEMA = {
     phone: { type: 'string' },
     email: { type: 'string' },
     serviceAreas: { type: 'array', items: { type: 'string' } },
+    hours: {
+      type: 'object',
+      properties: Object.fromEntries(
+        ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { from: { type: 'string' }, to: { type: 'string' } },
+            required: ['from', 'to'],
+          },
+        }]),
+      ),
+    },
     services: {
       type: 'array',
       items: {
@@ -122,5 +154,37 @@ export function validate(raw: unknown): ExtractedFacts {
           return [{ name, priceCents: cents(svc.priceCents), durationMinutes: cents(svc.durationMinutes) }]
         }).slice(0, 20)
       : [],
+    hours: hours(o.hours),
   }
+}
+
+/**
+ * Opening hours, checked rather than trusted (issue 145).
+ *
+ * Tier C: the model proposes and this decides. A malformed range is dropped
+ * rather than repaired, because a guess about when somebody opens becomes a
+ * customer standing outside a locked door - and a wrong hour is worse than an
+ * absent one, which the owner would at least notice and fill in.
+ */
+function hours(raw: unknown): ExtractedFacts['hours'] {
+  if (!raw || typeof raw !== 'object') return undefined
+  const src = raw as Record<string, unknown>
+  const out: NonNullable<ExtractedFacts['hours']> = {}
+  for (const day of DAYS) {
+    const ranges = src[day]
+    if (!Array.isArray(ranges)) continue
+    const clean = ranges.flatMap((r) => {
+      const o = r as Record<string, unknown>
+      const from = typeof o.from === 'string' ? o.from.trim() : ''
+      const to = typeof o.to === 'string' ? o.to.trim() : ''
+      if (!TIME.test(from) || !TIME.test(to)) return []
+      // A range that ends before it starts is an extraction error, not a
+      // night shift; we have no way to tell the difference, so we drop it.
+      if (to <= from) return []
+      return [{ from, to }]
+    // Two ranges is a lunch break. More than that is the model padding.
+    }).slice(0, 2)
+    if (clean.length) out[day] = clean
+  }
+  return Object.keys(out).length ? out : undefined
 }
