@@ -424,7 +424,7 @@ const pricingPage = () => {
       <div class="price featured">
         <h3>Trade</h3>
         <div class="amount">$29<span> / month</span></div>
-        <p class="tier-pitch">Everything switched on, for what Jobber charges to start.</p>
+        <p class="tier-pitch">Everything switched on, month to month, for what Jobber charges if you prepay a year.</p>
         <ul>
           <li>Everything in Free, plus:</li>
           <li><strong>Unlimited</strong> bookings, review invites, quotes and invoices</li>
@@ -476,9 +476,9 @@ const pricingPage = () => {
           <tr><th>&nbsp;</th><th>MakerBay Trade</th><th>Jobber Core</th></tr>
         </thead>
         <tbody>
-          <tr><td>Starting price</td><td><strong>$29/mo flat</strong></td><td>$39/mo</td></tr>
+          <tr><td>Starting price</td><td><strong>$29/mo, month to month</strong></td><td>$29/mo if you prepay a year; more month to month</td></tr>
           <tr><td>Free plan</td><td><strong>Yes, no clock</strong></td><td>14-day trial only</td></tr>
-          <tr><td>AI that answers customers</td><td><strong>Included</strong></td><td>Add-on, around $99/mo</td></tr>
+          <tr><td>AI that answers customers</td><td><strong>Included, 2,000 messages</strong></td><td>+$29/mo for 30 conversations, then $0.79 each</td></tr>
           <tr><td>Extra users</td><td><strong>Not charged per seat</strong></td><td>+$29/user/mo</td></tr>
           <tr><td>Review requests</td><td><strong>Included</strong></td><td>Not included</td></tr>
           <tr><td>Fee on your card payments</td><td><strong>None from us</strong></td><td>None from Jobber</td></tr>
@@ -716,7 +716,7 @@ const comparePage = () =>
   page({
     title: 'MakerBay vs Jobber - an honest comparison',
     description:
-      'Jobber starts at $39/month for one user with AI answering as a paid add-on. MakerBay is $29 flat with the assistant included, and a free plan that is not a trial. The mechanics, side by side.',
+      'Jobber starts at $29/month for one user if you prepay a year, with AI answering a $29 add-on capped at 30 conversations. MakerBay is $29 month to month with the assistant included, and a free plan that is not a trial. The mechanics, side by side.',
     path: '/compare/jobber',
     body: `
 <div class="hero">
@@ -738,11 +738,11 @@ const comparePage = () =>
       <table class="pricing-table">
         <thead><tr><th></th><th>Jobber</th><th>MakerBay</th></tr></thead>
         <tbody>
-          <tr><td>Entry price</td><td>$39/mo (Core, billed monthly), one user</td><td>$29/mo flat (Trade) - or $0 forever on Free</td></tr>
+          <tr><td>Entry price</td><td>$29/mo (Core) on annual prepay, one user; more month to month</td><td>$29/mo (Trade) month to month - or $0 forever on Free</td></tr>
           <tr><td>Free plan</td><td>No - 14-day trial only</td><td>Yes - a real plan with real allowances, no clock</td></tr>
-          <tr><td>AI that answers customers</td><td>AI Receptionist is a paid add-on (~$99/mo)</td><td>Included on every plan - grounded in your documents, with sources shown</td></tr>
+          <tr><td>AI that answers customers</td><td>Receptionist add-on: $29/mo for 30 conversations, then $0.79 each. Included on their top plan</td><td>Included on every plan, 2,000 messages - grounded in your documents, with sources shown</td></tr>
           <tr><td>Extra team members</td><td>+$29/user/mo</td><td>Solo-first today; no per-seat pricing</td></tr>
-          <tr><td>Tier jumps</td><td>$39 &rarr; $119 &rarr; $199 as features unlock</td><td>$29 switches everything on; $99 adds the Genie copilot</td></tr>
+          <tr><td>Tier jumps</td><td>Core &rarr; Connect &rarr; Grow &rarr; Plus as features unlock</td><td>$29 switches everything on; $99 adds the Genie copilot</td></tr>
           <tr><td>Card payment fees</td><td>Processing via Jobber Payments</td><td>We add no fee - Stripe's rate is Stripe's</td></tr>
           <tr><td>Contract</td><td>Monthly or annual</td><td>Month to month; cancel from the billing page, not a phone call</td></tr>
           <tr><td>Your data</td><td>Export available</td><td>CSV export on every plan - <a href="/roadmap">the roadmap pledges it publicly</a></td></tr>
@@ -927,8 +927,11 @@ const walk = async (dir) => {
 for (const file of await walk(dist)) {
   const html = await readFile(file, 'utf8')
   const out = html
-    .replaceAll('/assets/mb.css', `/assets/mb.css?v=${LATEST}`)
-    .replaceAll('/assets/hero-demo.js', `/assets/hero-demo.js?v=${LATEST}`)
+    // Every script, not a hand-maintained list. hero-setup.js was missed and
+    // shipped unversioned next to a stamped hero-demo.js - and it is the one
+    // driving the hero flow, so a stale copy would break the first thing a
+    // stranger does. Exactly the failure issue 92 was written to prevent.
+    .replace(/\/assets\/([a-z0-9-]+\.(?:js|css))(?!\?)/g, `/assets/$1?v=${LATEST}`)
   if (out !== html) await writeFile(file, out, 'utf8')
 }
 
