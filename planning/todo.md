@@ -1775,8 +1775,11 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
 - **Quotes/invoice extras** (from 61 consult) — remaining ranked
   dashboard ideas beyond what shipped; pick during testing if wanted.
 - **Identity Center before the first paying customer** (issue 154) —
-  part of the 2026-08-26 ops-hygiene hold; the review ranks it above
-  "after testing".
+  runbook ready (docs/runbook-identity-center.md): ~30 console minutes
+  from you (Part A), then the CLI switchover and CDK hardening are mine.
+  Verified 2026-08-30: today every deploy runs as literal root and no
+  CloudTrail trail exists. Part of the 2026-08-26 ops-hygiene hold; the
+  review ranks it above "after testing".
 
 ## Blocked on you (quick) ⛔
 
@@ -2944,16 +2947,28 @@ again - roughly a year away at current growth.
 **Manual test:** `node scripts/check-stack-budget.mjs` after a synth
 prints `ok Makerbay: 413/500`.
 
-### 154 — Identity Center before the first paying customer 💬 same hold as 152
+### 154 — Identity Center before the first paying customer 💬 runbook ready, ~30 founder minutes
 Root-account operation from a single Windows machine is the bus-factor
-risk multiplied: a lost laptop or compromised session is existential today
-and grows with every customer added. IAM Identity Center with short-lived
-sessions also ends the AWS session expiring mid-deploy (which stranded
-issue 118 phase 2 for a day). Held 2026-08-26 until "the current testing
-round and improvements land"; the 2026-08-30 review ranks it ahead of that
-trigger - the blast radius argument strengthens with issue 151, not after
-it. **Manual test:** deploys run under an Identity Center profile; root
-credentials sign in only for the tasks AWS reserves to root.
+risk multiplied - and it is worse than assumed: verified live 2026-08-30,
+every CLI call and deploy runs as literally `arn:aws:iam::...:root`, there
+are ZERO IAM users, and NO CloudTrail trail exists (only the console's
+90-day history). The saving graces, also verified: root has no access
+keys and MFA is on, so the fix is additive with nothing to revoke first.
+Identity Center's 12-hour sessions also end the AWS session expiring
+mid-deploy (which stranded issue 118 phase 2 for a day).
+
+The full plan is **docs/runbook-identity-center.md**: Part A is ~30
+founder console minutes (organization, Identity Center in us-east-1,
+user + MFA, AdministratorAccess permission set at 12h sessions, billing
+access for roles); Parts B and C are mine (CLI switchover keeping the
+`makerbay` profile name so nothing else changes, then a CloudTrail trail
+with 366-day lifecycle, a root-sign-in alarm to the alerts topic, and the
+GitHub OIDC role that switches on CI's dormant embed drift check).
+Held 2026-08-26 inside ops hygiene; the review ranks it ahead of that
+trigger - the blast radius grows with issue 151, not after it.
+**Manual test:** the runbook's "Done means" list - fresh shell shows the
+SSO role not root, a full deploy completes in one session, the trail is
+Logging, a deliberate root sign-in emails, CI runs the drift check.
 
 ### 155 — Free-Quotes bet: attach a metric and a review date 📋 deferred by founder 2026-08-30
 Quotes is the highest willingness-to-pay feature currently free - the most
