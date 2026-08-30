@@ -1774,14 +1774,13 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
   number, Meta verification, per-conversation fees. Parked until you say go.
 - **Quotes/invoice extras** (from 61 consult) — remaining ranked
   dashboard ideas beyond what shipped; pick during testing if wanted.
-- **Minimal CI** (issue 152) — held inside the ops-hygiene bundle on
-  2026-08-26; the 2026-08-30 review recommends lifting the hold for CI
-  alone. Say go and it ships without touching the rest of the bundle.
 - **Identity Center before the first paying customer** (issue 154) —
-  same hold; the review ranks it above "after testing".
-- **Stack split plan** (issue 153) — decide the split calmly at 496 of
-  500 resources rather than at 500. Plan is mine to write; approving the
-  approach is yours.
+  part of the 2026-08-26 ops-hygiene hold; the review ranks it above
+  "after testing".
+- **Stack split: approve Step 1** (issue 153) — the plan is written
+  (planning/stack-split-plan.md). Approving it approves the Lambda
+  permission squash (~85 resources back, one low-risk deploy) and the
+  nested-stack policy; the edge split stays parked until needed.
 - **Free-Quotes bet: metric and review date** (issue 155) — pick the
   trigger (proposed: 50 active workspaces) so the giveaway stays a bet
   rather than becoming a habit.
@@ -2900,27 +2899,40 @@ appeal (150.1) clears, so sequencing them in the same push is the point.
 **Manual test:** ten workspaces with real (non-test) tenants, at least one
 on the founding rate; the stats rows show their page traffic.
 
-### 152 — Minimal CI 💬 held 2026-08-26 inside ops hygiene; recommend lifting for CI alone
+### 152 — Minimal CI ✅ shipped 2026-08-30 (founder lifted the hold for CI alone)
 Every historical release miss is already a script that exists and simply
 was not run: typecheck ran half its surface until 2026-08-28, the embed
 shipped two days stale (fixed by publish-embed --check), site assets went
-out unstamped (issue 92). One GitHub Actions workflow on push - typecheck,
-vitest, cdk synth, publish-embed --check, site build - turns each memory
+out unstamped (issue 92). One GitHub Actions workflow on push
+(.github/workflows/ci.yml) - typecheck, vitest, site build, cdk synth
+(which bundles every Lambda, so esbuild failures surface here instead of
+mid-deploy), and the stack resource budget check
+(scripts/check-stack-budget.mjs: warn 480, fail 498) - turns each memory
 note into a machine that cannot forget. No deploy automation in scope, so
 it does not touch the parts of the ops-hygiene hold that need account work.
+One step is dormant by design: the embed drift check (publish-embed
+--check) reads the live S3 bucket, so it runs only once a read-only OIDC
+role exists and its ARN is set as the CI_AWS_ROLE_ARN repo variable -
+that role is account work, deliberately outside this issue.
 **Manual test:** push a branch with a UI type error; the check fails.
 
-### 153 — Stack split plan before resource 500 📋 plan proposed, awaiting approval
+### 153 — Stack split plan before resource 500 💬 plan WRITTEN 2026-08-30, awaiting approval of Step 1
 The Makerbay stack is at 496 of a hard 500 CloudFormation resources after
 the beacon POST route. Nested stacks bought room twice (log retention,
 setup, monitoring); the next route or table forces a split unplanned, and a
-split at 500 is an incident where a split at 496 is a refactor. The plan to
-write: what moves (candidates: the static-site/CDN constructs, or the
-public-documents surface), in what order, with zero-downtime import steps
-(cdk refactor / import), and a synth-time resource-count check in CI (152)
-so the ceiling can never again approach silently.
-**Manual test:** the plan names the split, the move order, and the check;
-synth on main reports the count.
+split at 500 is an incident where a split at 496 is a refactor. The plan is written:
+planning/stack-split-plan.md. Its finding changed the shape of the fix -
+half the stack is API plumbing, and 118 Lambda permissions exist for 33
+integrations because CDK mints one per route. So Step 1 is not a split at
+all: squash to one wildcard permission per function (same trust boundary,
+scoped to our API's ARN), freeing ~85 resources in one stateless deploy.
+Step 2 is the nested-stack policy for new features, already the de-facto
+pattern. Step 3 (moving the ~60-resource edge surface via CloudFormation
+stack refactor) stays parked until the CI guard's WARN returns. The
+synth-time count check shipped with 152 and reports on every push.
+**Manual test:** planning/stack-split-plan.md names the steps, order and
+risks; `node scripts/check-stack-budget.mjs` after a synth prints
+496/500 WARN for the main stack today.
 
 ### 154 — Identity Center before the first paying customer 💬 same hold as 152
 Root-account operation from a single Windows machine is the bus-factor

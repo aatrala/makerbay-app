@@ -1,0 +1,67 @@
+# Minimal CI (issue 152).
+#
+# Every check here is a script that already existed and simply was not run
+# automatically - each one corresponds to a release miss that actually
+# happened: typecheck covered half its surface until 2026-08-28, the embed
+# shipped two days stale (issue 118), site assets went out unstamped
+# (issue 92), and the stack reached 496/500 resources before anyone counted
+# (issue 153). No deploys happen here, by design: releasing stays a human
+# decision, this only stops a broken one leaving the laptop unnoticed.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck (Lambdas, packages, dashboard, admin, module UIs)
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npx vitest run
+
+      - name: Marketing site builds
+        run: node site/build.mjs
+
+      # Bundles every Lambda with esbuild, so a bundling failure surfaces
+      # here instead of mid-deploy. Offline: the stack pins account/region
+      # and does no context lookups.
+      - name: CDK synth
+        working-directory: infra
+        run: npx cdk synth --quiet
+
+      - name: Stack resource budget (issue 153)
+        run: node scripts/check-stack-budget.mjs
+
+      # Embed drift (publish-embed --check) compares src/ against the live
+      # S3 bucket, so it needs read-only AWS credentials this repo does not
+      # have yet. When a CI role exists (OIDC, s3:GetObject/HeadObject on
+      # the embed bucket), set the CI_AWS_ROLE_ARN repo variable and this
+      # step starts running; until then it is skipped, not failing.
+      - name: Embed drift check
+        if: vars.CI_AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CI_AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Embed drift check (run)
+        if: vars.CI_AWS_ROLE_ARN != ''
+        run: node scripts/publish-embed.mjs --check
