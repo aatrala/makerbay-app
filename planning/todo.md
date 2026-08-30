@@ -12,7 +12,7 @@
 >   77-81; the rest are roadmap or deliberate scope, not open work.
 
 Location: `makerbay-app/planning/todo.md` (inside the app repo).
-Updated 2026-08-25. One section per issue with a manual test you can run.
+Updated 2026-08-30. One section per issue with a manual test you can run.
 
 Legend: ✅ live and verified · 🔶 live, founder test welcome · ⏳ in
 progress · 💬 awaiting your decision · ⛔ blocked · 📋 spec'd/deferred
@@ -1774,9 +1774,28 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
   number, Meta verification, per-conversation fees. Parked until you say go.
 - **Quotes/invoice extras** (from 61 consult) — remaining ranked
   dashboard ideas beyond what shipped; pick during testing if wanted.
+- **Minimal CI** (issue 152) — held inside the ops-hygiene bundle on
+  2026-08-26; the 2026-08-30 review recommends lifting the hold for CI
+  alone. Say go and it ships without touching the rest of the bundle.
+- **Identity Center before the first paying customer** (issue 154) —
+  same hold; the review ranks it above "after testing".
+- **Stack split plan** (issue 153) — decide the split calmly at 496 of
+  500 resources rather than at 500. Plan is mine to write; approving the
+  approach is yours.
+- **Free-Quotes bet: metric and review date** (issue 155) — pick the
+  trigger (proposed: 50 active workspaces) so the giveaway stays a bet
+  rather than becoming a habit.
 
 ## Blocked on you (quick) ⛔
 
+- **Gate-clearing week** (issue 150) — the four founder errands that
+  unblock more than any month of engineering: submit the SES appeal (76),
+  run one live Stripe subscription (123), click the SNS confirmation,
+  do the 30-minute Connect console task. All four already tracked
+  individually; 150 exists so they get done as one push.
+- **First ten founding users** (issue 151) — the founding offer, the
+  demo tenant and (since 2026-08-30) working analytics all exist; ten
+  real tradies answer every open product question faster than analysis.
 - **SNS abuse-alert confirmation** — the subscription email to
   aatrala@gmail.com is still PendingConfirmation; until you click it,
   the cost-tripwire alarms (issue 47) cannot email you.
@@ -2843,3 +2862,86 @@ stays, before offering "Erase, permanently". It also surfaces the two honest
 caveats the API already returns: a do-not-email record is kept because
 deleting it would mean emailing somebody who asked us to stop, and anonymous
 chat is not linked to a contact so it is not covered.
+
+## Issues 150-155 (from the architecture & business review, 2026-08-30)
+
+Source: the scored platform review of 2026-08-30
+(https://claude.ai/code/artifact/0850ee55-6c61-433f-8ca0-517e9eb67962),
+prepared at commit 10c7f5b after the 25-finding code-review batch shipped.
+Overall 6.9/10: build scores 8-9, launch scores 4-5 - the recommendations
+below exist to close that gap, in this order.
+
+### 150 — Founder gate-clearing week ⛔ founder, bundles existing items
+Four errands, none of them code, that together unblock the whole loop:
+
+1. Submit the SES production-access appeal (issue 76 - the appeal text is
+   rewritten and ready in planning/ses-appeal.md, it has only to be sent).
+2. Create one live Stripe subscription end to end with a real card, then
+   refund it (issue 123 - webhook and handler are proven in test mode only).
+3. Click the SNS confirmation in aatrala@gmail.com so the cost-tripwire
+   alarms can actually email (issue 47's last step).
+4. The ~30-minute Amazon Connect console task for the voice probe
+   (docs/probe-voice-latency.md), then 10 test calls.
+
+Not a new work item - a commitment device. Everything here is already
+tracked; this issue is done when all four are, ideally inside one week.
+**Manual test:** SES console shows production access; Billing shows a live
+Stripe event; the SNS subscription shows Confirmed; the probe latency
+numbers exist.
+
+### 151 — First ten founding users ⛔ founder (blocked on 150.1 for the full loop)
+Zero paying customers means every remaining engineering task improves a
+product nobody uses. The pieces are in place: founding rate live on the
+pricing page, demo tenant at demo.makerbay.app, signup canary guarding the
+front door, and first-party analytics counting since 2026-08-30 (the beacon
+POST fix). What is missing is the outreach motion - which is founder work,
+not platform work. Note: customer email flows are degraded until the SES
+appeal (150.1) clears, so sequencing them in the same push is the point.
+**Manual test:** ten workspaces with real (non-test) tenants, at least one
+on the founding rate; the stats rows show their page traffic.
+
+### 152 — Minimal CI 💬 held 2026-08-26 inside ops hygiene; recommend lifting for CI alone
+Every historical release miss is already a script that exists and simply
+was not run: typecheck ran half its surface until 2026-08-28, the embed
+shipped two days stale (fixed by publish-embed --check), site assets went
+out unstamped (issue 92). One GitHub Actions workflow on push - typecheck,
+vitest, cdk synth, publish-embed --check, site build - turns each memory
+note into a machine that cannot forget. No deploy automation in scope, so
+it does not touch the parts of the ops-hygiene hold that need account work.
+**Manual test:** push a branch with a UI type error; the check fails.
+
+### 153 — Stack split plan before resource 500 📋 plan proposed, awaiting approval
+The Makerbay stack is at 496 of a hard 500 CloudFormation resources after
+the beacon POST route. Nested stacks bought room twice (log retention,
+setup, monitoring); the next route or table forces a split unplanned, and a
+split at 500 is an incident where a split at 496 is a refactor. The plan to
+write: what moves (candidates: the static-site/CDN constructs, or the
+public-documents surface), in what order, with zero-downtime import steps
+(cdk refactor / import), and a synth-time resource-count check in CI (152)
+so the ceiling can never again approach silently.
+**Manual test:** the plan names the split, the move order, and the check;
+synth on main reports the count.
+
+### 154 — Identity Center before the first paying customer 💬 same hold as 152
+Root-account operation from a single Windows machine is the bus-factor
+risk multiplied: a lost laptop or compromised session is existential today
+and grows with every customer added. IAM Identity Center with short-lived
+sessions also ends the AWS session expiring mid-deploy (which stranded
+issue 118 phase 2 for a day). Held 2026-08-26 until "the current testing
+round and improvements land"; the 2026-08-30 review ranks it ahead of that
+trigger - the blast radius argument strengthens with issue 151, not after
+it. **Manual test:** deploys run under an Identity Center profile; root
+credentials sign in only for the tasks AWS reserves to root.
+
+### 155 — Free-Quotes bet: attach a metric and a review date 💬 decision
+Quotes is the highest willingness-to-pay feature currently free - the most
+expensive giveaway in the product. The acquisition logic is sound and
+docs/vision.md already flags it as "the one to keep watching", but a
+deliberate bet with no measurement plan degrades into a habit. Proposed:
+at 50 active workspaces, measure conversion to Trade among workspaces that
+sent 3+ quotes versus those that sent none; revisit pricing only on that
+number. Needs nothing built today beyond agreeing the trigger - the usage
+metering and insights endpoints already record what the measurement reads.
+**Manual test:** the trigger and metric are written here and in
+docs/vision.md §4, replacing "worth revisiting once there are paying
+customers" with the number that causes the revisit.
