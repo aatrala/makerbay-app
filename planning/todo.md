@@ -1777,9 +1777,6 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
 - **Identity Center before the first paying customer** (issue 154) —
   part of the 2026-08-26 ops-hygiene hold; the review ranks it above
   "after testing".
-- **Free-Quotes bet: metric and review date** (issue 155) — pick the
-  trigger (proposed: 50 active workspaces) so the giveaway stays a bet
-  rather than becoming a habit.
 
 ## Blocked on you (quick) ⛔
 
@@ -1815,6 +1812,10 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
 
 ## On hold (deliberate)
 
+- Free-Quotes measurement plan (issue 155) — founder deferred 2026-08-30.
+  The proposed trigger (at 50 active workspaces, compare Trade conversion
+  of 3+-quote senders vs non-senders) stays written in the issue for when
+  it is picked back up.
 - Marketplace (~1000 customers).
 - WhatsApp Genie (see issue 70 - after 100+ users + marketing).
 - Ops hygiene (root → IAM Identity Center — would also stop the AWS
@@ -2954,7 +2955,7 @@ trigger - the blast radius argument strengthens with issue 151, not after
 it. **Manual test:** deploys run under an Identity Center profile; root
 credentials sign in only for the tasks AWS reserves to root.
 
-### 155 — Free-Quotes bet: attach a metric and a review date 💬 decision
+### 155 — Free-Quotes bet: attach a metric and a review date 📋 deferred by founder 2026-08-30
 Quotes is the highest willingness-to-pay feature currently free - the most
 expensive giveaway in the product. The acquisition logic is sound and
 docs/vision.md already flags it as "the one to keep watching", but a
