@@ -665,25 +665,13 @@ export class MakerbayStack extends cdk.Stack {
     })
 
     // ── Functions ────────────────────────────────────────────────────────
-    /*
-     * Every Lambda this stack creates, so log retention can be applied to all
-     * of them at the end (issue 135). Collected rather than listed, because a
-     * hand-maintained list is exactly what let hero-setup.js ship without a
-     * cache-buster.
-     */
-    const allFunctions: lambda.IFunction[] = []
-    const record = <T extends lambda.IFunction>(f: T): T => {
-      allFunctions.push(f)
-      return f
-    }
-
     const fn = (
       name: string,
       entry: string,
       env: Record<string, string>,
       opts?: { timeoutSeconds?: number; memorySize?: number },
     ) =>
-      record(new NodejsFunction(this, name, {
+      (new NodejsFunction(this, name, {
         entry: path.join(repoRoot, entry),
         runtime: lambda.Runtime.NODEJS_22_X,
         architecture: lambda.Architecture.ARM_64,
@@ -1126,7 +1114,15 @@ export class MakerbayStack extends cdk.Stack {
       EMAIL_FROM: `hello@${DOMAIN}`,
       EMAIL_CONFIG_SET: emailConfigSet.configurationSetName,
       CUSTOMER_POOL_ID: userPool.userPoolId,
+      // Ticket replies go through sendEmail with a ref, which runs the
+      // pre-send suppression check against MailLog. Without the table name
+      // that check throws, its catch fails open, and staff replies keep going
+      // to addresses already known to bounce. (The nine module senders get
+      // this in their shared loop below; adminApiFn is built from adminEnv,
+      // which that loop does not cover.)
+      TABLE_MAILLOG: mailLog.tableName,
     })
+    mailLog.grantReadWriteData(adminApiFn)
     // Staff can send a test email so SES setup is verifiable rather than
     // merely declared. The first real sender will be the Requests module.
     adminApiFn.addToRolePolicy(sesSendPolicy)
@@ -1878,9 +1874,12 @@ export class MakerbayStack extends cdk.Stack {
       authorizer,
     })
     // The public page render. No authorizer: the slug identifies the tenant.
+    // POST as well as GET: the page-view beacon arrives via
+    // navigator.sendBeacon, which can only POST - a GET-only route rejected
+    // every beacon at the gateway and the analytics counters stayed at zero.
     httpApi.addRoutes({
       path: '/v1/public/presence',
-      methods: [apigwv2.HttpMethod.GET],
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration('PublicPresenceIntegration', presenceFn),
     })
     httpApi.addRoutes({
@@ -2538,11 +2537,20 @@ function handler(event) {
      * 500 is what forced the manual workaround in the first place. The nested
      * stack costs the parent ONE and brings its own budget.
      *
-     * Every function is collected as it is built rather than listed here, so
-     * a new Lambda is covered on the day it is written.
+     * The list is a SWEEP of the finished construct tree, not an opt-in
+     * wrapper. The first version collected functions through the fn() helper,
+     * which quietly excluded anything built with a bare `new NodejsFunction`
+     * - ScrapeRenderFn, which needs x86_64 and its own lockfile, was outside
+     * the twelve-month promise on the day the sweep shipped. Walking the tree
+     * covers every function in THIS stack however it was constructed; nested
+     * stacks are excluded because they carry their own retention (see
+     * setup-stack.ts and monitoring-stack.ts).
      */
+    const everyFunction = this.node.findAll()
+      .filter((c): c is lambda.Function => c instanceof lambda.Function)
+      .filter((f) => cdk.Stack.of(f) === this)
     new LogRetentionStack(this, 'LogRetention', {
-      functionNames: allFunctions.map((f) => f.functionName),
+      functionNames: everyFunction.map((f) => f.functionName),
     })
   }
 }

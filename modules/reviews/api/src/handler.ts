@@ -255,6 +255,8 @@ export async function createInvite(
     to: who.email,
     ref: { tenantId, moduleId: 'reviews', refType: 'review', refId: who.contactId },
     optional: true,
+    // Minted once above for the footer; sendEmail reuses it for the header.
+    ...(unsubToken ? { unsubToken } : {}),
     audience: 'customer' as const,
     fromName: brand.name,
     replyTo,
@@ -325,6 +327,8 @@ async function onBookingCompleted(detail: BookingCompletedEvent['detail']): Prom
       to: email,
       ref: { tenantId, moduleId: 'reviews', refType: 'review', refId: contactId },
       optional: true,
+      // Minted once above for the footer; sendEmail reuses it for the header.
+      ...(unsubToken ? { unsubToken } : {}),
       audience: 'customer' as const,
       fromName: brand.name,
       replyTo,

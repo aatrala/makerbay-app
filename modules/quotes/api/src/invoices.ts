@@ -2,6 +2,7 @@ import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import {
   appendContactEvent, ddb, emitUsage, getTenant, getTenantBrand, json, linkToken, money, sendEmail, ulid,
+  type TenantBrand,
 } from '@makerbay/core'
 import { getQuotesConfig, type QuoteLine, type QuoteRow } from './db'
 import { docUrl } from './links'
@@ -263,7 +264,6 @@ export async function revokeInvoiceLink(tenantId: string, invoiceId: string): Pr
 export async function sendInvoice(
   tenantId: string,
   invoiceId: string,
-  payoutsEnabled = false,
 ): Promise<APIGatewayProxyResultV2> {
   const invoice = await getInvoice(tenantId, invoiceId)
   if (!invoice) return json(404, { error: 'not_found' })
@@ -292,8 +292,10 @@ export async function sendInvoice(
     due,
     url,
     // A pay button only when it would actually work; otherwise the bank
-    // details, which is how most of these get paid today.
-    payable: Boolean(payoutsEnabled) && invoice.status !== 'paid',
+    // details, which is how most of these get paid today. Read off the tenant
+    // row fetched above - an earlier version took this as a parameter that
+    // the only call site never passed, so the button was unreachable.
+    payable: tenant?.payoutsEnabled === true && invoice.status !== 'paid',
     howToPay: invoice.paymentInstructions,
   })
   const notice = await sendEmail({
@@ -362,47 +364,19 @@ export async function patchInvoice(
   return json(200, { invoice: updated })
 }
 
-/** The business photo from Your page, worn as the document logo. */
-export async function documentLogo(
-  tenantId: string,
-  config: { showLogoOnDocs?: boolean },
-): Promise<string | undefined> {
-  if (config.showLogoOnDocs === false) return undefined
-  try {
-    const r = await ddb.send(new GetCommand({
-      TableName: process.env.TABLE_PRESENCECONFIG!,
-      Key: { tenantId },
-    }))
-    const key = r.Item?.photoKey
-    return key ? `https://chat.makerbay.app/${String(key)}` : undefined
-  } catch {
-    return undefined
-  }
-}
-
 /**
- * The business's phone number, for the printed document.
+ * The business photo from Your page, worn as the document logo.
  *
- * On screen a customer can reply to the email or tap through to the page. On
- * paper there was NO way to reach the tradesperson at all unless they had
- * hand-typed a number into the document footer - which is the difference
- * between an invoice that gets queried and one that gets filed and forgotten.
- *
- * Reads the same presence row documentLogo does, so this costs no extra query
- * when both are fetched together.
+ * Pure: the photo and the phone both ride on TenantBrand now, which is the
+ * core seam over the presence table - this module no longer reads that table
+ * itself (CLAUDE.md: data access goes through packages/core).
  */
-export async function businessPhone(tenantId: string): Promise<string | undefined> {
-  try {
-    const r = await ddb.send(new GetCommand({
-      TableName: process.env.TABLE_PRESENCECONFIG!,
-      Key: { tenantId },
-    }))
-    const phone = String(r.Item?.phone ?? '').trim()
-    return phone || undefined
-  } catch {
-    return undefined
-  }
-}
+export const documentLogo = (
+  config: { showLogoOnDocs?: boolean },
+  brand: Pick<TenantBrand, 'photoUrl'>,
+): string | undefined =>
+  config.showLogoOnDocs === false ? undefined : brand.photoUrl
+
 
 /**
  * Document labels: an optional per-tenant tag, the document kind, and a
@@ -427,11 +401,14 @@ export async function publicInvoiceView(
 ): Promise<APIGatewayProxyResultV2> {
   const invoice = await findInvoiceByToken(tenantId, token)
   if (!invoice || invoice.status === 'draft') return json(404, { error: 'not_found' })
-  const config = await getQuotesConfig(tenantId)
-  const [logoUrl, phone] = await Promise.all([
-    documentLogo(tenantId, config),
-    businessPhone(tenantId),
+  const [config, brand] = await Promise.all([
+    getQuotesConfig(tenantId),
+    getTenantBrand(tenantId),
   ])
+  const logoUrl = documentLogo(config, brand)
+  // On paper there is no reply button; the number is how a printed invoice
+  // gets queried rather than filed and forgotten.
+  const phone = brand.phone
   const label = invoiceLabel(invoice, (config as { docPrefix?: string }).docPrefix ?? '')
   /**
    * A void invoice has nothing to open. A PAID one keeps its square, because

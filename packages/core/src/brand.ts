@@ -22,6 +22,13 @@ export interface TenantBrand {
   /** What the inbox list shows, which on a phone is all it shows. */
   name: string
   accent: string
+  /**
+   * The number from Your page, for printed documents - paper is the one
+   * surface with no reply button. Absent when the tenant has not given one.
+   */
+  phone?: string
+  /** The business photo, worn as the document logo where config allows. */
+  photoUrl?: string
 }
 
 /** MakerBay's own colour, used when a tenant has not chosen one. */
@@ -38,12 +45,17 @@ export async function getTenantBrand(tenantId: string): Promise<TenantBrand> {
     })).catch(() => ({ Item: undefined })),
   ])
 
-  const p = presence.Item as { accentColor?: string; photoKey?: string } | undefined
+  const p = presence.Item as
+    | { accentColor?: string; photoKey?: string; phone?: string }
+    | undefined
   const accent = HEX.test(String(p?.accentColor ?? '')) ? String(p!.accentColor) : DEFAULT_ACCENT
+  const phone = String(p?.phone ?? '').trim()
 
   return {
     name: tenant?.name ?? 'MakerBay',
     accent,
+    ...(phone ? { phone } : {}),
+    ...(p?.photoKey ? { photoUrl: `https://chat.makerbay.app/${String(p.photoKey)}` } : {}),
   }
 }
 

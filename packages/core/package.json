@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./color": "./src/color.ts",
-    "./http": "./src/http.ts"
+    "./http": "./src/http.ts",
+    "./money": "./src/money.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",

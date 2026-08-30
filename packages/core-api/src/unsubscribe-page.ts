@@ -1,4 +1,6 @@
 import { applyUnsubscribe, getTenant, resolveUnsub } from '@makerbay/core'
+import { esc } from '@makerbay/email'
+import { htmlResponse } from './html'
 
 /**
  * The page behind an unsubscribe link (issue 121).
@@ -6,42 +8,31 @@ import { applyUnsubscribe, getTenant, resolveUnsub } from '@makerbay/core'
  * Two callers, and they must behave differently:
  *
  * POST is the mail client acting on the recipient's behalf - Gmail's and Apple
- * Mail's own one-tap control, per RFC 8058. It must take effect immediately
- * and MUST NOT ask anything: there is no human looking at a page, and a
- * confirmation step means the unsubscribe silently never happens.
+ * Mail's own one-tap control, per RFC 8058 - or the button on the page below.
+ * It takes effect immediately and MUST NOT ask anything: for the one-click
+ * case there is no human looking at a page, and a confirmation step means the
+ * unsubscribe silently never happens. RFC 8058 makes one-click POST-only for
+ * exactly the reason the next paragraph exists.
  *
- * GET is a person who clicked the text link. It also takes effect immediately
- * rather than showing a "confirm?" button, because a link in an email is
- * already a deliberate act and a second step is where people give up and
- * press spam instead - which is the outcome this whole feature exists to
- * avoid.
+ * GET is at most a person who clicked the text link - and often nobody at
+ * all. Outlook SafeLinks, corporate mail scanners and some antivirus GET
+ * every URL in every message they deliver, so a GET that applies immediately
+ * unsubscribes recipients who never clicked, silently, with no way for
+ * anyone to notice. So GET shows one button and does nothing else. The
+ * button is the whole page; someone who deliberately clicked "stop these"
+ * presses it in the same second, and a prefetcher never presses it at all.
  *
  * Neither identifies the recipient to anyone. The page says which business
  * has stopped mailing them, never who they are.
  */
 
-const html = (body: string, status = 200) => ({
-  statusCode: status,
-  headers: {
-    'content-type': 'text/html; charset=utf-8',
-    // Never cached: the answer changes the moment it is acted on, and a CDN
-    // holding "you are unsubscribed" for the next person would be worse than
-    // useless.
-    'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff',
-    'referrer-policy': 'no-referrer',
-  },
-  body,
-})
+// Never cached: the answer changes the moment it is acted on, and a CDN
+// holding "you are unsubscribed" for the next person would be worse than
+// useless.
+const html = (body: string, status = 200) =>
+  htmlResponse(body, { status, cacheControl: 'no-store' })
 
-const esc = (s: string): string =>
-  String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-
-function page(heading: string, detail: string): string {
+function page(heading: string, detail: string, extra = ''): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -56,9 +47,11 @@ function page(heading: string, detail: string): string {
          border-radius: 12px; padding: 28px; }
   h1 { font-size: 20px; margin: 0 0 12px; }
   p { margin: 0 0 12px; color: #57534e; }
+  button { font: inherit; font-weight: 600; color: #fff; background: #1c1917;
+           border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
 </style>
 </head>
-<body><main><h1>${esc(heading)}</h1><p>${esc(detail)}</p></main></body>
+<body><main><h1>${esc(heading)}</h1><p>${esc(detail)}</p>${extra}</main></body>
 </html>`
 }
 
@@ -80,10 +73,22 @@ export const handler = async (event: {
     ), 404)
   }
 
-  await applyUnsubscribe(target)
-
+  const method = String(event.requestContext?.http?.method ?? 'GET').toUpperCase()
   const tenant = await getTenant(target.tenantId).catch(() => undefined)
   const who = tenant?.name ?? 'this business'
+
+  if (method !== 'POST') {
+    return html(page(
+      'Stop these emails?',
+      `Press the button and ${who} will stop sending you review requests and updates. `
+      + 'Anything you actually asked for, like a quote or an invoice, will still reach you.',
+      `<form method="post" action="/v1/public/unsubscribe?t=${esc(encodeURIComponent(token))}">`
+      + '<button type="submit">Stop these emails</button></form>',
+    ))
+  }
+
+  await applyUnsubscribe(target)
+
   return html(page(
     'Done - you are unsubscribed',
     `${who} will stop sending you review requests and updates. `

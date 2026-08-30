@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "publish-embed": "node ../../../scripts/publish-embed.mjs",
+    "publish-embed:check": "node ../../../scripts/publish-embed.mjs --check"
   }
 }

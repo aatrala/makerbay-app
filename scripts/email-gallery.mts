@@ -164,8 +164,7 @@ if (missing.length || stale.length) {
   process.exit(1)
 }
 
-const esc = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+import { esc } from '../packages/email/src/render'
 
 const TONE: Record<Entry['audience'], string> = {
   Customer: 'cust', Owner: 'own', Security: 'sec',

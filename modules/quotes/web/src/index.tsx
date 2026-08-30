@@ -100,24 +100,10 @@ const aging = (i: Pick<Invoice, 'status' | 'dueAt'>) => {
 /**
  * Rendered in the locale that treats this currency as local, so a London
  * electrician sees "£99.00" rather than "GBP 99.00" on their own quote
- * (issue 114). Duplicated from packages/core/money rather than imported
- * because this bundle must not pull in the AWS SDK that the core barrel
- * carries; the table below is the same one.
+ * (issue 114). The `/money` subpath is SDK-free, so this bundle stays clear
+ * of the AWS SDK the core barrel carries.
  */
-const CASH_LOCALE: Record<string, string> = {
-  AUD: 'en-AU', NZD: 'en-NZ', GBP: 'en-GB', USD: 'en-US', CAD: 'en-CA',
-  EUR: 'en-IE', INR: 'en-IN', SGD: 'en-SG', ZAR: 'en-ZA', AED: 'en-AE',
-}
-const cash = (cents: number, currency = 'AUD') => {
-  const code = String(currency ?? 'AUD').toUpperCase()
-  try {
-    return new Intl.NumberFormat(CASH_LOCALE[code] ?? 'en', {
-      style: 'currency', currency: code,
-    }).format(cents / 100)
-  } catch {
-    return `${code} ${(cents / 100).toFixed(2)}`
-  }
-}
+import { money as cash } from '@makerbay/core/money'
 
 /** The server expires lazily on read; lists apply the same rule client-side. */
 const quoteStatus = (q: Pick<Quote, 'status' | 'validUntil'>): Quote['status'] =>
@@ -418,6 +404,111 @@ function NewQuote() {
   )
 }
 
+/**
+ * Share/revoke for a public document link - ONE definition for the two detail
+ * screens (quote and invoice), which had byte-for-byte copies differing only
+ * in endpoint. The clipboard fallback and the revoke confirm wording are the
+ * kind of thing that gets fixed on one screen and not the other.
+ */
+function useShareLink(opts: {
+  /** `/v1/quotes/${id}` or `/v1/quotes/invoices/${id}`. */
+  endpoint: string
+  publicUrl: string
+  setPublicUrl: (u: string) => void
+  reload: () => Promise<void>
+  setBusy: (b: boolean) => void
+  setError: (e: string) => void
+  setNote: (n: string) => void
+  setCopied: (c: boolean) => void
+}) {
+  const { endpoint, publicUrl, setPublicUrl, reload, setBusy, setError, setNote, setCopied } = opts
+
+  /**
+   * Put the link on the clipboard, marking the document sent on the way.
+   *
+   * A draft has no working link - the public page 404s on one - so the first
+   * press has to go to the server before there is anything worth copying.
+   * After that it is a straight copy.
+   */
+  const share = () =>
+    void (async () => {
+      setBusy(true); setError(''); setNote(''); setCopied(false)
+      try {
+        const url = publicUrl || (await api('POST', `${endpoint}/share`, {})).publicUrl as string
+        setPublicUrl(url)
+        // If the clipboard is refused - an insecure context, or a browser that
+        // wants a fresher gesture - the link is still shown in the field
+        // below, so the tradesperson is never left with nothing.
+        try {
+          await navigator.clipboard.writeText(url)
+          setCopied(true)
+        } catch {
+          setNote('Copy the link below and send it to your customer.')
+        }
+        await reload()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  const revoke = () =>
+    void (async () => {
+      if (!window.confirm(
+        'Stop this link working?\n\nAnyone you already sent it to will not be able to open it. '
+        + 'You get a new link to send instead.',
+      )) return
+      setBusy(true); setError(''); setNote(''); setCopied(false)
+      try {
+        const r = await api('POST', `${endpoint}/revoke`, {})
+        setPublicUrl(r.publicUrl)
+        setNote('The old link no longer works. Send the new one below.')
+        await reload()
+      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
+    })()
+
+  return { share, revoke }
+}
+
+/** The customer-link field, QR fold and revoke button both detail screens share. */
+function ShareLinkCard({ publicUrl, meta, qrLabel, canRevoke, busy, revoke }: {
+  publicUrl: string
+  /** The line under the link - what holding it means for THIS document kind. */
+  meta: string
+  qrLabel: string
+  canRevoke: boolean
+  busy: boolean
+  revoke: () => void
+}) {
+  return (
+    <>
+      <label className="mt">Customer link</label>
+      <div className="row">
+        <input className="grow" readOnly value={publicUrl} onFocus={(e) => e.target.select()} aria-label="Customer link" />
+        <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener noreferrer">Preview</a>
+      </div>
+      <p className="meta">{meta}</p>
+      <details className="mt">
+        <summary>Show a code they can scan</summary>
+        <div className="mt">
+          <QrBlock url={publicUrl} label={qrLabel} size={180}
+            hint="Hold your phone up and let your customer point their camera at it. If they would rather have it in a message, use Copy the link." />
+        </div>
+      </details>
+      {canRevoke && (
+        <div className="row mt">
+          {/*
+            The honest answer to "I sent it to the wrong Dave", and the
+            reason this product has no view password: a password pasted
+            into the same message would not have stopped that either.
+          */}
+          <button className="ghost danger" disabled={busy} onClick={revoke}
+            title="The old link stops working and you get a new one">
+            Stop this link working
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
 function QuoteDetail() {
   const { quoteId = '' } = useParams()
   const navigate = useNavigate()
@@ -451,45 +542,13 @@ function QuoteDetail() {
     })()
 
   /**
-   * Put the link on the clipboard, marking the quote sent on the way.
-   *
-   * A draft has no working link - the public page 404s on one - so the first
-   * press has to go to the server before there is anything worth copying.
-   * After that it is a straight copy.
+   * Sharing via the shared hook; see useShareLink for the clipboard and
+   * draft-first-press behaviour.
    */
-  const share = () =>
-    void (async () => {
-      setBusy(true); setError(''); setNote(''); setCopied(false)
-      try {
-        const url = publicUrl || (await api('POST', `/v1/quotes/${quoteId}/share`, {})).publicUrl as string
-        setPublicUrl(url)
-        // If the clipboard is refused - an insecure context, or a browser that
-        // wants a fresher gesture - the link is still shown in the field
-        // below, so the tradesperson is never left with nothing.
-        try {
-          await navigator.clipboard.writeText(url)
-          setCopied(true)
-        } catch {
-          setNote('Copy the link below and send it to your customer.')
-        }
-        await load()
-      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
-    })()
-
-  const revoke = () =>
-    void (async () => {
-      if (!window.confirm(
-        'Stop this link working?\n\nAnyone you already sent it to will not be able to open it. '
-        + 'You get a new link to send instead.',
-      )) return
-      setBusy(true); setError(''); setNote(''); setCopied(false)
-      try {
-        const r = await api('POST', `/v1/quotes/${quoteId}/revoke`, {})
-        setPublicUrl(r.publicUrl)
-        setNote('The old link no longer works. Send the new one below.')
-        await load()
-      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
-    })()
+  const { share, revoke } = useShareLink({
+    endpoint: `/v1/quotes/${quoteId}`,
+    publicUrl, setPublicUrl, reload: load, setBusy, setError, setNote, setCopied,
+  })
 
   if (error && !quote) return (
     <><p className="meta"><Link to="/quotes">← All quotes</Link></p><h1>Quote</h1>
@@ -592,38 +651,10 @@ function QuoteDetail() {
           <p className="meta">This quote has been {quote.status}, so it cannot be sent again.</p>
         )}
         {publicUrl && quote.status !== 'draft' && (
-          <>
-            <label className="mt">Customer link</label>
-            <div className="row">
-              <input className="grow" readOnly value={publicUrl} onFocus={(e) => e.target.select()} aria-label="Customer link" />
-              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener noreferrer">Preview</a>
-            </div>
-            <p className="meta">
-              Anyone with this link can see the quote. Accepting it asks them to type their name.
-            </p>
-            {publicUrl && (
-              <details className="mt">
-                <summary>Show a code they can scan</summary>
-                <div className="mt">
-                  <QrBlock url={publicUrl} label={`quote ${quote.label ?? quote.number}`} size={180}
-                    hint="Hold your phone up and let your customer point their camera at it. If they would rather have it in a message, use Copy the link." />
-                </div>
-              </details>
-            )}
-            {!settled && (
-              <div className="row mt">
-                {/*
-                  The honest answer to "I sent it to the wrong Dave", and the
-                  reason this product has no view password: a password pasted
-                  into the same message would not have stopped that either.
-                */}
-                <button className="ghost danger" disabled={busy} onClick={revoke}
-                  title="The old link stops working and you get a new one">
-                  Stop this link working
-                </button>
-              </div>
-            )}
-          </>
+          <ShareLinkCard publicUrl={publicUrl} busy={busy} revoke={revoke}
+            meta="Anyone with this link can see the quote. Accepting it asks them to type their name."
+            qrLabel={`quote ${quote.label ?? quote.number}`}
+            canRevoke={!settled} />
         )}
         {quote.status !== 'draft' && (
           <p className="meta mt">
@@ -778,36 +809,10 @@ function InvoiceDetail() {
    * while there was no link below. Invoices did not work without email, only
    * quotes did.
    */
-  const share = () =>
-    void (async () => {
-      setBusy(true); setError(''); setNote(''); setCopied(false)
-      try {
-        const url = publicUrl || (await api('POST', `/v1/quotes/invoices/${invoiceId}/share`, {})).publicUrl as string
-        setPublicUrl(url)
-        try {
-          await navigator.clipboard.writeText(url)
-          setCopied(true)
-        } catch {
-          setNote('Copy the link below and send it to your customer.')
-        }
-        await load()
-      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
-    })()
-
-  const revoke = () =>
-    void (async () => {
-      if (!window.confirm(
-        'Stop this link working?\n\nAnyone you already sent it to will not be able to open it. '
-        + 'You get a new link to send instead.',
-      )) return
-      setBusy(true); setError(''); setNote(''); setCopied(false)
-      try {
-        const r = await api('POST', `/v1/quotes/invoices/${invoiceId}/revoke`, {})
-        setPublicUrl(r.publicUrl)
-        setNote('The old link no longer works. Send the new one below.')
-        await load()
-      } catch (e) { setError(explain(e)) } finally { setBusy(false) }
-    })()
+  const { share, revoke } = useShareLink({
+    endpoint: `/v1/quotes/invoices/${invoiceId}`,
+    publicUrl, setPublicUrl, reload: load, setBusy, setError, setNote, setCopied,
+  })
 
   if (error && !invoice) return (
     <><p className="meta"><Link to="/quotes/invoices">← All invoices</Link></p><h1>Invoice</h1>
@@ -900,30 +905,11 @@ function InvoiceDetail() {
           </>
         )}
         {publicUrl && (
-          <>
-            <label className="mt">Customer link</label>
-            <div className="row">
-              <input className="grow" readOnly value={publicUrl} onFocus={(e) => e.target.select()} aria-label="Customer link" />
-              <a className="btn ghost" href={publicUrl} target="_blank" rel="noopener noreferrer">Preview</a>
-            </div>
-            <p className="meta">The page is printable — the customer can save it as a PDF. The look comes from your invoice theme under Price list.</p>
-            <details className="mt">
-              <summary>Show a code they can scan</summary>
-              <div className="mt">
-                <QrBlock url={publicUrl} label={`invoice ${label}`} size={180}
-                  hint="Hold your phone up and let your customer point their camera at it. If they would rather have it in a message, use Copy the link." />
-              </div>
-            </details>
-            {invoice.status !== 'paid' && (
-              <div className="row mt">
-                {/* A paid invoice is the customer's receipt, so its link stays. */}
-                <button className="ghost danger" disabled={busy} onClick={revoke}
-                  title="The old link stops working and you get a new one">
-                  Stop this link working
-                </button>
-              </div>
-            )}
-          </>
+          <ShareLinkCard publicUrl={publicUrl} busy={busy} revoke={revoke}
+            meta="The page is printable — the customer can save it as a PDF. The look comes from your invoice theme under Price list."
+            qrLabel={`invoice ${label}`}
+            /* A paid invoice is the customer's receipt, so its link stays. */
+            canRevoke={invoice.status !== 'paid'} />
         )}
       </div>
     </>

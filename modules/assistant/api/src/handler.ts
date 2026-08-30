@@ -55,10 +55,12 @@ import {
   HELP_THEMES,
   renderArticle,
   renderIndex,
+  isVendoredFont,
   renderNotFound,
   renderRobots,
   renderSitemap,
   sourceIdFromSlug,
+  VENDORED_FONT_NAMES,
   type HelpRenderOpts,
   type HelpTheme,
 } from './help'
@@ -804,7 +806,18 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
   const orderChanged = JSON.stringify(catOrder) !== JSON.stringify(prev?.helpCategoryOrder ?? [])
   if ((pinsChanged || orderChanged) && tier === 'free')
     return json(402, { error: 'upgrade_required', feature: 'help_structure' })
+  /*
+   * Only names the bucket actually serves. The vendored map replaced the open
+   * Google Fonts field (issue 133), but this write path kept accepting any
+   * string - which "saved" fonts that then silently never rendered, behind a
+   * settings box that still said "any Google font". A previously stored
+   * legacy name is left alone until the owner next edits; a NEW value must be
+   * on the list, or empty to return to the theme default.
+   */
   const fontHead = String(body.helpFontHead ?? prev?.helpFontHead ?? '').trim().slice(0, 40)
+  if (body.helpFontHead !== undefined && fontHead && !isVendoredFont(fontHead)) {
+    return json(400, { error: 'unknown_font', fonts: VENDORED_FONT_NAMES })
+  }
   const accent2 = /^#[0-9a-fA-F]{6}$/.test(String(body.helpAccent2)) ? String(body.helpAccent2) : prev?.helpAccent2
   const showLogo = body.helpShowLogo === undefined ? prev?.helpShowLogo : body.helpShowLogo === true
   const brandingChanged =

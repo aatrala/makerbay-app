@@ -1,4 +1,6 @@
 import { getTenantBySlugOrAlias } from '@makerbay/core'
+import { esc } from '@makerbay/email'
+import { htmlResponse } from './html'
 
 /**
  * The HTML shell behind a quote or invoice link (issue 118 phase 2).
@@ -38,27 +40,12 @@ interface ShellEvent {
   queryStringParameters?: Record<string, string | undefined>
 }
 
-const esc = (s: string): string =>
-  String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-
-const html = (body: string, status = 200) => ({
-  statusCode: status,
-  headers: {
-    'content-type': 'text/html; charset=utf-8',
-    // The card is cached by the messaging app per URL and never purged, so a
-    // short origin TTL is all we control. Long enough that a tradesperson
-    // sending ten links in a row hits cache; short enough that a rename shows
-    // up the same afternoon on links sent after it.
-    'cache-control': 'public, max-age=300, s-maxage=300',
-    'x-content-type-options': 'nosniff',
-    'referrer-policy': 'no-referrer',
-  },
-  body,
-})
+// The card is cached by the messaging app per URL and never purged, so a
+// short origin TTL is all we control. Long enough that a tradesperson
+// sending ten links in a row hits cache; short enough that a rename shows
+// up the same afternoon on links sent after it.
+const html = (body: string, status = 200) =>
+  htmlResponse(body, { status, cacheControl: 'public, max-age=300, s-maxage=300' })
 
 /**
  * A card for a document that could not be resolved.

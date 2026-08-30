@@ -36,8 +36,8 @@ interface Waiting {
   /** Tomorrow's diary, not today's. See the comment on the fetch. */
   tomorrow: Array<{ time: string; who: string; missing?: string }>
   tomorrowLabel: string
+  /** Every outstanding document is a chase row, so the list IS the count. */
   chases: Chase[]
-  invoicesUnpaid: number
   /** True when a read failed, so the screen must not claim all is quiet. */
   incomplete: boolean
 }
@@ -127,6 +127,10 @@ export default function Home({ me }: { me: Me }) {
 
       const zone = String(books.timezone ?? 'UTC')
       const tomorrow = dayIn(zone, 1)
+      // One formatter for the whole list: constructing Intl.DateTimeFormat is
+      // among the dearest Intl operations, and doing it per booking row put
+      // hundreds of milliseconds on first paint for a busy diary.
+      const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: zone })
 
       setWaiting({
         // The server already counted these; Shell reads the same numbers from
@@ -147,8 +151,7 @@ export default function Home({ me }: { me: Me }) {
             b.kind !== 'block'
             && b.status !== 'cancelled' && b.status !== 'pending_payment'
             && String(b.startsAt ?? '').length > 0
-            && new Intl.DateTimeFormat('en-CA', { timeZone: zone })
-              .format(new Date(String(b.startsAt))) === tomorrow)
+            && dayOf.format(new Date(String(b.startsAt))) === tomorrow)
           .sort((a: { startsAt?: string }, b: { startsAt?: string }) =>
             String(a.startsAt).localeCompare(String(b.startsAt)))
           .map((b: {
@@ -163,18 +166,16 @@ export default function Home({ me }: { me: Me }) {
             // showing tomorrow rather than today.
             missing: !b.phone ? 'no phone number' : !b.address ? 'no address' : undefined,
           })),
-        // Field names taken from the endpoint, not guessed: rows carry
-        // `who` and `age`, and the document type is only knowable from the
-        // label, which reads "Quote 14" or "Invoice 7".
+        // Routed on `kind`, which the endpoint sends as data - an earlier
+        // version sniffed the display label ("Invoice 7"), so any rewording
+        // would have silently sent invoice chases to the quotes screen.
         chases: (insights.chase ?? []).slice(0, 4).map((c: {
-          label?: string; who?: string; age?: number; reason?: string
+          kind?: string; label?: string; who?: string; age?: number; reason?: string
         }) => ({
           label: `${c.label ?? 'Document'} · ${c.who ?? 'someone'}`,
           detail: `${c.age ?? 0} days · ${c.reason ?? 'waiting'}`,
-          to: String(c.label ?? '').startsWith('Invoice') ? '/quotes/invoices' : '/quotes',
+          to: c.kind === 'invoice' ? '/quotes/invoices' : '/quotes',
         })),
-        // The funnel already counts these; no separate field to invent.
-        invoicesUnpaid: Number(insights.invoices?.sent ?? 0),
         incomplete: failed.length > 0,
       })
     })()
@@ -295,9 +296,13 @@ export default function Home({ me }: { me: Me }) {
     }).catch(() => { /* the URL is on screen either way */ })
   }
 
+  // Exactly the three things the card renders, nothing hidden. An earlier
+  // version also gated on the invoice funnel's `sent`, a LIFETIME total - so
+  // any workspace that had ever issued an invoice could never see this state
+  // again. Outstanding invoices appear as chase rows, so the list is the test.
   const nothingWaiting = waiting
     && waiting.openRequests === 0 && waiting.tomorrow.length === 0
-    && waiting.chases.length === 0 && waiting.invoicesUnpaid === 0
+    && waiting.chases.length === 0
 
   const showSetup = !hidden && !allDone
 

@@ -38,123 +38,98 @@ const NEUTRAL: TradeExamples = {
 }
 
 /**
- * Keyed on a lowercase fragment, matched by substring, first hit wins. Order
- * matters where one trade's word appears inside another's.
+ * Keyed on lowercase fragments, matched by substring, first hit wins. Order
+ * matters where one trade's word appears inside another's. Fragments that
+ * mean the same trade share ONE entry - they were pasted copies once, and a
+ * price fixed in "hvac" but not "refrigerat" is silent drift in exactly the
+ * copy this file calls the fastest signal a new user gets.
  */
-const BY_KEYWORD: Array<[string, TradeExamples]> = [
-  ['plumb', {
+const BY_KEYWORD: Array<[string[], TradeExamples]> = [
+  [['plumb'], {
     service: 'Blocked drain',
     servicePrice: '180.00',
     deposit: '50.00',
     quoteLine: 'Labour, licensed plumber',
     docFooter: 'Business number · Plumbing licence',
   }],
-  ['electric', {
+  [['electric'], {
     service: 'Switchboard inspection',
     servicePrice: '160.00',
     deposit: '50.00',
     quoteLine: 'Labour, licensed electrician',
     docFooter: 'Business number · Electrical licence',
   }],
-  ['hvac', {
+  [['hvac', 'refrigerat'], {
     service: 'Air conditioning service',
     servicePrice: '190.00',
     deposit: '50.00',
     quoteLine: 'Labour, refrigeration technician',
     docFooter: 'Business number · Refrigerant handling licence',
   }],
-  ['refrigerat', {
-    service: 'Air conditioning service',
-    servicePrice: '190.00',
-    deposit: '50.00',
-    quoteLine: 'Labour, refrigeration technician',
-    docFooter: 'Business number · Refrigerant handling licence',
-  }],
-  ['clean', {
+  [['clean'], {
     service: 'End of lease clean',
     servicePrice: '320.00',
     deposit: '80.00',
     quoteLine: 'Cleaning, two staff',
     docFooter: 'Business number · Public liability insurer',
   }],
-  ['landscap', {
+  [['landscap', 'garden'], {
     service: 'Garden tidy up',
     servicePrice: '220.00',
     deposit: '60.00',
     quoteLine: 'Labour and green waste removal',
     docFooter: 'Business number · Public liability insurer',
   }],
-  ['garden', {
-    service: 'Garden tidy up',
-    servicePrice: '220.00',
-    deposit: '60.00',
-    quoteLine: 'Labour and green waste removal',
-    docFooter: 'Business number · Public liability insurer',
-  }],
-  ['carpent', {
+  [['carpent', 'build'], {
     service: 'Site visit and measure',
     servicePrice: '150.00',
     deposit: '200.00',
     quoteLine: 'Labour, qualified carpenter',
     docFooter: 'Business number · Builder licence',
   }],
-  ['build', {
-    service: 'Site visit and measure',
-    servicePrice: '150.00',
-    deposit: '200.00',
-    quoteLine: 'Labour, qualified carpenter',
-    docFooter: 'Business number · Builder licence',
-  }],
-  ['handy', {
+  [['handy'], {
     service: 'Half day of odd jobs',
     servicePrice: '240.00',
     deposit: '60.00',
     quoteLine: 'Labour, half day',
     docFooter: 'Business number · Public liability insurer',
   }],
-  ['paint', {
+  [['paint'], {
     service: 'Quote visit',
     servicePrice: '0.00',
     deposit: '150.00',
     quoteLine: 'Preparation and two coats',
     docFooter: 'Business number · Painter licence',
   }],
-  ['salon', {
+  [['salon', 'hair'], {
     service: 'Cut and blow dry',
     servicePrice: '65.00',
     deposit: '20.00',
     quoteLine: 'Colour, full head',
     docFooter: 'Business number',
   }],
-  ['beauty', {
+  [['beauty'], {
     service: 'Facial, 60 minutes',
     servicePrice: '95.00',
     deposit: '25.00',
     quoteLine: 'Treatment course, six sessions',
     docFooter: 'Business number',
   }],
-  ['hair', {
-    service: 'Cut and blow dry',
-    servicePrice: '65.00',
-    deposit: '20.00',
-    quoteLine: 'Colour, full head',
-    docFooter: 'Business number',
-  }],
-  ['tutor', {
+  [['tutor'], {
     service: 'One hour lesson',
     servicePrice: '60.00',
     deposit: '0.00',
     quoteLine: 'Ten lesson block',
     docFooter: 'Business number · Working with children check',
   }],
-  ['coach', {
+  [['coach'], {
     service: 'One hour session',
     servicePrice: '80.00',
     deposit: '0.00',
     quoteLine: 'Six session programme',
     docFooter: 'Business number · Working with children check',
   }],
-  ['pet', {
+  [['pet'], {
     service: 'Dog groom, medium',
     servicePrice: '75.00',
     deposit: '20.00',
@@ -166,8 +141,8 @@ const BY_KEYWORD: Array<[string, TradeExamples]> = [
 export function tradeExamples(trade?: string): TradeExamples {
   const t = (trade ?? '').toLowerCase()
   if (!t) return NEUTRAL
-  for (const [key, examples] of BY_KEYWORD) {
-    if (t.includes(key)) return examples
+  for (const [keys, examples] of BY_KEYWORD) {
+    if (keys.some((key) => t.includes(key))) return examples
   }
   return NEUTRAL
 }

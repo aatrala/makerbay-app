@@ -941,19 +941,21 @@ for (const file of await walk(dist)) {
   if (out !== html) await writeFile(file, out, 'utf8')
 }
 
-await writeFile(
-  join(dist, 'sitemap.xml'),
-  // /compare/jobber was written to rank for "jobber alternative" and then left
-  // out of here, so no crawler was ever told it exists (issue 139).
-  sitemap([
-    '/', '/pricing', '/roadmap', '/changelog',
-    '/terms', '/privacy', '/dpa', '/subprocessors', '/security',
-    '/for/plumbers',
-    '/compare/jobber',
-    ...modules.map((m) => `/modules/${m.id}`),
-  ]),
-  'utf8',
-)
+/*
+ * The sitemap is DERIVED from what was actually built, never hand-listed.
+ * Every index.html under dist IS a page; walking the tree cannot forget one.
+ * The hand-maintained list this replaces forgot /compare/jobber the week it
+ * shipped (issue 139) - and then grew five new entries in one branch, each a
+ * fresh chance to repeat the mistake. Same lesson as the asset stamping
+ * above: "every script, not a hand-maintained list".
+ */
+const NOT_INDEXED = new Set(['/404'])
+const pagePaths = (await walk(dist))
+  .filter((f) => f.endsWith('index.html'))
+  .map((f) => f.slice(dist.length, -'/index.html'.length).replace(/\\/g, '/') || '/')
+  .filter((p) => !NOT_INDEXED.has(p))
+  .sort()
+await writeFile(join(dist, 'sitemap.xml'), sitemap(pagePaths), 'utf8')
 
 console.log(
   `marketing site built: ${modules.length} modules (${generated} generated, ${modules.length - generated} hand-written), ${releases.length} releases`,

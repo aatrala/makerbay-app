@@ -1,4 +1,4 @@
-import { DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
+import { BatchWriteCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { ddb } from './db'
 import { getContact } from './contacts'
 
@@ -166,29 +166,24 @@ export async function contactFootprint(
   const contact = await getContact(tenantId, contactId)
   if (!contact) return undefined
 
+  // The seven counts are independent reads of independent tables, so they run
+  // together; a data-heavy contact answers in one round-trip's time, not seven.
+  const [events, eraseCounts, keepCounts] = await Promise.all([
+    eventKeys(tenantId, contactId),
+    Promise.all(ERASE.map(async (t): Promise<FootprintEntry> =>
+      t.table()
+        ? { label: t.label, count: (await idsFor(t, tenantId, contactId)).length }
+        : { label: t.label, count: 0, unknown: true })),
+    Promise.all(KEEP.map(async (t): Promise<FootprintEntry> =>
+      t.table()
+        ? { label: t.label, count: (await idsFor(t, tenantId, contactId)).length, keptReason: t.reason }
+        : { label: t.label, count: 0, unknown: true, keptReason: t.reason })),
+  ])
   const erase: FootprintEntry[] = [
-    { label: 'history entries', count: (await eventKeys(tenantId, contactId)).length },
+    { label: 'history entries', count: events.length },
+    ...eraseCounts,
   ]
-  for (const t of ERASE) {
-    if (!t.table()) {
-      erase.push({ label: t.label, count: 0, unknown: true })
-      continue
-    }
-    erase.push({ label: t.label, count: (await idsFor(t, tenantId, contactId)).length })
-  }
-
-  const keep: FootprintEntry[] = []
-  for (const t of KEEP) {
-    if (!t.table()) {
-      keep.push({ label: t.label, count: 0, unknown: true, keptReason: t.reason })
-      continue
-    }
-    keep.push({
-      label: t.label,
-      count: (await idsFor(t, tenantId, contactId)).length,
-      keptReason: t.reason,
-    })
-  }
+  const keep: FootprintEntry[] = keepCounts
 
   const notes = [
     'If this person ever asked to stop receiving email, that record is kept.'
@@ -207,6 +202,31 @@ export async function contactFootprint(
     keep,
     notes,
   }
+}
+
+/**
+ * Delete many keys from one table, 25 at a time.
+ *
+ * One awaited DeleteCommand per row was fine until the first contact with a
+ * long history: hundreds of serial round-trips inside a synchronous API
+ * DELETE flirt with the route's 29-second ceiling on exactly the contacts
+ * with the most data. BatchWrite turns 300 requests into 12. Unprocessed
+ * items are retried, then given up on by count - the report stays honest
+ * about what remains, and a second run finishes the job, which is the
+ * contract eraseContact already documents.
+ */
+async function batchDelete(table: string, keys: Array<Record<string, unknown>>): Promise<number> {
+  let done = 0
+  for (let i = 0; i < keys.length; i += 25) {
+    let requests = keys.slice(i, i + 25).map((Key) => ({ DeleteRequest: { Key } }))
+    for (let attempt = 0; attempt < 3 && requests.length > 0; attempt++) {
+      const r = await ddb.send(new BatchWriteCommand({ RequestItems: { [table]: requests } }))
+      const left = (r.UnprocessedItems?.[table] ?? []) as typeof requests
+      done += requests.length - left.length
+      requests = left
+    }
+  }
+  return done
 }
 
 export interface ErasureReport {
@@ -235,31 +255,26 @@ export async function eraseContact(
 
   // History first. It is the largest set and the most revealing.
   const sks = await eventKeys(tenantId, contactId)
-  for (const sk of sks) {
-    await ddb.send(new DeleteCommand({
-      TableName: Tables.contactEvents(),
-      Key: { pk: `${tenantId}#${contactId}`, sk },
-    }))
-  }
-  deleted['history entries'] = sks.length
+  deleted['history entries'] = await batchDelete(
+    Tables.contactEvents(),
+    sks.map((sk) => ({ pk: `${tenantId}#${contactId}`, sk })),
+  )
 
   for (const t of ERASE) {
     const table = t.table()
     if (!table) { skipped.push(t.label); continue }
     const ids = await idsFor(t, tenantId, contactId)
-    for (const id of ids) {
-      await ddb.send(new DeleteCommand({
-        TableName: table,
-        Key: { tenantId, [t.idAttr]: id },
-      }))
-    }
-    deleted[t.label] = ids.length
+    deleted[t.label] = await batchDelete(table, ids.map((id) => ({ tenantId, [t.idAttr]: id })))
   }
 
-  for (const t of KEEP) {
+  const keptCounts = await Promise.all(KEEP.map(async (t) => {
     const table = t.table()
-    if (!table) { skipped.push(t.label); continue }
-    kept[t.label] = (await idsFor(t, tenantId, contactId)).length
+    if (!table) return { label: t.label, count: undefined }
+    return { label: t.label, count: (await idsFor(t, tenantId, contactId)).length }
+  }))
+  for (const k of keptCounts) {
+    if (k.count === undefined) skipped.push(k.label)
+    else kept[k.label] = k.count
   }
 
   // The contact row last, so a failure part-way leaves something to retry

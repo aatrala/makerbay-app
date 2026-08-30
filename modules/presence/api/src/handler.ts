@@ -1,8 +1,9 @@
 import type { APIGatewayProxyEventV2WithLambdaAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import {
+  bumpCounter,
   ddb,
   getEffectiveEntitlement,
   getSlugAlias,
@@ -108,6 +109,21 @@ async function resolveTenantId(ctx: CallerContext): Promise<string> {
 // ── Public page ──────────────────────────────────────────────────────────
 
 async function publicRoute(method: string, event: Event): Promise<APIGatewayProxyResultV2> {
+  /*
+   * The beacon, BEFORE the GET-only guard: navigator.sendBeacon can only
+   * POST, and with this branch below the guard every beacon in every modern
+   * browser was 404'd before it counted anything - the counters read zero
+   * while the code "worked". GET stays accepted for the keepalive-fetch
+   * fallback in browsers without sendBeacon. (See the doc block further down
+   * for what is counted and why it needs no banner.)
+   */
+  const statPath = String(event.queryStringParameters?.stat ?? '').trim()
+  if (statPath && (method === 'GET' || method === 'POST')) {
+    await countPageView(statPath, String(event.queryStringParameters?.ref ?? ''))
+    // 204 with no body: the caller is a beacon and reads nothing.
+    return { statusCode: 204, headers: { 'cache-control': 'no-store' }, body: '' }
+  }
+
   if (method !== 'GET') return json(404, { error: 'not_found' })
 
   // Sub-page segment (grow/storefront styles): /p/{slug}/faq, or /faq on a
@@ -132,28 +148,6 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
    * Always noindex: this is a proposal about somebody else's business, built
    * from their public website, and it must never appear in a search result.
    */
-  /*
-   * First-party page counting (issue 145).
-   *
-   * There was no analytics on this platform at all, so nothing about the
-   * marketing site could be measured or checked. A hosted script was not an
-   * option: the privacy policy promises no third-party trackers and a
-   * build-failing test enforces it, so the beacon is ours.
-   *
-   * It lives on this route for the same reason the preview does - a new route
-   * is a CloudFormation resource and the stack is at 492 of a hard 500 - and
-   * because this is already the public edge Lambda.
-   *
-   * A daily count per path. No cookie, no identifier, nothing that could
-   * follow one person between two requests.
-   */
-  const statPath = String(event.queryStringParameters?.stat ?? '').trim()
-  if (statPath) {
-    await countPageView(statPath, String(event.queryStringParameters?.ref ?? ''))
-    // 204 with no body: the caller is a beacon and reads nothing.
-    return { statusCode: 204, headers: { 'cache-control': 'no-store' }, body: '' }
-  }
-
   const previewToken = String(event.queryStringParameters?.preview ?? '').trim()
   if (previewToken) {
     const draft = await getProspectPreview(previewToken)
@@ -496,13 +490,20 @@ async function photoConfirm(tenantId: string, event: Event): Promise<APIGatewayP
 export { DEFAULT_PRESENCE }
 
 /**
- * One page view, counted into a daily bucket.
+ * First-party page counting (issue 145): one page view into a daily bucket.
+ *
+ * There was no analytics on this platform at all, so nothing about the
+ * marketing site could be measured or checked. A hosted script was not an
+ * option: the privacy policy promises no third-party trackers and a
+ * build-failing test enforces it, so the beacon is ours. A daily count per
+ * path - no cookie, no identifier, nothing that could follow one person
+ * between two requests.
  *
  * Uses the rate-limit table, which is a generic (pk, sk) counter with a TTL -
  * exactly this shape. The name is about its first use, not its only one.
  *
- * Fails silently on purpose: a counter that can break a page render is worse
- * than no counter, and there is nobody to tell.
+ * Fails silently on purpose (bumpCounter swallows): a counter that can break
+ * a page render is worse than no counter, and there is nobody to tell.
  */
 async function countPageView(rawPath: string, rawRef: string): Promise<void> {
   const table = process.env.TABLE_RATELIMIT
@@ -511,31 +512,15 @@ async function countPageView(rawPath: string, rawRef: string): Promise<void> {
   const path = rawPath.replace(/[^a-zA-Z0-9/_-]/g, '').slice(0, 80) || '/'
   const ref = rawRef.replace(/[^a-zA-Z0-9.-]/g, '').slice(0, 60)
   const day = new Date().toISOString().slice(0, 10)
-  try {
-    await ddb.send(new UpdateCommand({
-      TableName: table,
-      Key: { pk: `stat#${day}`, sk: path },
-      UpdateExpression: 'ADD #n :one SET #exp = if_not_exists(#exp, :exp)',
-      ExpressionAttributeNames: { '#n': 'n', '#exp': 'expiresAt' },
-      ExpressionAttributeValues: {
-        ':one': 1,
-        // 400 days, so a year-on-year comparison is possible later.
-        ':exp': Math.floor(Date.now() / 1000) + 400 * 24 * 60 * 60,
-      },
-    }))
-    if (ref) {
-      await ddb.send(new UpdateCommand({
-        TableName: table,
-        Key: { pk: `statref#${day}`, sk: ref },
-        UpdateExpression: 'ADD #n :one SET #exp = if_not_exists(#exp, :exp)',
-        ExpressionAttributeNames: { '#n': 'n', '#exp': 'expiresAt' },
-        ExpressionAttributeValues: {
-          ':one': 1,
-          ':exp': Math.floor(Date.now() / 1000) + 400 * 24 * 60 * 60,
-        },
-      }))
-    }
-  } catch (err) {
-    console.warn('page view not counted', { path, err: String(err) })
-  }
+  // 400 days, so a year-on-year comparison is possible later.
+  const ttlSeconds = 400 * 24 * 60 * 60
+  // The shared core counter (bumpCounter swallows its own failures and this
+  // module writes no DynamoDB expression of its own), and the two counts are
+  // independent, so they land together rather than in series.
+  await Promise.all([
+    bumpCounter({ table, key: { pk: `stat#${day}`, sk: path }, field: 'n', ttlSeconds }),
+    ...(ref
+      ? [bumpCounter({ table, key: { pk: `statref#${day}`, sk: ref }, field: 'n', ttlSeconds })]
+      : []),
+  ])
 }

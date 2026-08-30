@@ -24,12 +24,14 @@ export const handler = async (event: { tenantId: string; bookingId: string }): P
     new GetCommand({ TableName: process.env.TABLE_BOOKINGCONFIG!, Key: { tenantId: event.tenantId } }),
   )
   const timezone = String(cfg.Item?.timezone ?? 'UTC')
-  const tenant = await getTenant(event.tenantId)
+  // Independent reads, together - these ran in series per reminder.
+  const [tenant, brand] = await Promise.all([
+    getTenant(event.tenantId),
+    getTenantBrand(event.tenantId),
+  ])
   const when = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone, weekday: 'long', day: 'numeric', month: 'long',
   }).format(new Date(String(booking.startsAt)))
-
-  const brand = await getTenantBrand(event.tenantId)
   const mail = bookingReminder({
     brand,
     contact: { email: String(cfg.Item?.notifyEmail ?? '') || undefined },

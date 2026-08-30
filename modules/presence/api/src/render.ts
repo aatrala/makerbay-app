@@ -11,6 +11,7 @@
  */
 
 import { readableOn } from '@makerbay/core/color'
+import { money } from '@makerbay/core/money'
 import { DEFAULT_BLOCKS, type AssistantView, type BlockId, type FontPair, type HoursView, type PresenceConfigRow, type ServiceView } from './db'
 
 export interface ReviewView {
@@ -355,22 +356,9 @@ const styles = (brand: string, theme: ThemeStyle, config: PresenceConfigRow) => 
 `
 }
 
-const CASH_LOCALE: Record<string, string> = {
-  AUD: 'en-AU', NZD: 'en-NZ', GBP: 'en-GB', USD: 'en-US', CAD: 'en-CA',
-  EUR: 'en-IE', INR: 'en-IN', SGD: 'en-SG', ZAR: 'en-ZA', AED: 'en-AE',
-}
-// Plain 'en' rendered every non-US currency with a disambiguating prefix on
-// the page customers actually read (issue 114).
-const cash = (cents: number, currency = 'AUD') => {
-  try {
-    return new Intl.NumberFormat(CASH_LOCALE[String(currency).toUpperCase()] ?? 'en', {
-      style: 'currency', currency,
-      minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
-    }).format(cents / 100)
-  } catch {
-    return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
-  }
-}
+// The one currency->locale table, from core (issue 114). Whole dollars on the
+// page customers actually read: "$80" is a headline here, not a figure.
+const cash = (cents: number, currency = 'AUD') => money(cents, currency, { trimEvenCents: true })
 
 export function renderPage(input: PageInput): string {
   const { config, businessName, slug, services, hours, assistant, hasKnowledge, bookingEnabled, sub } = input

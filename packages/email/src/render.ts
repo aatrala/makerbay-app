@@ -16,7 +16,12 @@ import type { Block, EmailDoc } from './blocks'
  * inlined, 600px fixed, no web fonts, no background images.
  */
 
-const esc = (s: string): string =>
+/**
+ * The one HTML escaper. Exported because four other copies of it had grown
+ * around the codebase, and an escaping fix applied to one copy and not the
+ * rest is an XSS-relevant gap, not a style nit.
+ */
+export const esc = (s: string): string =>
   String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

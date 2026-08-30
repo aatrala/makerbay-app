@@ -84,8 +84,19 @@ export class MonitoringStack extends cdk.NestedStack {
       retention: logs.RetentionDays.ONE_YEAR,
     })
 
+    /*
+     * Every SIX HOURS, not every fifteen minutes. Each run performs a real
+     * SignUp, and a real SignUp dispatches a real verification email - which,
+     * until SES leaves the sandbox, comes out of Cognito's default sender:
+     * capped at 50 messages a day for the WHOLE account. At 15 minutes the
+     * canary alone was 96 emails a day - it would have exhausted the shared
+     * budget by midday and starved real customers of their codes, causing
+     * precisely the outage it exists to detect. Four a day keeps the
+     * end-to-end test (the code dispatch IS the success condition) at 8% of
+     * the budget. Revisit the cadence when SES_LEFT_THE_SANDBOX flips.
+     */
     new events.Rule(this, 'SignupCanarySchedule', {
-      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
+      schedule: events.Schedule.rate(cdk.Duration.hours(6)),
       targets: [new eventsTargets.LambdaFunction(canary)],
     })
 
@@ -99,12 +110,14 @@ export class MonitoringStack extends cdk.NestedStack {
         namespace: 'MakerBay/Canary',
         metricName: 'SignupWorks',
         statistic: 'Minimum',
-        period: cdk.Duration.minutes(15),
+        // Matches the six-hour canary cadence so every period has one
+        // datapoint; a shorter period would read as missing data.
+        period: cdk.Duration.hours(6),
       }),
       threshold: 1,
       comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
-      // Two in a row: one transient Cognito error should not wake anybody, but
-      // a real outage is caught within half an hour rather than in days.
+      // Two in a row: one transient Cognito error should not page anybody,
+      // but a real outage is caught within half a day rather than in weeks.
       evaluationPeriods: 2,
       datapointsToAlarm: 2,
       // No data means the canary itself stopped, which is also worth knowing.

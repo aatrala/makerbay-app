@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, explain, type Me, Notice, Skeleton } from '@makerbay/web-kit'
+// The one currency->locale table (issue 114); the /money subpath is SDK-free.
+import { money as cash } from '@makerbay/core/money'
 
 // Metric keys are a stable API contract; these are the names people use.
 // An unmapped key falls back to a readable form of the key itself.
@@ -28,18 +30,6 @@ interface Insights {
   invoices: Funnel
   chase: Chase[]
   viewTrackingSince: string
-}
-
-const CASH_LOCALE: Record<string, string> = {
-  AUD: 'en-AU', NZD: 'en-NZ', GBP: 'en-GB', USD: 'en-US', CAD: 'en-CA',
-  EUR: 'en-IE', INR: 'en-IN', SGD: 'en-SG', ZAR: 'en-ZA', AED: 'en-AE',
-}
-const cash = (cents: number, currency = 'AUD') => {
-  const code = String(currency ?? 'AUD').toUpperCase()
-  try {
-    return new Intl.NumberFormat(CASH_LOCALE[code] ?? 'en', { style: 'currency', currency: code })
-      .format(cents / 100)
-  } catch { return `${code} ${(cents / 100).toFixed(2)}` }
 }
 
 const pctOf = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0)

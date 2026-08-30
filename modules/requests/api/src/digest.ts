@@ -63,6 +63,9 @@ export const handler = async (): Promise<void> => {
         audience: 'owner' as const,
         ref: { tenantId, moduleId: 'requests', refType: 'request', refId: `digest-${rows[0]?.requestId ?? 'none'}` },
         optional: true,
+        // Minted once above for the footer; passing it spares sendEmail a
+        // second lookup and keeps header and footer from ever disagreeing.
+        ...(unsubToken ? { unsubToken } : {}),
         subject: mail.subject,
         text: mail.text,
         html: mail.html,

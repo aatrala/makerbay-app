@@ -452,11 +452,11 @@ async function checkout(tenant: TenantLike, event: Event): Promise<APIGatewayPro
               // The annual founder pays a yearly figure, so quoting a monthly
               // price on their checkout page would be wrong (issue 145).
               message: interval === 'year'
-                ? `Founding member price: ${(FOUNDING_ANNUAL_PRICE_CENTS / 100).toFixed(0)} a year `
-                  + `instead of ${(annualPriceCents('pro') / 100).toFixed(0)}, and you keep it for as `
+                ? `Founding member price: $${(FOUNDING_ANNUAL_PRICE_CENTS / 100).toFixed(0)} a year `
+                  + `instead of $${(annualPriceCents('pro') / 100).toFixed(0)}, and you keep it for as `
                   + `long as you stay. ${foundingSeats} of ${FOUNDING_LIMIT} places left.`
-                : `Founding member price: ${(FOUNDING_PRICE_CENTS / 100).toFixed(0)} a month instead of `
-                  + `${(PLANS.pro.monthlyPriceCents / 100).toFixed(0)}, and you keep it for as long as you stay. `
+                : `Founding member price: $${(FOUNDING_PRICE_CENTS / 100).toFixed(0)} a month instead of `
+                  + `$${(PLANS.pro.monthlyPriceCents / 100).toFixed(0)}, and you keep it for as long as you stay. `
                   + `${foundingSeats} of ${FOUNDING_LIMIT} places left.`,
             },
           },

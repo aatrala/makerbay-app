@@ -122,6 +122,12 @@ const vendoredFont = (name?: string): string | undefined =>
     ? VENDORED_FONTS[name]
     : undefined
 
+/** The choosable names, for the settings write path and its UI. */
+export const VENDORED_FONT_NAMES = Object.keys(VENDORED_FONTS)
+
+export const isVendoredFont = (name?: string): boolean =>
+  !!name && Object.prototype.hasOwnProperty.call(VENDORED_FONTS, name)
+
 // ── Theme definitions ────────────────────────────────────────────────────
 
 interface ThemeDef {

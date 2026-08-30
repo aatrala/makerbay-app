@@ -424,7 +424,9 @@ async function confirmSideEffects(
   exempt = false,
 ): Promise<boolean> {
   const view = publicView(row, timezone)
-  const brand = await getTenantBrand(tenantId)
+  // One fetch feeding brand, currency and slug. This used to be three
+  // separate sequential reads of the same tenant row on every confirmation.
+  const [brand, tenant] = await Promise.all([getTenantBrand(tenantId), getTenant(tenantId)])
   /*
    * The tenant's own currency, not a hardcoded 'AUD' (issue 114 fallout).
    *
@@ -434,8 +436,8 @@ async function confirmSideEffects(
    * Issue 114 fixed this across quotes, invoices and the business page and
    * did not reach booking, because booking never read the field.
    */
-  const currency = (await getTenant(tenantId))?.currency ?? 'AUD'
-  const cancelUrl = `${CHAT}/booking/cancel?slug=${encodeURIComponent(await slugOf(tenantId))}&token=${row.cancelToken}`
+  const currency = tenant?.currency ?? 'AUD'
+  const cancelUrl = `${CHAT}/booking/cancel?slug=${encodeURIComponent(tenant?.slug ?? '')}&token=${row.cancelToken}`
   const confirmMail = bookingConfirmed({
     brand,
     contact: { email: notifyEmail || undefined },
@@ -526,10 +528,6 @@ async function onDepositPaid(detail: PaymentReceivedEvent['detail']): Promise<vo
   const updated = { ...row, status: 'confirmed' as BookingStatus, depositPaidAt: new Date().toISOString(), paymentId }
   const [config, tenant] = await Promise.all([getBookingConfig(tenantId), getTenant(tenantId)])
   await confirmSideEffects(tenantId, tenant?.name ?? '', updated, config.timezone, config.notifyEmail, true)
-}
-
-async function slugOf(tenantId: string): Promise<string> {
-  return (await getTenant(tenantId))?.slug ?? ''
 }
 
 const scheduler = new SchedulerClient({})

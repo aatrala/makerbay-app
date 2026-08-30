@@ -78,16 +78,26 @@ export function currencyForLocale(locale?: string): string | undefined {
  *
  * Never throws: an unknown currency code falls back to a plain number rather
  * than taking down the page that was trying to show a price.
+ *
+ * `trimEvenCents` drops the ".00" from round amounts - for marketing surfaces
+ * like the public business page, where "$80" reads better than "$80.00".
+ * Documents keep the cents: an invoice total is a figure, not a headline.
  */
-export const money = (cents: number, currency = 'AUD'): string => {
+export const money = (
+  cents: number,
+  currency = 'AUD',
+  opts?: { trimEvenCents?: boolean },
+): string => {
   const code = String(currency ?? 'AUD').toUpperCase()
+  const trim = opts?.trimEvenCents === true && cents % 100 === 0
   try {
     return new Intl.NumberFormat(localeForCurrency(code), {
       style: 'currency',
       currency: code,
+      ...(trim ? { minimumFractionDigits: 0 } : {}),
     }).format(cents / 100)
   } catch {
-    return `${code} ${(cents / 100).toFixed(2)}`
+    return `${code} ${(cents / 100).toFixed(trim ? 0 : 2)}`
   }
 }
 

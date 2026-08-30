@@ -74,6 +74,11 @@ interface EmailBase {
    * back to the quote that caused it (issue 107). SES EmailTags values allow
    * only alphanumerics, hyphens and underscores - ULIDs are Crockford base32
    * uppercase, so they pass unmodified.
+   *
+   * Optional here, REQUIRED by the `customer` audience below: the suppression
+   * check, the daily cap and bounce attribution all hang off it, and a
+   * customer-bound call site that forgot it would silently bypass all three.
+   * The compiler keeps the tenth sender covered, not convention.
    */
   ref?: MailRef
   /**
@@ -82,6 +87,13 @@ interface EmailBase {
    * invoice, so only optional mail is stopped by a complaint.
    */
   optional?: boolean
+  /**
+   * A pre-resolved unsubscribe token, when the caller already minted one to
+   * render the template's footer. Passing it saves sendEmail resolving the
+   * same address a second time for the List-Unsubscribe header - and keeps
+   * header and footer agreeing, because both came from one resolution.
+   */
+  unsubToken?: string
 }
 
 /**
@@ -96,7 +108,7 @@ interface EmailBase {
  */
 export type EmailInput =
   | (EmailBase & { audience: 'owner' | 'staff' })
-  | (EmailBase & { audience: 'customer'; fromName: string; replyTo: string })
+  | (EmailBase & { audience: 'customer'; fromName: string; replyTo: string; ref: MailRef })
 
 const FROM = () => process.env.EMAIL_FROM ?? 'hello@makerbay.app'
 /**
@@ -151,10 +163,12 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
     const tenantId = input.ref.tenantId
     let limits
     try {
-      const tenant = await getTenant(tenantId)
+      // Independent reads, so they run together rather than in series - this
+      // sits inside the choke point every customer send passes through.
+      const [tenant, paid] = await Promise.all([getTenant(tenantId), isPaidWorkspace(tenantId)])
       limits = tierFor({
         payoutsEnabled: tenant?.payoutsEnabled,
-        paid: await isPaidWorkspace(tenantId),
+        paid,
         // Written by the payments module the moment Stripe Connect
         // onboarding completes, so it already means exactly "verified since".
         verifiedSince: tenant?.connectOnboardedAt,
@@ -189,7 +203,7 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
    */
   let unsub: string | undefined
   if (input.optional && input.ref) {
-    const token = await unsubTokenFor(input.ref.tenantId, to)
+    const token = input.unsubToken ?? (await unsubTokenFor(input.ref.tenantId, to))
     if (token) unsub = unsubUrl(token)
   }
 

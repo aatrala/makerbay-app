@@ -1,5 +1,9 @@
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { ddb } from './db'
+import { bumpCounter, claimFromCounter, type LimitResult } from './ratelimit'
+
+/** Same shape as every other counter check; kept as a named alias for callers. */
+export type ClaimResult = LimitResult
 
 /**
  * How much customer-bound mail one workspace may send in a day (issue 134).
@@ -90,54 +94,29 @@ export function tierFor(state: TenantSendState, now = Date.now()): TierLimits {
   return warmed ? { tier: 2, ...TIERS[2] } : { tier: 1, ...TIERS[1] }
 }
 
-export interface ClaimResult {
-  ok: boolean
-  /** True when the check itself failed, so the caller can fail open safely. */
-  unavailable?: boolean
-}
-
 /**
  * Take one message from today's allowance, or refuse.
  *
- * A single conditional ADD, so check-then-increment cannot be raced by two
- * Lambdas sending at once. Copied in shape from claimAttempt in ratelimit.ts,
- * which solved the same problem for PIN guesses.
+ * A single conditional ADD via the shared counter in ratelimit.ts, so
+ * check-then-increment cannot be raced by two Lambdas sending at once and the
+ * write shape (aliasing included) lives in exactly one place.
  */
-export async function claimSend(
+export function claimSend(
   tenantId: string,
   optional: boolean,
   limit: number,
   now = new Date(),
 ): Promise<ClaimResult> {
-  if (limit <= 0) return { ok: false }
   const day = now.toISOString().slice(0, 10)
-  const field = optional ? 'nOpt' : 'n'
-  try {
-    await ddb.send(new UpdateCommand({
-      TableName: TABLE(),
-      Key: { tenantId, messageId: `cap#${day}` },
-      // Every name aliased. `n` is short enough to collide with something in
-      // DynamoDB's long reserved list, and a ValidationException here would
-      // fail open on every send while the unit tests stayed green - which is
-      // precisely how issue 107's `at` shipped.
-      UpdateExpression: 'ADD #f :one SET #exp = if_not_exists(#exp, :exp)',
-      ConditionExpression: 'attribute_not_exists(#f) OR #f < :limit',
-      ExpressionAttributeNames: { '#f': field, '#exp': 'expiresAt' },
-      ExpressionAttributeValues: {
-        ':one': 1,
-        ':limit': limit,
-        // Two days, so a row outlives the day it counts and then goes away.
-        ':exp': Math.floor(now.getTime() / 1000) + 2 * 24 * 60 * 60,
-      },
-    }))
-    return { ok: true }
-  } catch (err) {
-    if ((err as { name?: string }).name === 'ConditionalCheckFailedException') {
-      return { ok: false }
-    }
-    console.error('send cap check failed', { tenantId, err: String(err) })
-    return { ok: true, unavailable: true }
-  }
+  return claimFromCounter({
+    table: TABLE(),
+    key: { tenantId, messageId: `cap#${day}` },
+    field: optional ? 'nOpt' : 'n',
+    limit,
+    // Two days, so a row outlives the day it counts and then goes away.
+    ttlSeconds: 2 * 24 * 60 * 60,
+    nowMs: now.getTime(),
+  })
 }
 
 /**
@@ -167,26 +146,16 @@ export const COMPLAINT_BRAKE = 3
 /**
  * Count one complaint and say whether the brake should trip.
  *
- * Same conditional-ADD shape, but the condition is inverted: we always want
- * the increment to land, and the count back, so the caller decides.
+ * The unconditional variant of the shared counter: we always want the
+ * increment to land, and the count back, so the caller decides.
  */
-export async function countComplaint(tenantId: string, now = new Date()): Promise<number> {
+export function countComplaint(tenantId: string, now = new Date()): Promise<number> {
   const day = now.toISOString().slice(0, 10)
-  try {
-    const r = await ddb.send(new UpdateCommand({
-      TableName: TABLE(),
-      Key: { tenantId, messageId: `cap#${day}` },
-      UpdateExpression: 'ADD #c :one SET #exp = if_not_exists(#exp, :exp)',
-      ExpressionAttributeNames: { '#c': 'nComplaints', '#exp': 'expiresAt' },
-      ExpressionAttributeValues: {
-        ':one': 1,
-        ':exp': Math.floor(now.getTime() / 1000) + 2 * 24 * 60 * 60,
-      },
-      ReturnValues: 'UPDATED_NEW',
-    }))
-    return Number((r.Attributes as { nComplaints?: number } | undefined)?.nComplaints ?? 0)
-  } catch (err) {
-    console.error('complaint count failed', { tenantId, err: String(err) })
-    return 0
-  }
+  return bumpCounter({
+    table: TABLE(),
+    key: { tenantId, messageId: `cap#${day}` },
+    field: 'nComplaints',
+    ttlSeconds: 2 * 24 * 60 * 60,
+    nowMs: now.getTime(),
+  })
 }

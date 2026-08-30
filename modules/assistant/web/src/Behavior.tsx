@@ -185,6 +185,17 @@ export function HelpCentrePage({ me }: { me: Me }) {
   )
 }
 
+/**
+ * The heading faces the help centre can actually serve - keep in step with
+ * VENDORED_FONTS in modules/assistant/api/src/help.ts, which is the enforced
+ * list (the API refuses anything else with `unknown_font`).
+ */
+const HELP_FONTS = [
+  'Archivo', 'Fraunces', 'Source Sans 3', 'Source Serif 4', 'IBM Plex Sans',
+  'IBM Plex Mono', 'Zilla Slab', 'Public Sans', 'Inter', 'Nunito',
+  'Nunito Sans', 'Playfair Display', 'Lora',
+]
+
 const THEME_CHOICES: { key: string; name: string; blurb: string }[] = [
   { key: 'clean', name: 'Clean', blurb: 'The free look - tidy cards, your colour on the trim.' },
   { key: 'bold', name: 'Bold', blurb: 'Your colour full-bleed across the top, chunky cards.' },
@@ -272,9 +283,21 @@ function ThemeCard({ config, tier, patch, slug }: {
           </label>
           <div className="row mt" style={{ gap: 14, flexWrap: 'wrap' }}>
             <div>
-              <label htmlFor="h-font">Heading font (any Google font)</label>
-              <input id="h-font" defaultValue={config.helpFontHead ?? ''} placeholder="e.g. Bricolage Grotesque"
-                onBlur={(e) => void patch({ helpFontHead: e.target.value.trim() })} />
+              <label htmlFor="h-font">Heading font</label>
+              {/* A closed list, matching VENDORED_FONTS in the API (help.ts):
+                  faces are served from our own bucket since issue 133, so
+                  only these names render. The old free-text box said "any
+                  Google font" and happily saved names that then did nothing. */}
+              <select id="h-font" value={config.helpFontHead ?? ''}
+                onChange={(e) => void patch({ helpFontHead: e.target.value })}>
+                <option value="">Theme default</option>
+                {HELP_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
+                {config.helpFontHead && !HELP_FONTS.includes(config.helpFontHead) && (
+                  <option value={config.helpFontHead} disabled>
+                    {config.helpFontHead} (no longer available)
+                  </option>
+                )}
+              </select>
             </div>
             <div>
               <label htmlFor="h-acc2">Second accent</label>

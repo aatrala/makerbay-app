@@ -23,7 +23,6 @@ import {
   getInvoice,
   invoiceFromQuote,
   documentLogo,
-  businessPhone,
   invoiceLabel,
   quoteLabel,
   listInvoices,
@@ -38,13 +37,12 @@ import { docUrl } from './links'
 import { depositPaid, quoteAnswered, quoteSent } from '@makerbay/email'
 import { documentInsights } from './insights'
 import { docQr } from './qr'
-import { claimAcceptFailure, getTenantBrand } from '@makerbay/core'
+import { claimAcceptAttempt, claimDocumentProbe, getTenantBrand } from '@makerbay/core'
 import {
   affirmationFor,
   callerIp,
   documentHash,
   effectiveCheck,
-  lastFour,
   snapshotOf,
   verifyAccept,
 } from './accept'
@@ -283,6 +281,26 @@ async function publicRoute(
   )
   if (!resolved) return json(404, { error: 'not_found' })
 
+  /**
+   * The per-IP ceiling on sweeping many documents (issue 119 review).
+   *
+   * The per-token limiter below stops 10,000 guesses at ONE document; this
+   * stops one address probing MANY. 120 an hour is generous - a household
+   * shares an address, a tradesperson opens several of their own links from
+   * one office - and useless to a token sweep. Fails open (`unavailable`):
+   * losing this ceiling for a few minutes is better than a customer who
+   * cannot open the quote they were sent.
+   */
+  // No source IP means the check cannot key on anything; claimAttempt treats
+  // an empty key as ok, which is the same fail-open stance as `unavailable`.
+  const probe = await claimDocumentProbe(callerIp(event) ?? '')
+  if (!probe.ok) {
+    return json(429, {
+      error: 'too_many_requests',
+      message: 'Too many requests from this connection. Try again in an hour.',
+    })
+  }
+
   if (method === 'GET' && path === '/v1/public/quotes/invoice') {
     return publicInvoiceView(
       resolved.tenantId, resolved.name, String(q.token ?? ''), resolved.payoutsEnabled, resolved.slug,
@@ -334,19 +352,25 @@ async function publicRoute(
     const qr = status === 'sent'
       ? await docQr(quoteUrl(resolved.slug, quoteLabel(quote.number, config.docPrefix), quote.publicToken))
       : undefined
+    const brand = await getTenantBrand(resolved.tenantId)
     return json(200, {
       business: resolved.name,
       footer: config.docFooter || undefined,
-      logoUrl: await documentLogo(resolved.tenantId, config),
+      logoUrl: documentLogo(config, brand),
       // For the printed sheet, where there is otherwise no way to reach them.
-      ...(await businessPhone(resolved.tenantId).then((p) => (p ? { phone: p } : {}))),
+      ...(brand.phone ? { phone: brand.phone } : {}),
       quote: { ...publicView(quote, status, config.taxLabel, config.docPrefix), deposit },
       // What the customer must do to accept, and the wording they will be
       // agreeing to. Sent with the document so the page cannot invent either.
+      //
+      // NO phone hint. This response is served to whoever holds the link, and
+      // "the number ending 5678" IS the answer the phone4 check verifies -
+      // publishing it here made the strongest gate answerable by reading the
+      // same response it protects. The customer knows their own number; the
+      // page asks for "the number this was sent to" without saying which.
       accept: {
         check,
         affirmation: affirmationFor(resolved.name, money(quote.totalCents, quote.currency)),
-        ...(check === 'phone4' ? { phoneHint: phoneHintOf(quote.customerPhone) } : {}),
       },
       ...(qr ? { qr } : {}),
     })
@@ -358,16 +382,6 @@ async function publicRoute(
     )
   }
   return json(404, { error: 'not_found' })
-}
-
-/**
- * "the number ending 5678", so the customer knows which phone is being asked
- * about without the page republishing the whole number to whoever holds the
- * link.
- */
-const phoneHintOf = (phone?: string): string | undefined => {
-  const four = lastFour(phone)
-  return four ? `the number ending ${four}` : undefined
 }
 
 /**
@@ -473,34 +487,36 @@ async function respond(
    */
   let acceptance: AcceptanceRecord | undefined
   if (accepted) {
+    /**
+     * The attempt is claimed BEFORE the guess is compared (issue 119 review).
+     *
+     * The check being protected is the last four digits of a phone number:
+     * 10,000 possibilities, which one script works through in minutes. Until
+     * this, the STRONGER accept setting was the brute-forceable one, which
+     * made it falsely reassuring. Success would have been recorded as a
+     * binding contract with a name, an IP and a document hash.
+     *
+     * Order matters: an earlier version counted only failures, after
+     * verification - so the one guess that mattered, the correct one, never
+     * failed and was never stopped. Now the eleventh attempt in an hour is
+     * refused before anything is compared, right or wrong.
+     *
+     * Keyed on the token rather than the caller's address, because someone
+     * who can hold the link can also change address - a per-IP cap alone
+     * would be theatre against exactly this attack.
+     */
+    const allowed = await claimAcceptAttempt(quote.publicToken)
+    if (!allowed.ok) {
+      return json(429, {
+        error: 'too_many_attempts',
+        message: 'Too many tries. Wait an hour, or ask them to send the quote again.',
+      })
+    }
     const failed = verifyAccept(check, quote, {
       name: String(b.name ?? ''),
       phone4: String(b.phone4 ?? ''),
     })
-    if (failed) {
-      /**
-       * Wrong answers are counted, and after ten in an hour this document
-       * stops listening (issue 119 review).
-       *
-       * The check being protected is the last four digits of a phone number:
-       * 10,000 possibilities, which one script works through in minutes. Until
-       * this, the STRONGER accept setting was the brute-forceable one, which
-       * made it falsely reassuring. Success would have been recorded as a
-       * binding contract with a name, an IP and a document hash.
-       *
-       * Keyed on the token rather than the caller's address, because someone
-       * who can hold the link can also change address - a per-IP cap alone
-       * would be theatre against exactly this attack.
-       */
-      const allowed = await claimAcceptFailure(quote.publicToken)
-      if (!allowed.ok) {
-        return json(429, {
-          error: 'too_many_attempts',
-          message: 'Too many tries. Wait an hour, or ask them to send the quote again.',
-        })
-      }
-      return json(400, failed)
-    }
+    if (failed) return json(400, failed)
 
     const snapshot = snapshotOf(quote)
     acceptance = {

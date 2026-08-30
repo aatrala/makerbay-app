@@ -22,9 +22,17 @@ import { listInvoices, type InvoiceRow } from './invoices'
  */
 
 export interface DocFunnel {
+  /** Everything that ever left draft - a LIFETIME total, kept for the funnel. */
   sent: number
   opened: number
   settled: number
+  /**
+   * Still awaiting the customer: unanswered quotes, unpaid invoices. This is
+   * the number for "what needs you" surfaces - the dashboard once used `sent`
+   * for that, which meant a workspace that had ever issued an invoice could
+   * never again read as having nothing outstanding.
+   */
+  outstanding: number
   /** Money, so the numbers are in the units the owner thinks in. */
   sentCents: number
   settledCents: number
@@ -33,6 +41,12 @@ export interface DocFunnel {
 
 export interface NeedsChasing {
   id: string
+  /**
+   * Which document this is, as data. The dashboard routes on it - an earlier
+   * version made it sniff `label.startsWith('Invoice')`, which turned display
+   * copy into an API contract that any rewording would silently break.
+   */
+  kind: 'quote' | 'invoice'
   label: string
   who: string
   totalCents: number
@@ -59,6 +73,7 @@ function chase(quotes: QuoteRow[], invoices: InvoiceRow[]): NeedsChasing[] {
     if (effectiveStatus(q) !== 'sent') continue
     rows.push({
       id: q.quoteId,
+      kind: 'quote',
       label: `Quote ${q.number}`,
       who: q.customerName || q.customerEmail || q.customerPhone || 'someone',
       totalCents: q.totalCents,
@@ -73,6 +88,7 @@ function chase(quotes: QuoteRow[], invoices: InvoiceRow[]): NeedsChasing[] {
     const overdue = new Date(i.dueAt).getTime() < Date.now()
     rows.push({
       id: i.invoiceId,
+      kind: 'invoice',
       label: `Invoice ${i.number}`,
       who: i.customerName || i.customerEmail || i.customerPhone || 'someone',
       totalCents: i.totalCents,
@@ -100,6 +116,7 @@ export async function documentInsights(tenantId: string): Promise<APIGatewayProx
     sent: out.length,
     opened: out.filter((q) => (q.viewCount ?? 0) > 0).length,
     settled: out.filter((q) => q.status === 'accepted').length,
+    outstanding: quotes.filter((q) => effectiveStatus(q) === 'sent').length,
     sentCents: out.reduce((n, q) => n + q.totalCents, 0),
     settledCents: out.filter((q) => q.status === 'accepted').reduce((n, q) => n + q.totalCents, 0),
     currency: out[0]?.currency ?? 'AUD',
@@ -108,6 +125,7 @@ export async function documentInsights(tenantId: string): Promise<APIGatewayProx
     sent: invOut.length,
     opened: invOut.filter((i) => (i.viewCount ?? 0) > 0).length,
     settled: invOut.filter((i) => i.status === 'paid').length,
+    outstanding: invOut.filter((i) => i.status === 'sent').length,
     sentCents: invOut.reduce((n, i) => n + i.totalCents, 0),
     settledCents: invOut.filter((i) => i.status === 'paid').reduce((n, i) => n + i.totalCents, 0),
     currency: invOut[0]?.currency ?? 'AUD',

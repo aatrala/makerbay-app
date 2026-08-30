@@ -50,7 +50,7 @@ vi.mock('@aws-sdk/lib-dynamodb', () => {
   }
 })
 
-const { ACCEPT_FAILURES, claimAcceptFailure, claimAttempt } = await import('./ratelimit')
+const { ACCEPT_ATTEMPTS, claimAcceptAttempt, claimAttempt } = await import('./ratelimit')
 
 beforeEach(() => {
   store = new Map()
@@ -100,13 +100,13 @@ describe('claimAttempt', () => {
   })
 })
 
-describe('claimAcceptFailure', () => {
+describe('claimAcceptAttempt', () => {
   it('stops a phone4 sweep long before 10,000 guesses', async () => {
     let allowed = 0
     for (let i = 0; i < 200; i++) {
-      if ((await claimAcceptFailure('TOKEN-A')).ok) allowed++
+      if ((await claimAcceptAttempt('TOKEN-A')).ok) allowed++
     }
-    expect(allowed).toBe(ACCEPT_FAILURES.limit)
+    expect(allowed).toBe(ACCEPT_ATTEMPTS.limit)
     // 10,000 possibilities against a handful of tries is the whole point.
     expect(allowed).toBeLessThan(20)
   })
@@ -117,19 +117,19 @@ describe('claimAcceptFailure', () => {
    * against exactly the attack this stops.
    */
   it('is not escaped by changing address, because it counts per document', async () => {
-    for (let i = 0; i < ACCEPT_FAILURES.limit; i++) await claimAcceptFailure('TOKEN-B')
-    expect((await claimAcceptFailure('TOKEN-B')).ok).toBe(false)
+    for (let i = 0; i < ACCEPT_ATTEMPTS.limit; i++) await claimAcceptAttempt('TOKEN-B')
+    expect((await claimAcceptAttempt('TOKEN-B')).ok).toBe(false)
   })
 
   it('does not punish a different customer for someone else exhausting theirs', async () => {
-    for (let i = 0; i < ACCEPT_FAILURES.limit; i++) await claimAcceptFailure('TOKEN-C')
-    expect((await claimAcceptFailure('TOKEN-D')).ok).toBe(true)
+    for (let i = 0; i < ACCEPT_ATTEMPTS.limit; i++) await claimAcceptAttempt('TOKEN-C')
+    expect((await claimAcceptAttempt('TOKEN-D')).ok).toBe(true)
   })
 
   // A customer squinting at a number they were sent weeks ago gets room.
   it('leaves room for honest mistakes', async () => {
     for (let i = 0; i < 3; i++) {
-      expect((await claimAcceptFailure('TOKEN-E')).ok).toBe(true)
+      expect((await claimAcceptAttempt('TOKEN-E')).ok).toBe(true)
     }
   })
 })

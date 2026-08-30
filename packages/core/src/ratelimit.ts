@@ -25,12 +25,92 @@ export interface LimitResult {
   /**
    * True when the check could not run at all.
    *
-   * Callers decide what that means. A counter of FAILURES should fail open -
+   * Callers decide what that means. A counter of attempts should fail open -
    * losing the ceiling for a few minutes is better than telling a customer
    * they cannot accept their quote. A counter guarding expensive work should
    * fail closed.
    */
   unavailable?: boolean
+}
+
+/**
+ * One counter row, described rather than hand-written.
+ *
+ * Every counter in the platform - PIN attempts, document probes, the daily
+ * send cap, complaint counts, page-view stats - is the same DynamoDB shape:
+ * ADD a field, set a TTL the first time, sometimes refuse past a limit. It
+ * used to exist as four hand-written copies, which meant the next fix to the
+ * shape (the aliasing rule below, for one) had to be found and applied four
+ * times. Now the shape is written once and the callers choose table and key.
+ */
+export interface CounterSpec {
+  table: string
+  key: Record<string, unknown>
+  /** Attribute holding the count. */
+  field: string
+  /** How long the row outlives its first write before TTL removes it. */
+  ttlSeconds: number
+  nowMs?: number
+}
+
+/**
+ * Claim one unit, or refuse once `limit` is spent.
+ *
+ * Every name aliased. `n` is short enough to collide with something in
+ * DynamoDB's long reserved list, and a ValidationException here would fail
+ * open on every call while the unit tests stayed green - which is precisely
+ * how issue 107's `at` shipped.
+ */
+export async function claimFromCounter(spec: CounterSpec & { limit: number }): Promise<LimitResult> {
+  if (spec.limit <= 0) return { ok: false }
+  const nowMs = spec.nowMs ?? Date.now()
+  try {
+    await ddb.send(new UpdateCommand({
+      TableName: spec.table,
+      Key: spec.key,
+      UpdateExpression: 'ADD #f :one SET #exp = if_not_exists(#exp, :exp)',
+      ConditionExpression: 'attribute_not_exists(#f) OR #f < :limit',
+      ExpressionAttributeNames: { '#f': spec.field, '#exp': 'expiresAt' },
+      ExpressionAttributeValues: {
+        ':one': 1,
+        ':limit': spec.limit,
+        ':exp': Math.floor(nowMs / 1000) + spec.ttlSeconds,
+      },
+    }))
+    return { ok: true }
+  } catch (err) {
+    if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return { ok: false }
+    console.error('counter claim failed', { field: spec.field, err: String(err) })
+    return { ok: true, unavailable: true }
+  }
+}
+
+/**
+ * Count one, unconditionally, and return the new total.
+ *
+ * For counters that inform rather than refuse: complaint counts, page views.
+ * Returns 0 when the write failed - a lost count must never take down the
+ * request that was being counted.
+ */
+export async function bumpCounter(spec: CounterSpec): Promise<number> {
+  const nowMs = spec.nowMs ?? Date.now()
+  try {
+    const r = await ddb.send(new UpdateCommand({
+      TableName: spec.table,
+      Key: spec.key,
+      UpdateExpression: 'ADD #f :one SET #exp = if_not_exists(#exp, :exp)',
+      ExpressionAttributeNames: { '#f': spec.field, '#exp': 'expiresAt' },
+      ExpressionAttributeValues: {
+        ':one': 1,
+        ':exp': Math.floor(nowMs / 1000) + spec.ttlSeconds,
+      },
+      ReturnValues: 'UPDATED_NEW',
+    }))
+    return Number((r.Attributes as Record<string, unknown> | undefined)?.[spec.field] ?? 0)
+  } catch (err) {
+    console.error('counter bump failed', { field: spec.field, err: String(err) })
+    return 0
+  }
 }
 
 /**
@@ -51,48 +131,36 @@ export async function claimAttempt(
   // sweep. A fixed window is enough here: the attacker's gain from straddling
   // two windows is one extra allowance, against 10,000 guesses they need.
   const windowId = Math.floor(Date.now() / 1000 / windowSeconds)
-  try {
-    await ddb.send(new UpdateCommand({
-      TableName: TABLE(),
-      Key: { pk: `${bucket}#${windowId}`, sk: id },
-      UpdateExpression: 'ADD n :one SET expiresAt = if_not_exists(expiresAt, :exp)',
-      ConditionExpression: 'attribute_not_exists(n) OR n < :limit',
-      ExpressionAttributeValues: {
-        ':one': 1,
-        ':limit': limit,
-        ':exp': Math.floor(Date.now() / 1000) + windowSeconds * 2,
-      },
-    }))
-    return { ok: true }
-  } catch (err) {
-    if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return { ok: false }
-    console.error('rate limit check failed', { bucket, err: String(err) })
-    return { ok: true, unavailable: true }
-  }
+  return claimFromCounter({
+    table: TABLE(),
+    key: { pk: `${bucket}#${windowId}`, sk: id },
+    field: 'n',
+    limit,
+    ttlSeconds: windowSeconds * 2,
+  })
 }
 
 /**
- * How many wrong answers a document accepts before it stops listening.
+ * How many ACCEPT ATTEMPTS a document takes in an hour before it stops
+ * listening.
  *
  * Keyed on the TOKEN, not the caller's address. The check being protected is
  * the last four digits of a phone number - 10,000 possibilities - and an
  * attacker who can hold the link can also change address. Per-IP alone would
  * be theatre against exactly the attack it is supposed to stop.
  *
- * Ten is generous for a customer squinting at a number they were sent weeks
- * ago, and useless to somebody working through 10,000.
+ * Claimed BEFORE the guess is compared, and on every attempt. An earlier
+ * version counted only failures, checked after verification - which meant the
+ * one guess that matters, the correct one, never failed and so was never
+ * stopped: a lockout that only converted wrong answers from 400 to 429.
+ * Viewing is not counted, so a customer re-opening their page spends nothing;
+ * ten attempts is generous for someone squinting at a number they were sent
+ * weeks ago, and useless to somebody working through 10,000.
  */
-export const ACCEPT_FAILURES = { limit: 10, windowSeconds: 60 * 60 } as const
+export const ACCEPT_ATTEMPTS = { limit: 10, windowSeconds: 60 * 60 } as const
 
-/**
- * Counted only on a FAILED attempt.
- *
- * Counting every attempt would mean a customer who accepts, then opens the
- * page again, spends their own allowance on nothing. The thing worth limiting
- * is wrong guesses.
- */
-export const claimAcceptFailure = (token: string): Promise<LimitResult> =>
-  claimAttempt('accept-fail', token, ACCEPT_FAILURES.limit, ACCEPT_FAILURES.windowSeconds)
+export const claimAcceptAttempt = (token: string): Promise<LimitResult> =>
+  claimAttempt('accept-fail', token, ACCEPT_ATTEMPTS.limit, ACCEPT_ATTEMPTS.windowSeconds)
 
 /**
  * A ceiling on how many different documents one address may probe.

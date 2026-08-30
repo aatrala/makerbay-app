@@ -160,6 +160,8 @@ async function ask(tenantId: string, event: Event): Promise<APIGatewayProxyResul
     to: contact.email,
     ref: { tenantId, moduleId: 'visibility', refType: 'review', refId: contactId },
     optional: true,
+    // Minted once above for the footer; sendEmail reuses it for the header.
+    ...(unsubToken ? { unsubToken } : {}),
     audience: 'customer' as const,
     fromName: brand.name,
     replyTo,
