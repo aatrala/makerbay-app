@@ -11,6 +11,14 @@
   Cost Explorer after infra changes.
 - Monorepo: npm workspaces. `infra/` (CDK), `packages/core/`, `modules/<name>/`,
   `web/`. One CDK stack (`Makerbay`) until stage triggers say otherwise.
+- **Stack resource budget** (issue 153): the main stack sits well under
+  CloudFormation's hard 500 only because per-route API permissions are
+  squashed to one per function at the end of the stack constructor - do not
+  add permissions per route, and a new feature bringing more than ~5
+  resources gets its own nested stack (the LogRetention/Setup/Monitoring
+  pattern). CI guards the count via `scripts/check-stack-budget.mjs`
+  (warn 480, fail 498); the split plan for when it warns again is
+  `planning/stack-split-plan.md`.
 - Every DynamoDB item is tenant-scoped. Data access goes through
   `packages/core` — never hand-roll table access in module code.
 - Usage metering events on EventBridge bus `makerbay` are a stable contract:

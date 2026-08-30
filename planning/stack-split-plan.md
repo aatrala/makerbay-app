@@ -1,7 +1,8 @@
 # Stack split plan (issue 153)
 
-Status: **written 2026-08-30, awaiting founder approval of the approach.**
-Nothing here is executed yet. The CI guard (issue 152,
+Status: **Step 1 approved and DEPLOYED 2026-08-30** (496 -> 413/500,
+diff was 125 permission-only changes, live routes verified). Step 2 is
+policy in CLAUDE.md. Step 3 stays parked until the CI guard warns again. The CI guard (issue 152,
 `scripts/check-stack-budget.mjs`) is live and prints the count on every push:
 warn at 480, fail at 498.
 

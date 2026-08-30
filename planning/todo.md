@@ -1777,10 +1777,6 @@ CRLF files to zero; esbuild bumped to 0.25.12, clearing its advisory.
 - **Identity Center before the first paying customer** (issue 154) —
   part of the 2026-08-26 ops-hygiene hold; the review ranks it above
   "after testing".
-- **Stack split: approve Step 1** (issue 153) — the plan is written
-  (planning/stack-split-plan.md). Approving it approves the Lambda
-  permission squash (~85 resources back, one low-risk deploy) and the
-  nested-stack policy; the edge split stays parked until needed.
 - **Free-Quotes bet: metric and review date** (issue 155) — pick the
   trigger (proposed: 50 active workspaces) so the giveaway stays a bet
   rather than becoming a habit.
@@ -2916,7 +2912,7 @@ role exists and its ARN is set as the CI_AWS_ROLE_ARN repo variable -
 that role is account work, deliberately outside this issue.
 **Manual test:** push a branch with a UI type error; the check fails.
 
-### 153 — Stack split plan before resource 500 💬 plan WRITTEN 2026-08-30, awaiting approval of Step 1
+### 153 — Stack split plan before resource 500 ✅ Step 1 deployed 2026-08-30; Step 3 parked behind the CI guard
 The Makerbay stack is at 496 of a hard 500 CloudFormation resources after
 the beacon POST route. Nested stacks bought room twice (log retention,
 setup, monitoring); the next route or table forces a split unplanned, and a
@@ -2930,9 +2926,22 @@ Step 2 is the nested-stack policy for new features, already the de-facto
 pattern. Step 3 (moving the ~60-resource edge surface via CloudFormation
 stack refactor) stays parked until the CI guard's WARN returns. The
 synth-time count check shipped with 152 and reports on every push.
-**Manual test:** planning/stack-split-plan.md names the steps, order and
-risks; `node scripts/check-stack-budget.mjs` after a synth prints
-496/500 WARN for the main stack today.
+**Step 1 approved and deployed 2026-08-30.** A sweep at the end of the
+stack constructor removes CDK's per-route API permissions and adds one
+per (function, API) pair, SourceArn scoped to that API's whole ARN - 104
+permissions became 21 across the two APIs. `cdk diff` before deploying
+showed 125 changes, every one an AWS::Lambda::Permission; nothing else
+moved. **496 -> 413 of 500**, and the budget guard's WARN is gone.
+Verified live after deploy: public presence, beacon, doc and unsubscribe
+routes answer with their normal shapes; authorized routes on BOTH APIs
+return 401 (the authorizer Lambdas themselves are invoked through the
+squashed permissions); `scripts/verify-share-flow.mjs` 28/28 against the
+deployed Lambda; throwaway quotes cleaned up.
+Step 2 (nested-stack policy for new features) is now written into
+CLAUDE.md. Step 3 (the edge split) stays parked until the guard warns
+again - roughly a year away at current growth.
+**Manual test:** `node scripts/check-stack-budget.mjs` after a synth
+prints `ok Makerbay: 413/500`.
 
 ### 154 — Identity Center before the first paying customer 💬 same hold as 152
 Root-account operation from a single Windows machine is the bus-factor

@@ -2524,6 +2524,61 @@ function handler(event) {
     new cdk.CfnOutput(this, 'DataSourceId', { value: dataSource.attrDataSourceId })
 
     /*
+     * One API-invoke permission per function, not per route (issue 153 Step 1).
+     *
+     * CDK's HttpLambdaIntegration mints a route-scoped Lambda permission for
+     * every route, so a function serving fourteen routes carried fourteen
+     * near-identical permissions - 104 resources across the two APIs for 21
+     * functions, in a stack four resources from CloudFormation's hard 500.
+     *
+     * This sweep removes them after every route is registered and adds ONE
+     * permission per (function, API) pair, with SourceArn scoped to that
+     * API's whole ARN (`.../<apiId>/*` - which also covers the authorizers'
+     * `/authorizers/<id>` shape). The trust boundary is unchanged in
+     * substance: the API's own route table already decides which requests
+     * reach which function, and no cross-account or cross-API surface is
+     * added. Permissions are stateless, so a revert is a plain redeploy.
+     *
+     * It must run AFTER the last addRoutes call, which is why it sits here
+     * at the end of the constructor beside the log-retention sweep.
+     */
+    {
+      const refIn = (resolved: unknown): string | undefined =>
+        JSON.stringify(resolved).match(/"Ref":"([A-Za-z0-9]+)"/)?.[1]
+      const getAttIn = (resolved: unknown): string | undefined =>
+        JSON.stringify(resolved).match(/"Fn::GetAtt":\["([A-Za-z0-9]+)"/)?.[1]
+      const apiByRef = new Map<string, apigwv2.HttpApi>(
+        [httpApi, adminApi].map((a) => [refIn(this.resolve(a.apiId)) ?? '', a]),
+      )
+      const keep = new Map<string, { functionName: string; api: apigwv2.HttpApi; fnId: string }>()
+      for (const c of this.node.findAll()) {
+        if (!(c instanceof lambda.CfnPermission) || c.principal !== 'apigateway.amazonaws.com') continue
+        const resolvedFn = this.resolve(c.functionName)
+        const apiRef = refIn(this.resolve(c.sourceArn)) ?? ''
+        const api = apiByRef.get(apiRef)
+        if (!api) {
+          // A permission for an API this sweep does not know would be
+          // silently broken by removal - refuse loudly at synth instead.
+          throw new Error(`API permission for unknown API (ref ${apiRef}) at ${c.node.path}`)
+        }
+        keep.set(`${apiRef}#${JSON.stringify(resolvedFn)}`, {
+          functionName: c.functionName,
+          api,
+          fnId: getAttIn(resolvedFn) ?? refIn(resolvedFn) ?? `F${keep.size}`,
+        })
+        c.node.scope!.node.tryRemoveChild(c.node.id)
+      }
+      for (const { functionName, api, fnId } of keep.values()) {
+        new lambda.CfnPermission(this, `ApiInvoke${api.node.id}${fnId}`, {
+          action: 'lambda:InvokeFunction',
+          functionName,
+          principal: 'apigateway.amazonaws.com',
+          sourceArn: `arn:${this.partition}:execute-api:${this.region}:${this.account}:${api.apiId}/*`,
+        })
+      }
+    }
+
+    /*
      * Twelve-month log retention, in infrastructure at last (issue 135).
      *
      * The privacy policy promises logs are kept twelve months and deleted.
