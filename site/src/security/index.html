@@ -19,12 +19,12 @@
 <section class="legal">
   <div class="wrap">
     <h1>Security</h1>
-    <p class="legal-date">Last reviewed 29 August 2026.</p>
+    <p class="legal-date">Last reviewed 10 September 2026.</p>
 
     <div class="legal-summary">
       <h2>The short version</h2>
       <ul>
-        <li>Everything is encrypted, every workspace is separated, and passwords never reach us.</li>
+        <li>Everything is encrypted, every workspace is separated, and there are no passwords to steal.</li>
         <li><strong>We hold no SOC 2 and no ISO 27001.</strong> Amazon Web Services, who host everything, hold both.</li>
         <li>We have never commissioned a penetration test. We will before we reach 250 paying businesses.</li>
         <li>Three things are not in place yet, and they are named below with dates.</li>
@@ -47,14 +47,14 @@
       <li><strong>Encrypted in transit and at rest</strong>, across databases and file storage.</li>
       <li><strong>Every record is scoped to one workspace</strong>, enforced in a single shared data layer with automated tests covering it. There is no code path that reads across workspaces.</li>
       <li><strong>Point-in-time recovery</strong> on customer data, and tables configured so that tearing down our own infrastructure cannot delete yours.</li>
-      <li><strong>Passwords are handled by Amazon Cognito</strong> and never seen or stored by us. Two-factor authentication is available.</li>
+      <li><strong>There are no passwords.</strong> You sign in with a one-time code we email you, or with a passkey held on your phone or computer (fingerprint, face or PIN), which never leaves the device. The handful of accounts created before September 2026 keep a password in Amazon Cognito, which we never see, and can switch to a code at any time.</li>
       <li><strong>The staff console runs on a separate identity system</strong> from the customer app, so a customer login cannot become a staff login even if something else goes wrong.</li>
       <li><strong>Staff status is checked live on every request</strong>, so removing someone takes effect in about a minute rather than whenever their session happens to expire.</li>
       <li><strong>An append-only staff audit log.</strong> The service that writes it has permission to add rows and no permission to change them.</li>
       <li><strong>Rate limiting</strong> on public endpoints, and per-business daily caps on outbound email.</li>
       <li><strong>Automatic expiry</strong>: assistant conversations after 90 days, call recordings after 30, application logs after 12 months.</li>
       <li><strong>No third-party trackers anywhere</strong>, including on the pages your customers see. Fonts are served from our own servers rather than Google&rsquo;s. A test fails our build if that ever changes.</li>
-      <li><strong>A signup canary</strong> that creates an account every fifteen minutes and alarms if it cannot.</li>
+      <li><strong>A signup canary</strong> that asks the live sign-in page for a code every hour, waits for the delivery receipt, and alarms if either fails.</li>
       <li><strong>AI inference runs inside our own cloud account.</strong> No customer content trains any model.</li>
     </ul>
 

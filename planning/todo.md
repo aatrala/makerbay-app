@@ -12,7 +12,7 @@
 >   77-81; the rest are roadmap or deliberate scope, not open work.
 
 Location: `makerbay-app/planning/todo.md` (inside the app repo).
-Updated 2026-08-30. One section per issue with a manual test you can run.
+Updated 2026-09-10. One section per issue with a manual test you can run.
 
 Legend: ✅ live and verified · 🔶 live, founder test welcome · ⏳ in
 progress · 💬 awaiting your decision · ⛔ blocked · 📋 spec'd/deferred
@@ -232,7 +232,7 @@ founding-member pricing approved; hero must not look cheap (design
 consult before build). Deferred by founder: Google sign-in, Google
 Calendar two-way sync, QuickBooks/Xero, WhatsApp.
 
-### 76 — SES production access ⏳ appeal submitted 2026-09-04 as a reply on case 178755823800807, awaiting AWS
+### 76 — SES production access (first entry, kept for the history; the current status is the later "76 — SES appeal" heading: denied again 2026-09-08, Resend carries email now)
 Submitting hit a wall worth knowing about: a PREVIOUS request (contact
 aatral@makerbay.xyz) was already DENIED, and after a denial the API
 refuses re-submission. **Do:** AWS Console → Support → Your support cases → case
@@ -1305,7 +1305,7 @@ strangers' inboxes on your authenticated domain. Reject names containing @,
 a URL, or a known-brand lookalike, or "PayPal Security" becomes a phishing
 sender with valid DKIM on makerbay.app.
 
-### 110 — Email one-time-code sign-in: mechanism confirmed 📋 ready to build
+### 110 — Email one-time-code sign-in ✅ superseded by 157 (Better Auth, live 2026-09-09); the Cognito-native mechanism below was never built
 Founder approved this as the default sign-in (issue 93). Native Cognito
 passwordless email OTP shipped 2024-11-22 and is the right mechanism - do
 NOT build the older CUSTOM_AUTH trigger trio, which AWS themselves now

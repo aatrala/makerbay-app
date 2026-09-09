@@ -59,7 +59,7 @@ Every ticket arrives as an email address. Workspaces page → "Find by email"
 
 | Ticket | First look |
 |---|---|
-| "Can't log in" | 360 → People → Send password reset (Cognito emails them a code; staff never see a password) |
+| "Can't log in" | Customers sign in with an emailed code: check the mail log for their address (bounced? suppressed?) and the `makerbay-signup-broken` alarm. "Cognito password reset" on 360 → People only applies to the few pre-September-2026 password accounts. A passkey that stopped working is not a support case: they sign in with a code and remove the device under Your account |
 | "Billing is wrong" | 360 → Account → Stripe webhook row. No events or wrong mode = webhook misconfigured. Stripe customer id links the Dashboard |
 | "Payments/payouts stuck" | 360 → Get paid (Connect). `onboarding incomplete` = they never finished Stripe onboarding; otherwise investigate in the Stripe Connect dashboard with the acct id |
 | "Emails not arriving" | Email page → test-send to yourself proves platform SES. If platform is fine, check the SES suppression list in the AWS console (P1 will surface it) |

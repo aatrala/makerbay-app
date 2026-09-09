@@ -19,7 +19,7 @@
 <section class="legal">
   <div class="wrap">
     <h1>Privacy Policy</h1>
-    <p class="legal-date">Version 1.0. In effect from 29 August 2026.</p>
+    <p class="legal-date">Version 1.1. In effect from 10 September 2026. Changes from 1.0: Resend added as the email provider; sign-in described as codes and passkeys rather than passwords.</p>
 
     <div class="legal-summary">
       <h2>The short version</h2>
@@ -27,7 +27,7 @@
         <li>We sell nothing to anybody. No advertising, no data brokers, no tracking across the web.</li>
         <li>The website sets <strong>no cookies at all</strong>. We count page views ourselves, without cookies and without any third party.</li>
         <li>Your data is stored in the United States, on Amazon Web Services. If that matters to you, read section 5.</li>
-        <li>Two companies can touch it: Amazon Web Services, and Stripe for payments. That is the whole list.</li>
+        <li>Three companies can touch it: Amazon Web Services, Stripe for payments, and Resend for email. That is the whole list.</li>
         <li>The AI assistant runs inside our own AWS account. Nothing you or your customers type is used to train anybody&rsquo;s model.</li>
         <li>Ask us and we will send you everything we hold, or delete it.</li>
       </ul>
@@ -115,7 +115,7 @@
       UK and EU law needs more than a disclosure: it needs an approved transfer
       mechanism. There are two separate steps to cover. The step from us to our
       infrastructure providers is covered by the standard contractual clauses in
-      our agreements with Amazon Web Services and Stripe. The step from you to
+      our agreements with Amazon Web Services, Stripe and Resend. The step from you to
       us needs clauses between you and us, which is what our Data Processing
       Agreement is for. If you are a UK or EU business, ask us for it before you
       sign up and we will put it in place.
@@ -130,8 +130,12 @@
     <ul>
       <li>
         <strong>Amazon Web Services</strong> &mdash; hosting, databases, file
-        storage, sending email and SMS, and running the AI assistant. United
-        States.
+        storage, sending SMS, and running the AI assistant. United States.
+      </li>
+      <li>
+        <strong>Resend</strong> &mdash; sending the emails MakerBay sends on
+        your behalf, including sign-in codes, and telling us whether each one
+        arrived. United States.
       </li>
       <li>
         <strong>Stripe</strong> &mdash; subscription payments, and payments
@@ -180,7 +184,7 @@
 
     <h2>8. Email and text messages</h2>
     <p>
-      Messages are sent through Amazon SES and Amazon Pinpoint. We record
+      Email is sent through Resend and text messages through Amazon Pinpoint. We record
       whether each one was delivered, bounced, or was reported as spam, so a
       business can see that a customer never got their invoice, and so we stop
       sending to addresses that do not work.
@@ -217,9 +221,12 @@
       about forty lines.
     </p>
     <p>
-      When you sign in to the app, your browser stores a sign-in token so you
-      are not asked for your password on every page. It stays on your device,
-      is not a tracking cookie, and signing out removes it.
+      When you sign in to the app, your browser keeps a session cookie so you
+      are not asked for a code on every page. It is marked so that scripts on
+      the page cannot read it, it is not a tracking cookie, it expires after
+      seven days, and signing out removes it. If you choose to sign in with a
+      fingerprint or face, the passkey stays on your device; we hold only its
+      public half, which cannot be used to sign in.
     </p>
 
     <h2>10. How long we keep things</h2>
@@ -257,7 +264,7 @@
       <li>Each business&rsquo;s data is separated, and every request is checked against the workspace it belongs to.</li>
       <li>Databases have point-in-time recovery, so data can be restored after a mistake.</li>
       <li>Staff access is limited to what the job needs and is recorded in an audit log.</li>
-      <li>Passwords are handled by Amazon Cognito. We never see them.</li>
+      <li>There are no passwords. You sign in with a one-time emailed code or a passkey on your own device.</li>
     </ul>
     <p>
       No system is perfect. If a breach affects you, we will tell you and the

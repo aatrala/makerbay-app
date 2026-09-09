@@ -22,6 +22,8 @@ packages/
   core/               Shared platform code: tenancy, entitlements, metering, manifests
   core-api/           Platform API: workspaces, keys, usage, billing
   admin-api/          Staff-only API: grants, audit (separate Cognito pool, MFA required)
+  auth/               Customer sign-in on Better Auth: emailed codes and passkeys, DynamoDB
+                      adapter, Cognito kept only as the upstream for pre-2026-09 passwords
   mcp-server/         Hosted MCP endpoint at mcp.makerbay.app
   web-kit/            Everything a module's screens may import: API client,
                       shared components, the stylesheet

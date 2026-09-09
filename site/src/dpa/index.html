@@ -19,7 +19,7 @@
 <section class="legal">
   <div class="wrap">
     <h1>Data Processing Agreement</h1>
-    <p class="legal-date">Version 1.0. In effect from 29 August 2026.</p>
+    <p class="legal-date">Version 1.1. In effect from 10 September 2026. Changes from 1.0: Resend added to Annex III; Annex II sign-in measure updated.</p>
 
     <div class="legal-summary">
       <h2>The short version</h2>
@@ -298,7 +298,7 @@
       <li>Encrypted in transit (TLS) and at rest, across databases and file storage.</li>
       <li>Every stored record is scoped to one workspace, enforced in a single shared data layer with automated tests covering it.</li>
       <li>Point-in-time recovery on customer data, and tables configured so that tearing down our infrastructure cannot delete your data.</li>
-      <li>Passwords are handled by Amazon Cognito and never seen or stored by us. Two-factor authentication is available.</li>
+      <li>No passwords are held for customer accounts. Sign-in is by a one-time emailed code or a device-bound passkey with user verification required. Accounts created before September 2026 may retain a password in Amazon Cognito, never seen or stored by us.</li>
       <li>The staff console runs on a separate identity system from the customer app, so a customer login cannot become a staff login even if something else goes wrong.</li>
       <li>Staff status is checked live on every request, so removing someone takes effect in about a minute rather than whenever their session expires.</li>
       <li>An append-only staff audit log. The service that writes it has permission to add rows and no permission to change them.</li>
@@ -326,9 +326,15 @@
         <tbody>
           <tr>
             <td><strong>Amazon Web Services, Inc.</strong></td>
-            <td>Hosting, databases, file storage, email and SMS delivery, AI inference, sign-in</td>
+            <td>Hosting, databases, file storage, SMS delivery, AI inference, sign-in sessions</td>
             <td>United States</td>
             <td>Standard contractual clauses in the AWS data processing addendum</td>
+          </tr>
+          <tr>
+            <td><strong>Resend, Inc.</strong></td>
+            <td>Delivery of the emails we send on your behalf, including sign-in codes, and the delivery, bounce and complaint events that come back</td>
+            <td>United States</td>
+            <td>Standard contractual clauses in the Resend data processing addendum</td>
           </tr>
           <tr>
             <td><strong>Stripe, Inc.</strong></td>

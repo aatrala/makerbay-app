@@ -58,6 +58,10 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   add or remove is listed under Your account, and you get an email each
   time one changes, so a device you do not recognise is spotted and removed
   in a minute.
+- Changed `platform` The privacy policy, the security page and the Data
+  Processing Agreement now say how sign-in actually works (codes and
+  passkeys, no passwords) and list Resend as the company that delivers our
+  email. Both legal documents move to version 1.1.
 
 ## 2.28.0 - 2026-08-29
 

@@ -10,6 +10,7 @@
 // This writes the two rows that fix that.
 //
 // Run once: node scripts/seed-hq-session.mjs
+// HISTORICAL: ran 2026-08-27. Kept as the record of what was seeded.
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 

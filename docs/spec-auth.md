@@ -1,16 +1,16 @@
 # Spec: customer authentication on Better Auth (issue 157)
 
-Status: **LIVE 2026-09-09 (phase 1b flipped).** Production customers sign
-in with an emailed code; existing passwords still work through the Cognito
-upstream. Phases 0 and 1 history follows. The adapter passed Better
-Auth's conformance suites (114 of 116; the two misses are the harness's
-30-second timeout over the WAN, not failures). The AuthStack is deployed,
-JWKS is live at `https://api.makerbay.app/auth/jwks`, the six existing
-users are migrated, and the dashboard build carries both sign-ins. Test
-the dark path at `https://app.makerbay.app/?auth=better-auth`. Production
-still signs in on Cognito until `AUTH_PROVIDER` and
-`DEFAULT_AUTH_PROVIDER` flip (phase 1b). Founder decisions listed at the
-end; defaults apply until changed.
+Status: **LIVE 2026-09-09; extended by docs/spec-auth-phase2.md (people
+in a workspace, auth on the dashboard origin, passkeys), all live
+2026-09-09.** Production customers sign in with an emailed code or a
+passkey; the six accounts migrated from Cognito can still use their
+password through the Cognito upstream. `AUTH_PROVIDER` and
+`DEFAULT_AUTH_PROVIDER` are both `better-auth`; `?auth=cognito` on the
+dashboard URL is the per-browser escape hatch. Phases 0 and 1 history
+follows. The adapter passed Better Auth's conformance suites (114 of 116;
+the two misses are the harness's 30-second timeout over the WAN, not
+failures). JWKS is live at `https://api.makerbay.app/auth/jwks`. Founder
+decisions listed at the end; defaults apply until changed.
 
 **Proven live 2026-09-09 with Resend as the mail provider:** code requested,
 mailed and delivered, sign-in with the code, JWT minted, API answered,

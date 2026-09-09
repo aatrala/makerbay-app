@@ -2,6 +2,9 @@
 /**
  * Give every existing customer a Better Auth identity (issue 157).
  *
+ * HISTORICAL: ran once on 2026-09-09 for the six Cognito users. Kept as the
+ * record of how their ids were mapped; there is nothing left to migrate.
+ *
  * For each row in the Users table - keyed by the Cognito `sub` - this writes
  * two rows into the auth table:
  *
