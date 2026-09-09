@@ -45,7 +45,13 @@ const ALLOWED: Record<string, number> = {
  * The same rule for the other provider. There is no SDK to grep for, so the
  * guard is the API host: only the Resend adapter may know it.
  */
-const RESEND_ALLOWED = new Set(['packages/core/src/mail/resend.ts'])
+const RESEND_ALLOWED = new Set([
+  'packages/core/src/mail/resend.ts',
+  // The signup canary READS Resend's delivery log to confirm a code arrived
+  // (issue 158). It never sends; the code request goes through the live
+  // auth endpoint like any customer's.
+  'packages/core-api/src/signup-canary.ts',
+])
 
 const SKIP = new Set(['node_modules', 'dist', 'cdk.out', '.git', 'build', 'coverage'])
 

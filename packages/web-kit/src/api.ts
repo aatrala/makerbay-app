@@ -163,8 +163,19 @@ export async function api(method: string, path: string, body?: unknown, retried 
 
 // ── Typed helpers ────────────────────────────────────────────────────────
 
+export interface Invitation {
+  invitationId: string
+  tenantId: string
+  businessName: string
+  inviterEmail: string | null
+  role: 'owner' | 'member'
+  expiresAt: string
+}
+
 export interface Me {
-  user: { userId: string; email?: string; role?: string }
+  user: { userId: string; email?: string; role?: 'owner' | 'member'; notify?: boolean }
+  /** Invitations waiting for this address, from any workspace (issue 158). */
+  invitations?: Invitation[]
   /**
    * The server returns the whole tenant row here. `trade` has been stored
    * since issue 83 and undeclared ever since, which is why nothing could use
@@ -178,6 +189,8 @@ export interface Me {
 }
 
 export const getMe = (): Promise<Me> => api('GET', '/v1/core/me')
+/** Owner unless the server says otherwise; rows from before roles existed belong to owners. */
+export const isOwner = (me: Me): boolean => me.user.role !== 'member'
 export const getBillingSummary = () => api('GET', '/v1/core/billing/summary')
 export const resetBilling = (force = false) => api('POST', '/v1/core/billing/reset', { force })
 export const STREAM_BASE = 'https://stream.makerbay.app'
@@ -256,6 +269,8 @@ const MESSAGES: Record<string, string> = {
   upgrade_required: 'This is a paid feature — upgrade under Billing to use it.',
   module_not_enabled: 'This module is not switched on for your workspace.',
   forbidden: "You don't have permission to do that. Ask the workspace owner.",
+  owner_required: 'Only the workspace owner can change this. Ask them.',
+  last_owner: 'A workspace needs an owner. Make someone else an owner first.',
   unauthorized: 'Your session expired. Sign in again.',
   not_found: "We couldn't find that — it may have been removed.",
   invalid_url: "That doesn't look like a web address we can reach. Use a full https:// link to a public page.",

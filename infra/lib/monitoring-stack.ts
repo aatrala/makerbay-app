@@ -32,6 +32,12 @@ export interface MonitoringStackProps extends cdk.NestedStackProps {
   userPoolId: string
   userPoolClientId: string
   userPoolArn: string
+  /** Where the code sign-in lives, e.g. https://api.makerbay.app (issue 158). */
+  authBaseUrl: string
+  spaUrl: string
+  /** The canary reads Resend's log to confirm delivery, so it needs the same key. */
+  resendSecretArn: string
+  secretsKeyArn: string
   /** Where an alarm goes. The same topic the abuse alarms already use. */
   alerts: sns.ITopic
 }
@@ -56,19 +62,30 @@ export class MonitoringStack extends cdk.NestedStack {
       runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
       memorySize: 256,
-      timeout: cdk.Duration.seconds(30),
+      // A minute of polling Resend's log, plus the request itself (issue 158).
+      timeout: cdk.Duration.seconds(90),
       depsLockFilePath: path.join(props.repoRoot, 'package-lock.json'),
       environment: {
-        USER_POOL_ID: props.userPoolId,
-        USER_POOL_CLIENT_ID: props.userPoolClientId,
+        AUTH_BASE_URL: props.authBaseUrl,
+        AUTH_SPA_URL: props.spaUrl,
+        RESEND_SECRET_ARN: props.resendSecretArn,
       },
     })
-    canary.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['cognito-idp:SignUp', 'cognito-idp:AdminDeleteUser'],
-        resources: [props.userPoolArn],
-      }),
-    )
+    /*
+     * Identity-policy grants only (issue 158). `secret.grantRead` would also
+     * write this role into the parent's KMS key policy, and a parent key that
+     * depends on a nested role while the nested stack depends on the parent
+     * is the circular dependency that failed the first auth deploy.
+     */
+    canary.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: [props.resendSecretArn],
+    }))
+    canary.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['kms:Decrypt'],
+      resources: [props.secretsKeyArn],
+      conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
+    }))
     // No PutMetricData permission needed: the canary emits its metric in
     // CloudWatch's embedded format, so the log line IS the metric.
 
@@ -95,8 +112,11 @@ export class MonitoringStack extends cdk.NestedStack {
      * end-to-end test (the code dispatch IS the success condition) at 8% of
      * the budget. Revisit the cadence when SES_LEFT_THE_SANDBOX flips.
      */
+    // Hourly since issue 158: the canary now sends one Resend message per
+    // run to a Resend test address, not a Cognito code from the 50-a-day
+    // sender, so the old six-hour budget argument no longer applies.
     new events.Rule(this, 'SignupCanarySchedule', {
-      schedule: events.Schedule.rate(cdk.Duration.hours(6)),
+      schedule: events.Schedule.rate(cdk.Duration.hours(1)),
       targets: [new eventsTargets.LambdaFunction(canary)],
     })
 

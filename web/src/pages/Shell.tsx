@@ -120,6 +120,7 @@ export default function Shell({ me, modules, stripeMode }: {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
+  const owner = me.user.role !== 'member'
   const setupDone = isSetupDismissed(me.tenant?.tenantId ?? '')
 
   const byId = new Map(modules.map((m) => [m.id, m]))
@@ -189,11 +190,14 @@ export default function Shell({ me, modules, stripeMode }: {
           <div className="account" ref={acctRef}>
             {acctOpen && (
               <div className="acct-pop">
-                <NavLink to="/home">Getting started</NavLink>
-                <NavLink to="/workspace">Settings</NavLink>
+                {/* Members get what they can act on; the owner-only screens stay
+                    out of the menu rather than answering with a wall (issue 158). */}
+                {owner && <NavLink to="/home">Getting started</NavLink>}
+                <NavLink to="/workspace">{owner ? 'Settings' : 'Workspace'}</NavLink>
+                <NavLink to="/account">Your account</NavLink>
                 <NavLink to="/activity">Activity</NavLink>
-                <NavLink to="/usage">Usage</NavLink>
-                <NavLink to="/billing">Billing</NavLink>
+                {owner && <NavLink to="/usage">Usage</NavLink>}
+                {owner && <NavLink to="/billing">Billing</NavLink>}
                 <NavLink to="/support">Support &amp; feedback</NavLink>
                 <div className="sep" />
                 <button className="linkish" onClick={logout}>Sign out</button>

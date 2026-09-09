@@ -166,10 +166,13 @@ export async function findUserByEmail(email: string): Promise<UserRow | undefine
 }
 
 export async function listTenantUsers(tenantId: string): Promise<UserRow[]> {
+  // The byTenant index (issue 158) replaces a full-table Scan that was
+  // survivable at six users and would not have been at six hundred.
   const r = await ddb.send(
-    new ScanCommand({
+    new QueryCommand({
       TableName: Tables.users(),
-      FilterExpression: 'tenantId = :t',
+      IndexName: 'byTenant',
+      KeyConditionExpression: 'tenantId = :t',
       ExpressionAttributeValues: { ':t': tenantId },
     }),
   )

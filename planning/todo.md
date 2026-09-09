@@ -3088,5 +3088,35 @@ to a code request even when the send fails (it swallows the error).
 
 **Founder, before 1b:** confirm the defaults in docs/spec-auth.md and sign
 in once each way on the dark path (the password leg needs your Cognito
-password, which nothing here can exercise). Then the flip is `AUTH_PROVIDER` in the stack,
+password, which nothing here can exercise).
+
+### 158 — People in a workspace, and passkeys ⏳ Part A live 2026-09-09; Part B next
+Spec: docs/spec-auth-phase2.md, v2 after a product review and a security
+review of v1 both rejected mirroring Better Auth's organization plugin
+into the Users table. Membership stays in core: a Users row (now with
+`notify` and `invitedBy`, indexed by tenant), an Invitations table (7-day
+expiry, TTL, indexed by email), and the People routes under
+`/v1/core/people` and `/v1/core/me/invitations`. Two roles, owner and
+member; seats Free 2 / Trade 3 / Genie 10, pending invitations count.
+The invitation email carries no link: the person signs in at
+app.makerbay.app and the invitation is waiting (`me.invitations`).
+Removal and leaving revoke every session (`@makerbay/auth/sessions`).
+Owner notifications fan out in `sendEmail` to everyone with `notify` on,
+only for owner mail carrying a `ref`. Dashboard: People card on Workspace,
+Join prompt before Onboarding, Account page with Leave, close-workspace
+card, role-aware account menu, activity names the actor. Staff console
+shows role, notify and pending invitations. `privacy-delete.mjs` now
+clears the auth table for the tenant's people. The signup canary asks the
+live front door for a code hourly and confirms delivery in Resend's log
+(Better Auth answers success even when the send fails, so the API answer
+alone proves nothing).
+
+**Proven live:** two test addresses through the whole loop, see the spec
+status line. **Manual test:** Workspace → People → Invite; the invitee
+signs in with a code and sees "Join …?" first.
+
+**Part B (next):** `/auth/*` on the dashboard's origin via CloudFront,
+explicit JWT issuer, cookie sessions, retire the bridge; then passkeys
+("Sign in with your fingerprint next time"), fingerprint required.
+ Then the flip is `AUTH_PROVIDER` in the stack,
 `DEFAULT_AUTH_PROVIDER` in web-kit, deploy, publish the dashboard.

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, explain, Notice, type Me } from '@makerbay/web-kit'
+import { api, explain, isOwner, logout, Notice, type Me } from '@makerbay/web-kit'
+import PeopleCard from './PeopleCard'
 
 /**
  * Workspace settings: the business name and the public address (slug). The
@@ -112,8 +113,54 @@ export default function WorkspacePage({ me, onSaved }: { me: Me; onSaved?: () =>
         <p className="meta mt">A custom domain for your page is available with Presence Pro, under Your page.</p>
       </div>
 
+      <PeopleCard me={me} />
+
       <ModulesCard me={me} onSaved={onSaved} />
+
+      {isOwner(me) && <CloseWorkspaceCard me={me} />}
     </>
+  )
+}
+
+/**
+ * Closing the workspace (issue 158). Suspends it - every public page and
+ * every sign-in stops - and ends everyone's membership. Data is not erased
+ * here; that is a request to support, which is deliberate: an owner who
+ * closes in anger on a Friday should be able to ask for it back on Monday.
+ */
+function CloseWorkspaceCard({ me }: { me: Me }) {
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const slug = me.tenant?.slug ?? ''
+
+  const close = async () => {
+    setBusy(true); setError('')
+    try {
+      await api('DELETE', `/v1/core/tenants/${me.tenant?.tenantId}`, { confirm: confirm.trim().toLowerCase() })
+      logout()
+    } catch (err) {
+      setError(explain(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Close this workspace</h2>
+      <p className="meta">
+        Your page, chat and booking links stop working and everyone on the workspace loses access.
+        Nothing is erased: write to support@makerbay.app to have it erased, or to have it back.
+      </p>
+      {error && <Notice tone="err" onClose={() => setError('')}>{error}</Notice>}
+      <label htmlFor="close-confirm">Type your address, <strong>{slug}</strong>, to confirm</label>
+      <div className="row">
+        <input id="close-confirm" className="grow" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={slug} />
+        <button className="danger" disabled={busy || confirm.trim().toLowerCase() !== slug} onClick={() => void close()}>
+          {busy ? 'Closing…' : 'Close workspace'}
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -84,7 +84,9 @@ export default function Home({ me }: { me: Me }) {
   const [steps, setSteps] = useState<Step[] | null>(null)
   const [waiting, setWaiting] = useState<Waiting | null>(null)
   const [pageUrl, setPageUrl] = useState('')
-  const [hidden, setHidden] = useState(() => isSetupDismissed(tenantId))
+  // A member never sees the setup checklist: it is the owner's list of things
+  // to decide, and half of it is behind owner-only walls (issue 158).
+  const [hidden, setHidden] = useState(() => me.user.role === 'member' || isSetupDismissed(tenantId))
   const [copied, setCopied] = useState(false)
   const [later, setLater] = useState<Step[] | null>(null)
 

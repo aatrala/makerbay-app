@@ -18,6 +18,7 @@ import {
   grantManual,
   json,
   listGrants,
+  listTenantInvitations,
   listTenantUsers,
   MODULES,
   PLATFORM_VERSION,
@@ -305,7 +306,7 @@ async function tenantDetail(tenantId: string): Promise<APIGatewayProxyResultV2> 
   const tenant = await getTenant(tenantId)
   if (!tenant) return json(404, { error: 'tenant_not_found' })
 
-  const [grants, usage, users, presence, sourceCount] = await Promise.all([
+  const [grants, usage, users, presence, sourceCount, invitations] = await Promise.all([
     listGrants(tenantId),
     getMonthUsage(tenantId, new Date().toISOString().slice(0, 7)),
     listTenantUsers(tenantId),
@@ -317,6 +318,8 @@ async function tenantDetail(tenantId: string): Promise<APIGatewayProxyResultV2> 
       ExpressionAttributeValues: { ':t': tenantId },
       Select: 'COUNT',
     })).then((r) => r.Count ?? 0).catch(() => null),
+    // Who invited whom, and who is still to accept (issue 158).
+    listTenantInvitations(tenantId).catch(() => []),
   ])
   const entitlements: Record<string, unknown> = {}
   for (const m of MODULES) entitlements[m.id] = await getEffectiveEntitlement(tenantId, m.id)
@@ -348,6 +351,12 @@ async function tenantDetail(tenantId: string): Promise<APIGatewayProxyResultV2> 
     },
     users: users.map((u) => ({
       userId: u.userId, email: u.email ?? null, role: u.role, createdAt: u.createdAt,
+      notify: u.notify !== false,
+      invitedBy: u.invitedBy ? (users.find((x) => x.userId === u.invitedBy)?.email ?? u.invitedBy) : null,
+    })),
+    invitations: invitations.map((i) => ({
+      invitationId: i.invitationId, email: i.email, role: i.role, inviterEmail: i.inviterEmail ?? null,
+      createdAt: i.createdAt, expiresAt: i.expiresAt,
     })),
     moduleState: {
       presence: presence

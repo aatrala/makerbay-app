@@ -71,6 +71,35 @@ export interface UserRow {
   tenantId: string
   role: 'owner' | 'member'
   createdAt: string
+  /**
+   * Whether this person gets the workspace's notifications - new booking,
+   * new enquiry, quote accepted (issue 158). Absent means yes: every row
+   * written before the field existed belongs to an owner, and an owner who
+   * gets no notifications thinks they have no work.
+   */
+  notify?: boolean
+  /** userId of whoever invited them; absent for the owner who created the workspace. */
+  invitedBy?: string
+}
+
+/**
+ * An open invitation to join a workspace (issue 158). Matched to a person by
+ * email at sign-in time, never by a link: the invitation email carries no
+ * link on purpose, for the same reason the code emails carry none.
+ */
+export interface InvitationRow {
+  tenantId: string
+  invitationId: string
+  /** Lowercased. */
+  email: string
+  role: 'owner' | 'member'
+  inviterId: string
+  inviterEmail?: string
+  status: 'pending' | 'accepted' | 'declined' | 'canceled'
+  createdAt: string
+  expiresAt: string
+  /** Epoch seconds; DynamoDB removes the row shortly after expiry. */
+  ttl: number
 }
 
 export interface ApiKeyRow {

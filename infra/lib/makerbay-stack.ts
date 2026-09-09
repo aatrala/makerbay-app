@@ -165,6 +165,26 @@ export class MakerbayStack extends cdk.Stack {
       partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
     })
     const users = table('Users', 'userId')
+    // Who is on a workspace, without a table Scan (issue 158).
+    users.addGlobalSecondaryIndex({
+      indexName: 'byTenant',
+      partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
+    })
+    // Open invitations to join a workspace (issue 158). Matched to a person
+    // by email at sign-in, expire after a week, removed by TTL shortly after.
+    const invitations = new dynamodb.Table(this, 'Invitations', {
+      tableName: 'makerbay-invitations',
+      partitionKey: { name: 'tenantId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'invitationId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      timeToLiveAttribute: 'ttl',
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+    invitations.addGlobalSecondaryIndex({
+      indexName: 'byEmail',
+      partitionKey: { name: 'email', type: dynamodb.AttributeType.STRING },
+    })
     const apiKeys = table('ApiKeys', 'tenantId', 'keyId')
     apiKeys.addGlobalSecondaryIndex({
       indexName: 'byHash',
@@ -822,6 +842,22 @@ export class MakerbayStack extends cdk.Stack {
     })
     grantMailSending(coreFn)
     tickets.grantReadWriteData(coreFn)
+    // People in a workspace (issue 158): invitations, and the auth table's
+    // session rows so removing a person signs them out everywhere. The auth
+    // table lives in the nested AuthStack; its ARN is written out literally
+    // rather than referenced, because a parent role policy that references a
+    // nested-stack output while the nested stack references the parent's API
+    // is the circular dependency that failed the first auth deploy.
+    coreFn.addEnvironment('TABLE_INVITATIONS', invitations.tableName)
+    coreFn.addEnvironment('TABLE_AUTH', 'makerbay-auth')
+    invitations.grantReadWriteData(coreFn)
+    coreFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query', 'dynamodb:BatchWriteItem', 'dynamodb:DeleteItem'],
+      resources: [
+        `arn:${this.partition}:dynamodb:${this.region}:${this.account}:table/makerbay-auth`,
+        `arn:${this.partition}:dynamodb:${this.region}:${this.account}:table/makerbay-auth/index/*`,
+      ],
+    }))
     const contactsFn = fn('ContactsApiFn', 'modules/contacts/api/src/handler.ts', {
       ...tableEnv,
       /*
@@ -1228,6 +1264,9 @@ export class MakerbayStack extends cdk.Stack {
       TABLE_MAILLOG: mailLog.tableName,
     })
     mailLog.grantReadWriteData(adminApiFn)
+    // The tenant 360 shows open invitations (issue 158).
+    adminApiFn.addEnvironment('TABLE_INVITATIONS', invitations.tableName)
+    invitations.grantReadData(adminApiFn)
     // Staff can send a test email so SES setup is verifiable rather than
     // merely declared. The first real sender will be the Requests module.
     grantMailSending(adminApiFn)
@@ -1797,6 +1836,10 @@ export class MakerbayStack extends cdk.Stack {
       userPoolId: userPool.userPoolId,
       userPoolClientId: userPoolClient.userPoolClientId,
       userPoolArn: userPool.userPoolArn,
+      authBaseUrl: `https://api.${DOMAIN}`,
+      spaUrl: `https://app.${DOMAIN}`,
+      resendSecretArn: resendSecret.secretArn,
+      secretsKeyArn: secretsKey.keyArn,
       alerts: abuseAlerts,
     })
 

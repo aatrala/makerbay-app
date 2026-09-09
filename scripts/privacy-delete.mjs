@@ -7,7 +7,7 @@
 // should not be enough to destroy it. Cognito users and Stripe customers
 // are deleted by hand afterwards, and the action noted in the audit log.
 import { DynamoDBClient, DescribeTableCommand, ListTablesCommand } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, ScanCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb'
+import { DynamoDBDocumentClient, ScanCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3'
 
 const tenantId = process.argv[2]
@@ -35,6 +35,68 @@ const owns = (item) =>
   || item.forTenant === tenantId
 
 let deleted = 0
+
+/*
+ * The auth table first, while the Users rows still exist to say who the
+ * people were (issue 158). Its rows carry no tenantId - the key is
+ * `<model>#<id>` - so the generic pass below cannot see them, and until this
+ * pass existed a delete reported success and left every sign-in identity
+ * behind. For each person: the user row, their accounts, sessions and
+ * passkeys (indexed by user on gsi2), the verification rows for their
+ * address, invitations to that address anywhere, and the email uniqueness
+ * marker - which, left behind, would block that address from ever signing
+ * up again.
+ */
+{
+  const AUTH = 'makerbay-auth'
+  const people = []
+  let key
+  do {
+    const r = await ddb.send(new ScanCommand({
+      TableName: 'makerbay-users',
+      FilterExpression: 'tenantId = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+      ExclusiveStartKey: key,
+    }))
+    people.push(...(r.Items ?? []))
+    key = r.LastEvaluatedKey
+  } while (key)
+
+  const del = async (pk) => { await ddb.send(new DeleteCommand({ TableName: AUTH, Key: { pk } })); deleted++ }
+  const byIndex = async (index, pkValue) => {
+    const out = []
+    let k
+    do {
+      const r = await ddb.send(new QueryCommand({
+        TableName: AUTH, IndexName: index,
+        KeyConditionExpression: `${index}pk = :p`, ExpressionAttributeValues: { ':p': pkValue },
+        ExclusiveStartKey: k,
+      }))
+      out.push(...(r.Items ?? []))
+      k = r.LastEvaluatedKey
+    } while (k)
+    return out
+  }
+
+  let authRows = 0
+  for (const person of people) {
+    const id = person.userId
+    const email = String(person.email ?? '').trim().toLowerCase()
+    for (const model of ['session', 'account', 'passkey', 'member']) {
+      for (const row of await byIndex('gsi2', `${model}#userId#${id}`)) { await del(row.pk); authRows++ }
+    }
+    if (email) {
+      for (const row of await byIndex('gsi3', 'verification')) {
+        if (String(row.identifier ?? '').toLowerCase().includes(email)) { await del(row.pk); authRows++ }
+      }
+      for (const row of await byIndex('gsi2', `invitation#email#${email}`)) { await del(row.pk); authRows++ }
+      await del(`unique#user#email#${email}`); authRows++
+    }
+    await del(`user#${id}`); authRows++
+  }
+  if (authRows) console.log(`${AUTH}: deleted ${authRows} rows for ${people.length} people`)
+}
+
 for (const table of tables) {
   // The staff audit trail is append-only BY DESIGN - privacy deletion of
   // audit entries about the tenant is a legal-review call, not a default.
@@ -79,4 +141,4 @@ try {
 }
 
 console.log(`\nDone: ${deleted} rows removed for ${tenantId}.`)
-console.log('Finish by hand: delete the Cognito user(s), the Stripe customer, and add an audit note.')
+console.log('Finish by hand: delete any Cognito user(s) that still exist, the Stripe customer, and add an audit note.')

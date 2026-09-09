@@ -73,7 +73,8 @@ export default function ActivityPage() {
                 <strong>{MODULE_LABEL[e.moduleId] ?? e.moduleId}</strong> — {e.summary}
                 <span className="meta">
                   {' '}· {when(e.ts)}
-                  {e.actor?.label ? ` · ${e.actor.label}` : e.actor?.type === 'user' ? ' · you' : ''}
+                  {/* Named, never "you": with more than one person on a workspace, "you" is a lie half the time (issue 158). */}
+                  {e.actor?.label ? ` · ${e.actor.label}` : e.actor?.type === 'user' ? ' · a team member' : ''}
                 </span>
               </li>
             ))}

@@ -1,60 +1,35 @@
-import {
-  AdminDeleteUserCommand,
-  CognitoIdentityProviderClient,
-  SignUpCommand,
-} from '@aws-sdk/client-cognito-identity-provider'
+import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager'
 
 /**
- * Signs up, every fifteen minutes, so a human does not have to (issue 145).
+ * Asks for a sign-in code, every hour, so a human does not have to
+ * (issue 145, rewritten for issue 158).
  *
- * Between 27 and 29 August nobody could create a MakerBay account. Moving
- * Cognito's codes onto SES was correct in every respect except one: in the
- * sandbox SES authorises the RECIPIENT, and a person signing up has by
- * definition never been verified. Every signup was rejected before a code was
- * sent.
+ * Between 27 and 29 August nobody could create a MakerBay account, and it
+ * was found by a code review three days later because no alarm watched the
+ * front door. The front door is now Better Auth's code sign-in through
+ * Resend, so that is what this exercises: request a code for one of
+ * Resend's delivery test addresses, then confirm through Resend's own log
+ * that a message to that address was created after the request and was
+ * delivered.
  *
- * It was found by a code review three days later. Not by an alarm, because
- * there was no alarm: every existing alarm watches cost or deliverability, and
- * not one watches whether the front door opens. A green unit suite proved
- * nothing, exactly as it proved nothing for issue 107's reserved keyword.
+ * **Why not assert on the API's answer.** Better Auth answers `success`
+ * to a code request even when the email failed to send - it swallows the
+ * send error in its background-task wrapper. A canary that trusted that
+ * answer would be green during exactly the outage it exists to catch. The
+ * delivery record is the only honest signal.
  *
- * So this does the only thing that would have caught it: it actually signs up.
- *
- * **Why a real address rather than a verified one.** Signing up as
- * canary@makerbay.app would have passed happily throughout the outage, because
- * makerbay.app is a verified SES identity and the bug only affected everyone
- * else. The canary must look like a stranger or it tests nothing. It uses
- * example.com, which IANA reserves and which never accepts mail, so no message
- * can reach a real person however the sender is configured.
- *
- * The user is deleted immediately, whether or not the signup succeeded.
+ * **Why hourly.** Each run is one Resend message. Twenty-four a day is
+ * noise on a paid tier and a quarter of the free tier's daily cap; four a
+ * day, the old cadence, would leave an outage unnoticed for six hours.
  */
-
-const cognito = new CognitoIdentityProviderClient({})
-
 const NAMESPACE = 'MakerBay/Canary'
+const sm = new SecretsManagerClient({})
 
-/** A password that satisfies any sane policy and is never reused. */
-const throwawayPassword = (): string =>
-  `Cy-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2).toUpperCase()}-9!`
-
-/**
- * Publishes the result as a CloudWatch metric by logging it.
- *
- * Embedded metric format: CloudWatch reads this shape out of the log stream
- * and creates the metric itself. That means no SDK client, no PutMetricData
- * permission, and no second network call that could fail separately from the
- * thing being measured - the log line IS the metric.
- */
 function publish(ok: boolean, detail: string): void {
   console.log(JSON.stringify({
     _aws: {
       Timestamp: Date.now(),
-      CloudWatchMetrics: [{
-        Namespace: NAMESPACE,
-        Dimensions: [[]],
-        Metrics: [{ Name: 'SignupWorks', Unit: 'None' }],
-      }],
+      CloudWatchMetrics: [{ Namespace: NAMESPACE, Dimensions: [[]], Metrics: [{ Name: 'SignupWorks', Unit: 'None' }] }],
     },
     SignupWorks: ok ? 1 : 0,
     canary: 'signup',
@@ -62,51 +37,77 @@ function publish(ok: boolean, detail: string): void {
   }))
 }
 
+async function resendKey(): Promise<string> {
+  const r = await sm.send(new GetSecretValueCommand({ SecretId: process.env.RESEND_SECRET_ARN! }))
+  const parsed = JSON.parse(r.SecretString ?? '{}') as Record<string, string>
+  const key = parsed.apiKey ?? parsed.api_key ?? ''
+  if (!key.startsWith('re_')) throw new Error('resend key unusable')
+  return key
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 export const handler = async (): Promise<void> => {
-  const poolId = process.env.USER_POOL_ID
-  const clientId = process.env.USER_POOL_CLIENT_ID
-  if (!poolId || !clientId) {
-    publish(false, 'canary is misconfigured: no user pool')
+  const base = process.env.AUTH_BASE_URL
+  if (!base || !process.env.RESEND_SECRET_ARN) {
+    publish(false, 'canary is misconfigured: no auth base URL or resend secret')
+    return
+  }
+  // Unique per run, and a Resend test address: delivered on their side,
+  // never handed to a real mailbox, and plus-addressed so each run can be
+  // told apart in the log.
+  const email = `delivered+canary-${Date.now()}@resend.dev`
+  const startedAt = Date.now()
+
+  try {
+    const r = await fetch(`${base}/auth/email-otp/send-verification-otp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: process.env.AUTH_SPA_URL ?? base },
+      body: JSON.stringify({ email, type: 'sign-in' }),
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!r.ok) {
+      publish(false, `code request answered ${r.status}`)
+      return
+    }
+  } catch (err) {
+    publish(false, `code request failed: ${String((err as Error)?.message ?? err)}`.slice(0, 300))
     return
   }
 
-  // Unique per run, so a leftover user from a failed cleanup cannot make the
-  // next run look broken.
-  const email = `signup-canary-${Date.now()}@example.com`
-  let created = false
-
+  // Delivery to resend.dev takes seconds; give it a minute, checking as it goes.
+  let key: string
   try {
-    const r = await cognito.send(new SignUpCommand({
-      ClientId: clientId,
-      Username: email,
-      Password: throwawayPassword(),
-      UserAttributes: [{ Name: 'email', Value: email }],
-    }))
-    // Cognito only reports delivery details when it actually handed the
-    // message to a sender. Their absence is the shape the outage took.
-    created = true
-    const delivered = Boolean(r.CodeDeliveryDetails?.Destination)
-    publish(delivered, delivered
-      ? 'signup accepted and a code was dispatched'
-      : 'signup accepted but NO code was dispatched - check the user pool sender')
+    key = await resendKey()
   } catch (err) {
-    const name = (err as { name?: string }).name ?? 'Error'
-    const message = (err as { message?: string }).message ?? ''
-    // A duplicate is not an outage; it means a previous cleanup failed.
-    if (name === 'UsernameExistsException') {
-      publish(true, 'a previous canary user was left behind, signup itself is fine')
-    } else {
-      publish(false, `${name}: ${message}`.slice(0, 300))
-    }
-  } finally {
-    if (created) {
-      try {
-        await cognito.send(new AdminDeleteUserCommand({ UserPoolId: poolId, Username: email }))
-      } catch (err) {
-        // Left behind rather than lost: the next run uses a new address, and
-        // the handler above treats a duplicate as healthy.
-        console.warn('canary user not deleted', { email, err: String(err) })
+    publish(false, `cannot read the resend key: ${String((err as Error)?.message ?? err)}`)
+    return
+  }
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await sleep(10_000)
+    try {
+      const res = await fetch('https://api.resend.com/emails?limit=20', {
+        headers: { authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(10_000),
+      })
+      const json = (await res.json()) as { data?: Array<{ to?: string[]; created_at?: string; last_event?: string }> }
+      // The address is unique to this run, so any message to it is ours; no
+      // time comparison, because Resend's `created_at` ("2026-09-09
+      // 14:10:52.520000+00") is not something Date.parse understands.
+      const mine = (json.data ?? []).find((e) => (e.to ?? []).includes(email))
+      if (mine) {
+        if (mine.last_event === 'delivered' || mine.last_event === 'opened') {
+          publish(true, `code requested and delivered (${Date.now() - startedAt} ms)`)
+          return
+        }
+        if (mine.last_event === 'bounced' || mine.last_event === 'failed' || mine.last_event === 'complained') {
+          publish(false, `code email ended as ${mine.last_event}`)
+          return
+        }
       }
+    } catch (err) {
+      console.warn('resend log check failed', { attempt, err: String(err) })
     }
   }
+  publish(false, 'code requested but no delivered message appeared in the Resend log within a minute')
 }

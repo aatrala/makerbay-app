@@ -29,7 +29,8 @@ interface Detail {
   }
   webhook?: { lastAt: string | null; lastType: string | null; lastLive: boolean | null }
   connect?: { stripeAccountId: string | null; payoutsEnabled: boolean; onboardedAt: string | null }
-  users?: Array<{ userId: string; email: string | null; role: string; createdAt: string }>
+  users?: Array<{ userId: string; email: string | null; role: string; createdAt: string; notify?: boolean; invitedBy?: string | null }>
+  invitations?: Array<{ invitationId: string; email: string; role: string; inviterEmail: string | null; createdAt: string; expiresAt: string }>
   moduleState?: {
     presence: { published: boolean; customDomain: string | null; domainStatus: string | null } | null
     assistant: { sourceCount: number | null }
@@ -145,7 +146,7 @@ export default function TenantDetail() {
     </>
   )
 
-  const { tenant, webhook, connect, users, moduleState, entitlements, grants, usage } = data
+  const { tenant, webhook, connect, users, invitations, moduleState, entitlements, grants, usage } = data
   const moduleIds = Object.keys(entitlements)
   const isSuspended = tenant.status === 'suspended'
 
@@ -267,16 +268,17 @@ export default function TenantDetail() {
         {!users?.length ? <p className="meta">No users on this workspace.</p> : (
           <div className="scroll-x">
             <table>
-              <thead><tr><th>Email</th><th>Role</th><th>Joined</th><th><span className="visually-hidden">Actions</span></th></tr></thead>
+              <thead><tr><th>Email</th><th>Role</th><th>Notified</th><th>Joined</th><th><span className="visually-hidden">Actions</span></th></tr></thead>
               <tbody>
                 {users.map((u) => (
                   <tr key={u.userId}>
                     <td>{u.email ?? <code>{u.userId}</code>}</td>
-                    <td>{u.role}</td>
+                    <td>{u.role}{u.invitedBy && <span className="meta"> · invited by {u.invitedBy}</span>}</td>
+                    <td>{u.notify === false ? 'no' : 'yes'}</td>
                     <td className="nowrap">{when(u.createdAt)}</td>
                     <td>
-                      <ReasonAction label="Send password reset" busy={busy}
-                        hint={`Cognito emails ${u.email ?? 'the user'} a reset code - staff never see a password.`}
+                      <ReasonAction label="Cognito password reset" busy={busy}
+                        hint={`Only for an account that still signs in with a password. Code sign-in users need nothing: they ask for a code themselves. Cognito emails ${u.email ?? 'the user'} a reset code - staff never see a password.`}
                         onConfirm={(why) => void run(async () => {
                           await adminApi('POST', `/admin/v1/users/${u.userId}/reset-password`, { reason: why })
                           setNote(`Cognito emailed ${u.email ?? 'the user'} a reset code.`)
@@ -287,6 +289,27 @@ export default function TenantDetail() {
               </tbody>
             </table>
           </div>
+        )}
+        {invitations && invitations.length > 0 && (
+          <>
+            <h3 className="mt">Waiting to join</h3>
+            <div className="scroll-x">
+              <table>
+                <thead><tr><th>Email</th><th>Role</th><th>Invited by</th><th>Sent</th><th>Expires</th></tr></thead>
+                <tbody>
+                  {invitations.map((i) => (
+                    <tr key={i.invitationId}>
+                      <td>{i.email}</td>
+                      <td>{i.role}</td>
+                      <td>{i.inviterEmail ?? '?'}</td>
+                      <td className="nowrap">{when(i.createdAt)}</td>
+                      <td className="nowrap">{when(i.expiresAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

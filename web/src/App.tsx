@@ -4,6 +4,8 @@ import { finishExternalSignIn, getBillingSummary, getMe, isLoggedIn, type Me } f
 import { enabledModules } from './modules'
 import Login from './pages/Login'
 import Onboarding from './pages/Onboarding'
+import JoinPrompt from './pages/JoinPrompt'
+import AccountPage from './pages/AccountPage'
 import Shell from './pages/Shell'
 import Billing from './pages/Billing'
 import UsagePage from './pages/UsagePage'
@@ -11,6 +13,9 @@ import WorkspacePage from './pages/WorkspacePage'
 import ActivityPage from './pages/ActivityPage'
 import Support from './pages/Support'
 import Home from './pages/Home'
+
+/** Invitations dismissed with "Not now" this visit. They return next time; the row is still open. */
+const skippedInvitations = new Set<string>()
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -43,6 +48,20 @@ export default function App() {
 
   if (!isLoggedIn()) return <Login onLoggedIn={() => { setLoading(true); void reload() }} />
 
+  // An invitation waiting for this address comes before anything else
+  // (issue 158): before Onboarding for someone new, before the dashboard for
+  // someone who already has a workspace. "Not now" hides it for this visit.
+  const waiting = (me?.invitations ?? []).filter((i) => !skippedInvitations.has(i.invitationId))
+  if (waiting.length > 0) {
+    return (
+      <JoinPrompt
+        invitations={waiting}
+        onDone={() => { setLoading(true); void reload() }}
+        onSkip={() => { waiting.forEach((i) => skippedInvitations.add(i.invitationId)); setLoading(true); void reload() }}
+      />
+    )
+  }
+
   if (!me?.tenant) return <Onboarding onDone={() => { setLoading(true); void reload() }} />
 
   /*
@@ -58,7 +77,8 @@ export default function App() {
   sessionStorage.removeItem('mb.justOnboarded')
   const landing = '/home'
 
-  const modules = enabledModules(me)
+  // The "set it up for me" screens are the owner's; a member never sees them.
+  const modules = enabledModules(me).filter((m) => me.user.role !== 'member' || m.id !== 'setup')
 
   return (
     <Routes>
@@ -68,6 +88,7 @@ export default function App() {
         {modules.map((m) => m.routes({ me }))}
         <Route path="/usage" element={<UsagePage me={me} />} />
         <Route path="/billing" element={<Billing />} />
+        <Route path="/account" element={<AccountPage me={me} onChanged={() => void reload()} />} />
         <Route path="/workspace" element={<WorkspacePage me={me} onSaved={() => void reload()} />} />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/support" element={<Support />} />

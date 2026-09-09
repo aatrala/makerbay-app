@@ -132,7 +132,41 @@ const addressWithName = (name: string | undefined, address: string): string => {
   return `"${clean.replace(/["\\]/g, '')}" <${address}>`
 }
 
+/**
+ * Owner-bound mail about a workspace event goes to everyone on the workspace
+ * who wants it (issue 158), not only to the address the module was
+ * configured with. A partner who can answer enquiries but is never told one
+ * arrived is a seat that does nothing.
+ *
+ * Fan-out happens here, in the one choke point, so every module and every
+ * future module gets it without a change at the call site. It applies only
+ * to `owner` mail carrying a `ref` - a workspace event - never to a sign-in
+ * code or a staff ticket. The configured address stays first; a workspace
+ * whose module has no address configured now reaches its people anyway.
+ */
 export async function sendEmail(input: EmailInput): Promise<EmailResult> {
+  if (input.audience !== 'owner' || !input.ref) return sendOne(input)
+  let recipients: string[]
+  try {
+    const { notificationRecipients } = await import('./people')
+    recipients = await notificationRecipients(input.ref.tenantId, input.to)
+  } catch (err) {
+    console.warn('notification recipients lookup failed, sending to the configured address', { err: String(err) })
+    recipients = [input.to]
+  }
+  if (recipients.length === 0) return sendOne(input)
+  const results = await Promise.all(
+    recipients.map((to) => sendOne({
+      ...input,
+      to,
+      // A pre-minted unsubscribe token belongs to the address it was minted for.
+      unsubToken: to === input.to?.trim().toLowerCase() ? input.unsubToken : undefined,
+    })),
+  )
+  return results.find((r) => r.sent) ?? results[0] ?? { sent: false, error: 'no_recipient' }
+}
+
+async function sendOne(input: EmailInput): Promise<EmailResult> {
   const to = input.to?.trim()
   if (!to || !to.includes('@')) return { sent: false, error: 'no_recipient' }
 

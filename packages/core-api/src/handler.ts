@@ -37,6 +37,20 @@ import {
   type ModuleEntitlement,
 } from '@makerbay/core'
 
+import {
+  acceptInvitation,
+  cancelInvitation,
+  closeWorkspace,
+  declineInvitation,
+  invitationsFor,
+  invite,
+  leaveWorkspace,
+  listPeople,
+  myInvitations,
+  patchPerson,
+  removePerson,
+  resendInvitation,
+} from './people'
 import { createTicket, listTickets, replyTicket } from './support'
 
 type Event = APIGatewayProxyEventV2WithLambdaAuthorizer<CallerContext>
@@ -110,6 +124,29 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
     if (method === 'POST' && path === '/v1/core/workspace/aliases') return await addAlias(ctx, event)
     const aliasDel = path.match(/^\/v1\/core\/workspace\/aliases\/([a-z0-9-]{3,40})$/)
     if (method === 'DELETE' && aliasDel) return await removeAlias(ctx, aliasDel[1])
+    // People in a workspace (issue 158).
+    if (method === 'GET' && path === '/v1/core/people') return await listPeople(ctx)
+    if (method === 'POST' && path === '/v1/core/people/invitations') return await invite(ctx, event)
+    const invAction = path.match(/^\/v1\/core\/people\/invitations\/([0-9A-Z]{26})\/(resend|cancel)$/)
+    if (method === 'POST' && invAction) {
+      return invAction[2] === 'resend'
+        ? await resendInvitation(ctx, invAction[1])
+        : await cancelInvitation(ctx, invAction[1])
+    }
+    const person = path.match(/^\/v1\/core\/people\/([A-Za-z0-9_-]{8,64})$/)
+    if (method === 'PATCH' && person) return await patchPerson(ctx, person[1], event)
+    if (method === 'DELETE' && person) return await removePerson(ctx, person[1])
+    if (method === 'GET' && path === '/v1/core/me/invitations') return await myInvitations(ctx)
+    const myInv = path.match(/^\/v1\/core\/me\/invitations\/([0-9A-Z]{26})\/(accept|decline)$/)
+    if (method === 'POST' && myInv) {
+      return myInv[2] === 'accept'
+        ? await acceptInvitation(ctx, myInv[1], event)
+        : await declineInvitation(ctx, myInv[1])
+    }
+    if (method === 'POST' && path === '/v1/core/me/leave') return await leaveWorkspace(ctx)
+    const closeMatch = path.match(/^\/v1\/core\/tenants\/([0-9A-Z]{26})$/)
+    if (method === 'DELETE' && closeMatch) return await closeWorkspace(ctx, closeMatch[1], event)
+
     if (method === 'GET' && path === '/v1/core/activity') return await activity(ctx, event)
     if (method === 'GET' && path === '/v1/core/usage') return await usage(ctx)
     if (method === 'GET' && path === '/v1/core/version') {
@@ -451,7 +488,11 @@ async function activity(ctx: CallerContext, event: Event): Promise<APIGatewayPro
 async function me(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {
   if (!ctx.userId) return json(401, { error: 'user_token_required' })
   const user = await getUser(ctx.userId)
-  if (!user) return json(200, { user: { userId: ctx.userId, email: ctx.email }, tenant: null })
+  // Invitations waiting for this address ride along (issue 158): the
+  // dashboard asks "Join Southside Plumbing?" before it asks anything else,
+  // and a person with no workspace of their own sees it before Onboarding.
+  const invitations = await invitationsFor(ctx).catch(() => [])
+  if (!user) return json(200, { user: { userId: ctx.userId, email: ctx.email }, tenant: null, invitations })
   const [tenant, entitlements] = await Promise.all([
     getTenant(user.tenantId),
     getEntitlements(user.tenantId),
@@ -486,7 +527,7 @@ async function me(ctx: CallerContext): Promise<APIGatewayProxyResultV2> {
       limits: { genieMessagesPerMonth: onTrade ? 250 : 25 },
     }
   }
-  return json(200, { user, tenant, entitlements: { ...entitlements, modules } })
+  return json(200, { user, tenant, entitlements: { ...entitlements, modules }, invitations })
 }
 
 async function createKey(ctx: CallerContext, event: Event): Promise<APIGatewayProxyResultV2> {
