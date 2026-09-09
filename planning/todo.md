@@ -2870,32 +2870,37 @@ prepared at commit 10c7f5b after the 25-finding code-review batch shipped.
 Overall 6.9/10: build scores 8-9, launch scores 4-5 - the recommendations
 below exist to close that gap, in this order.
 
-### 150 — Founder gate-clearing week ⛔ founder, bundles existing items
-Four errands, none of them code, that together unblock the whole loop:
+### 150 — Founder gate-clearing week ⛔ founder; two errands left (re-scoped 2026-09-10)
+Four errands, none of them code, that together unblock the whole loop.
+Re-scoped 2026-09-10: item 1 is moot (SES denied twice, Resend carries
+email since 2026-09-08, issue 156) and item 4 moves with the deferred
+voice agent demo. What remains is two errands of about fifteen minutes
+each:
 
-1. ✅ 2026-09-04 Submitted the SES production-access appeal (issue 76 - the appeal text is
-   rewritten and ready in planning/ses-appeal.md, it has only to be sent).
+1. ~~SES production-access appeal~~ - submitted 2026-09-04, denied
+   2026-09-08, no longer needed.
 2. Create one live Stripe subscription end to end with a real card, then
    refund it (issue 123 - webhook and handler are proven in test mode only).
 3. Click the SNS confirmation in aatrala@gmail.com so the cost-tripwire
    alarms can actually email (issue 47's last step).
-4. The ~30-minute Amazon Connect console task for the voice probe
-   (docs/probe-voice-latency.md), then 10 test calls.
+4. ~~Amazon Connect console task for the voice probe~~ - parked with the
+   voice agent demo (docs/probe-voice-latency.md), not on the launch path.
 
 Not a new work item - a commitment device. Everything here is already
-tracked; this issue is done when all four are, ideally inside one week.
-**Manual test:** SES console shows production access; Billing shows a live
-Stripe event; the SNS subscription shows Confirmed; the probe latency
-numbers exist.
+tracked; this issue is done when 2 and 3 are.
+**Manual test:** Billing shows a live Stripe event; the SNS subscription
+shows Confirmed.
 
-### 151 — First ten founding users ⛔ founder (blocked on 150.1 for the full loop)
+### 151 — First ten founding users ⛔ founder; UNBLOCKED 2026-09-10 (nothing technical in the way)
 Zero paying customers means every remaining engineering task improves a
 product nobody uses. The pieces are in place: founding rate live on the
 pricing page, demo tenant at demo.makerbay.app, signup canary guarding the
-front door, and first-party analytics counting since 2026-08-30 (the beacon
-POST fix). What is missing is the outreach motion - which is founder work,
-not platform work. Note: customer email flows are degraded until the SES
-appeal (150.1) clears, so sequencing them in the same push is the point.
+front door, first-party analytics counting since 2026-08-30 (the beacon
+POST fix), and since 2026-09-09 a sign-in that needs no password (code or
+passkey, issues 157 and 158) with email carried by Resend (156), so
+customer email flows are no longer degraded. The former blocker, the SES
+appeal, is moot. What is missing is the outreach motion - which is founder
+work, not platform work. Australia only for launch (founder, 2026-09-09).
 **Manual test:** ten workspaces with real (non-test) tenants, at least one
 on the founding rate; the stats rows show their page traffic.
 
