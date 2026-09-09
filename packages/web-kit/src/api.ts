@@ -1,7 +1,25 @@
 // API + auth client. Cognito is called directly over its JSON protocol —
 // no SDK needed for USER_PASSWORD_AUTH flows, which keeps the bundle tiny.
+//
+// Two sign-in providers live side by side during the transition to Better
+// Auth (issue 157, docs/spec-auth.md). `authProvider()` says which one this
+// browser uses; everything below that asks for a bearer goes through
+// `bearer()`, which is the only place the two differ.
 
-export const API_BASE = 'https://api.makerbay.app'
+import * as ba from './auth/better-auth'
+import { authProvider } from './auth/provider'
+import { API_BASE } from './config'
+
+export { API_BASE } from './config'
+export { authProvider, DEFAULT_AUTH_PROVIDER, type AuthProvider } from './auth/provider'
+export {
+  AuthError,
+  finishExternalSignIn,
+  sendCode,
+  signInWithCode,
+  startUpstreamSignIn,
+} from './auth/better-auth'
+
 const COGNITO_URL = 'https://cognito-idp.us-east-1.amazonaws.com/'
 const CLIENT_ID = '3267h4gvj28r6ahaui5evn6dl4'
 
@@ -20,8 +38,24 @@ const store = {
   },
 }
 
-export const isLoggedIn = () => Boolean(store.idToken)
-export const logout = () => { store.clear(); window.location.href = '/' }
+export const isLoggedIn = () => (authProvider() === 'better-auth' ? ba.isSignedIn() : Boolean(store.idToken))
+
+export const logout = () => {
+  const done = () => { store.clear(); ba.clear(); window.location.href = '/' }
+  if (authProvider() === 'better-auth') void ba.signOut().finally(done)
+  else done()
+}
+
+/**
+ * The token every API call carries. On Cognito it is the ID token as
+ * always; on Better Auth it is the short-lived JWT, re-minted from the
+ * session when it is about to expire.
+ */
+export async function getAccessToken(force = false): Promise<string> {
+  if (authProvider() === 'better-auth') return ba.accessToken(force)
+  if (force && !(await refreshSession())) return ''
+  return store.idToken ?? ''
+}
 
 // ── Cognito ──────────────────────────────────────────────────────────────
 
@@ -106,12 +140,13 @@ export async function api(method: string, path: string, body?: unknown, retried 
   const r = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${store.idToken}`,
+      authorization: `Bearer ${await getAccessToken()}`,
       ...(body ? { 'content-type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   })
-  if ((r.status === 401 || r.status === 403) && !retried && (await refreshSession())) {
+  // One retry with a fresh token: a Cognito refresh, or a re-minted JWT.
+  if ((r.status === 401 || r.status === 403) && !retried && (await getAccessToken(true))) {
     return api(method, path, body, true)
   }
   if (r.status === 401) { logout(); throw new ApiError(401, 'unauthorized') }
@@ -157,7 +192,7 @@ export async function streamChat(
 ): Promise<{ sessionId: string; messageId: string; citations?: Array<{ sourceId: string; name: string }>; fallback?: boolean }> {
   const r = await fetch(STREAM_BASE, {
     method: 'POST',
-    headers: { authorization: `Bearer ${store.idToken}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${await getAccessToken()}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
   if (!r.ok || !r.body) throw new ApiError(r.status, 'no_stream')

@@ -30,17 +30,22 @@ const ROOT = process.cwd()
  * the regression this test exists to catch.
  */
 const ALLOWED: Record<string, number> = {
-  // The one sender. Everything else goes through it.
-  'packages/core/src/notify.ts': 1,
   /*
-   * The staff "send a test email" button, which exists to prove SES itself is
-   * working - domain verified, DKIM signing, config set applied, out of the
-   * sandbox. Routing it through sendEmail would test sendEmail instead, which
-   * is the one thing it must not do. It only ever sends to the staff member's
-   * own address, so it cannot become a way to reach a customer.
+   * The one SES sender, below sendEmail (issue 156). Everything else goes
+   * through sendEmail, which decides the message and hands it to the active
+   * provider. The staff "send a test email" button used to hold a second
+   * raw command; it now calls the provider layer's `deliver()`, which is
+   * still below sendEmail - the point of that button - without a second copy
+   * of the wire format.
    */
-  'packages/admin-api/src/handler.ts': 1,
+  'packages/core/src/mail/ses.ts': 1,
 }
+
+/**
+ * The same rule for the other provider. There is no SDK to grep for, so the
+ * guard is the API host: only the Resend adapter may know it.
+ */
+const RESEND_ALLOWED = new Set(['packages/core/src/mail/resend.ts'])
 
 const SKIP = new Set(['node_modules', 'dist', 'cdk.out', '.git', 'build', 'coverage'])
 
@@ -72,6 +77,20 @@ describe('email sending', () => {
         + 'the unsubscribe headers and the delivery tracking that a raw '
         + 'SendEmailCommand silently skips. If a new exception is genuinely '
         + 'right, add it to ALLOWED above with the reason.',
+    ).toEqual([])
+  })
+
+  it('talks to Resend from exactly one file', () => {
+    const offenders: string[] = []
+    for (const file of sources(ROOT)) {
+      const rel = relative(ROOT, file).split(sep).join('/')
+      if (RESEND_ALLOWED.has(rel)) continue
+      if (/api\.resend\.com/.test(readFileSync(file, 'utf8'))) offenders.push(rel)
+    }
+    expect(
+      offenders,
+      'Use sendEmail() or, for a diagnostic, deliver() from @makerbay/core. '
+        + 'A second copy of the provider call skips every guarantee sendEmail carries.',
     ).toEqual([])
   })
 

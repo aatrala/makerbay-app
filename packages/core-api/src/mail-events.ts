@@ -1,16 +1,19 @@
+import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { notificationsBroken } from '@makerbay/email'
 import {
   COMPLAINT_BRAKE,
   countComplaint,
   recordMailEvent,
+  resendWebhookSecret,
   restrictSending,
   sendEmail,
   setEmailStatus,
+  verifySvix,
   type MailState,
 } from '@makerbay/core'
 
 /**
- * What SES tells us after it has taken a message (issue 107).
+ * What the provider tells us after it has taken a message (issue 107).
  *
  * The config set now has an event destination, so bounces and complaints
  * reach this instead of being generated and discarded. Before it, a hard
@@ -21,6 +24,13 @@ import {
  * custom one, so the `makerbay` bus is not an option here and the rule filters
  * on `source: aws.ses` instead. The usage-metering contract on our own bus is
  * untouched by this.
+ *
+ * Two doors, one room (issue 156). SES arrives through EventBridge; Resend
+ * posts a signed webhook to /v1/mail/webhook, which lands on this same
+ * function. The webhook is verified, then translated into the SES event
+ * shape below, so everything from the suppression rule to the complaint
+ * brake exists exactly once and behaves identically whichever provider is
+ * live.
  */
 
 interface SesEvent {
@@ -53,8 +63,125 @@ const STATE: Record<string, MailState> = {
 /** EmailTags come back as arrays of one. */
 const tag = (e: SesEvent, name: string): string | undefined => e.mail?.tags?.[name]?.[0]
 
-export const handler = async (event: { detail?: SesEvent }): Promise<void> => {
-  const d = event.detail
+type Inbound = { detail?: SesEvent } | APIGatewayProxyEventV2
+
+const isHttp = (e: Inbound): e is APIGatewayProxyEventV2 =>
+  typeof (e as APIGatewayProxyEventV2).requestContext?.http?.method === 'string'
+
+export const handler = async (event: Inbound): Promise<APIGatewayProxyResultV2 | void> => {
+  if (isHttp(event)) return await webhook(event)
+  await processEvent(event.detail)
+}
+
+/**
+ * Resend's webhook. No authorizer on the route: the signature over the raw
+ * body is the authentication, and a request that fails it is dropped with a
+ * 400 before anything is parsed. Anything that fails AFTER verification is
+ * allowed to throw, so the provider retries it and the mail-events alarm sees
+ * it - a bounce silently swallowed is the exact state issue 107 was filed
+ * to end.
+ */
+async function webhook(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const raw = event.isBase64Encoded
+    ? Buffer.from(event.body ?? '', 'base64').toString('utf8')
+    : (event.body ?? '')
+  const h: Record<string, string | undefined> = {}
+  for (const [k, v] of Object.entries(event.headers ?? {})) h[k.toLowerCase()] = v
+
+  let secret: string
+  try {
+    secret = await resendWebhookSecret()
+  } catch (err) {
+    console.error('resend webhook secret unavailable', { err: String(err) })
+    return { statusCode: 503, body: 'not_configured' }
+  }
+  const ok = verifySvix({
+    secret,
+    id: h['svix-id'],
+    timestamp: h['svix-timestamp'],
+    signature: h['svix-signature'],
+    body: raw,
+  })
+  if (!ok) {
+    console.warn('resend webhook signature rejected', { id: h['svix-id'] })
+    return { statusCode: 400, body: 'invalid_signature' }
+  }
+
+  let payload: ResendEvent
+  try {
+    payload = JSON.parse(raw)
+  } catch {
+    return { statusCode: 400, body: 'bad_json' }
+  }
+  await processEvent(fromResend(payload))
+  return { statusCode: 200, body: 'ok' }
+}
+
+interface ResendEvent {
+  type?: string
+  data?: {
+    email_id?: string
+    to?: string[] | string
+    tags?: Record<string, unknown> | Array<{ name?: string; value?: unknown }>
+    bounce?: { type?: string; subType?: string; message?: string }
+    failed?: { reason?: string }
+  }
+}
+
+/** Resend event types, in terms of the SES ones the consumer already models. */
+const RESEND_TYPES: Record<string, string> = {
+  'email.sent': 'Send',
+  'email.delivered': 'Delivery',
+  'email.delivery_delayed': 'DeliveryDelay',
+  'email.bounced': 'Bounce',
+  'email.complained': 'Complaint',
+  'email.failed': 'Reject',
+  // The provider refused to send because the address is on its own
+  // suppression list. To the row that is a permanent bounce: the message
+  // did not go, and will not, until somebody clears the address.
+  'email.suppressed': 'Bounce',
+}
+
+/**
+ * One provider's vocabulary into the other's. Exported for the tests, which
+ * feed it the documented payloads verbatim.
+ */
+export function fromResend(p: ResendEvent | undefined): SesEvent | undefined {
+  const eventType = p?.type ? RESEND_TYPES[p.type] : undefined
+  if (!eventType) return undefined
+  const d = p!.data ?? {}
+  const tags: Record<string, string[]> = {}
+  if (Array.isArray(d.tags)) {
+    for (const t of d.tags) if (t?.name) tags[t.name] = [String(t.value ?? '')]
+  } else if (d.tags && typeof d.tags === 'object') {
+    for (const [k, v] of Object.entries(d.tags)) tags[k] = [String(v ?? '')]
+  }
+  const to = Array.isArray(d.to) ? d.to.map(String) : d.to ? [String(d.to)] : []
+  const out: SesEvent = { eventType, mail: { messageId: d.email_id, destination: to, tags } }
+  if (p!.type === 'email.bounced') {
+    out.bounce = {
+      // Resend uses SES's own classification: Permanent, Transient, Undetermined.
+      bounceType: d.bounce?.type ?? 'Permanent',
+      bounceSubType: d.bounce?.subType,
+      bouncedRecipients: to.map((a) => ({ emailAddress: a, diagnosticCode: d.bounce?.message })),
+    }
+  } else if (p!.type === 'email.suppressed') {
+    out.bounce = {
+      bounceType: 'Permanent',
+      bounceSubType: 'Suppressed',
+      bouncedRecipients: to.map((a) => ({ emailAddress: a, diagnosticCode: 'On the provider suppression list' })),
+    }
+  } else if (p!.type === 'email.complained') {
+    out.complaint = { complainedRecipients: to.map((a) => ({ emailAddress: a })) }
+  } else if (p!.type === 'email.failed') {
+    // Not a bounce: nothing is known about the address, only that the
+    // provider could not take the message. Keep the reason as the diagnostic.
+    out.bounce = { bouncedRecipients: to.map((a) => ({ emailAddress: a, diagnosticCode: d.failed?.reason })) }
+  }
+  return out
+}
+
+async function processEvent(d: SesEvent | undefined): Promise<void> {
   if (!d?.eventType) return
   const state = STATE[d.eventType]
   if (!state) return

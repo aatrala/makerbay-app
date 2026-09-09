@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { API_BASE, Empty, Notice, Skeleton, api, explain, when } from '@makerbay/web-kit'
+import { API_BASE, Empty, Notice, Skeleton, api, explain, getAccessToken, when } from '@makerbay/web-kit'
 
 export interface Contact {
   contactId: string
@@ -88,7 +88,7 @@ export default function ContactsList() {
   // The export route returns a file, so it needs the token on a raw fetch.
   const exportCsv = () =>
     void run(async () => {
-      const token = localStorage.getItem('mb.idToken')
+      const token = await getAccessToken()
       const r = await fetch(`${API_BASE}/v1/contacts/export`, {
         headers: { authorization: `Bearer ${token}` },
       })

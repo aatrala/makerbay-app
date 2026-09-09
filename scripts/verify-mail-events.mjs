@@ -2,17 +2,28 @@
 /**
  * End-to-end proof that a bounce and a complaint actually reach us (issue 107).
  *
- * Uses the SES mailbox simulator, which works while the account is still
- * sandboxed - so this verifies the whole pipeline today rather than after
+ * Two providers, one pipeline (issue 156). Pick with --provider:
+ *
+ *   node scripts/verify-mail-events.mjs                  # SES (default)
+ *   node scripts/verify-mail-events.mjs --provider resend
+ *
+ * SES uses the mailbox simulator, which works while the account is still
+ * sandboxed, so it verifies the whole pipeline today rather than after
  * production access is granted. The simulator addresses do not count towards
  * the account's bounce or complaint reputation.
  *
- * It sends through the real configuration set with the real EmailTags, so what
- * it exercises is the same path a quote takes: SES -> event destination ->
- * default EventBridge bus -> rule -> mail-events Lambda -> MailLog + status +
- * row write-back.
+ * Resend uses its own test addresses (bounced@, complained@, delivered@
+ * resend.dev), which likewise leave domain reputation alone but DO count
+ * against the account's daily quota. It needs RESEND_API_KEY in the
+ * environment. Per CLAUDE.md, never paste the key: resolve it at runtime,
+ * for example with asm-exec and
+ * {{resolve:secretsmanager:makerbay/resend:SecretString:apiKey}}.
  *
- *   node scripts/verify-mail-events.mjs
+ * Both paths send with the real tags and end in the same place: MailLog +
+ * per-tenant address status + row write-back, via the mail-events Lambda.
+ * For SES the route is the config set's EventBridge destination; for Resend
+ * it is the signed webhook at /v1/mail/webhook, so a green run here also
+ * proves the webhook and its secret are wired.
  *
  * Nothing here writes to a real person's address.
  */
@@ -26,6 +37,13 @@ const CONFIG_SET = process.env.EMAIL_CONFIG_SET ?? 'makerbay-transactional'
 const FROM = process.env.EMAIL_FROM ?? 'hello@makerbay.app'
 const MAILLOG = process.env.TABLE_MAILLOG ?? 'makerbay-maillog'
 
+const argProvider = process.argv.indexOf('--provider')
+const PROVIDER = argProvider > -1 ? process.argv[argProvider + 1] : (process.env.EMAIL_PROVIDER ?? 'ses')
+if (!['ses', 'resend'].includes(PROVIDER)) {
+  console.error(`unknown provider "${PROVIDER}": use ses or resend`)
+  process.exit(2)
+}
+
 // A tenant id that is obviously synthetic, so nothing here can be mistaken for
 // a real workspace's mail history.
 const TENANT = 'VERIFY-MAIL-EVENTS'
@@ -33,32 +51,55 @@ const TENANT = 'VERIFY-MAIL-EVENTS'
 const ses = new SESv2Client({ region: REGION })
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }))
 
-const CASES = [
-  { name: 'bounce', to: 'bounce@simulator.amazonses.com', expect: 'bounced', refId: 'VERIFY-B' },
-  { name: 'complaint', to: 'complaint@simulator.amazonses.com', expect: 'complained', refId: 'VERIFY-C' },
-  { name: 'success', to: 'success@simulator.amazonses.com', expect: 'delivered', refId: 'VERIFY-S' },
-]
+const CASES = PROVIDER === 'resend'
+  ? [
+      { name: 'bounce', to: 'bounced@resend.dev', expect: 'bounced', refId: 'VERIFY-B' },
+      { name: 'complaint', to: 'complained@resend.dev', expect: 'complained', refId: 'VERIFY-C' },
+      { name: 'success', to: 'delivered@resend.dev', expect: 'delivered', refId: 'VERIFY-S' },
+    ]
+  : [
+      { name: 'bounce', to: 'bounce@simulator.amazonses.com', expect: 'bounced', refId: 'VERIFY-B' },
+      { name: 'complaint', to: 'complaint@simulator.amazonses.com', expect: 'complained', refId: 'VERIFY-C' },
+      { name: 'success', to: 'success@simulator.amazonses.com', expect: 'delivered', refId: 'VERIFY-S' },
+    ]
 
-async function send({ to, refId }) {
+const TAGS = (refId) => ({ tenantId: TENANT, refType: 'quote', refId, audience: 'customer' })
+const SUBJECT = 'MakerBay delivery pipeline check'
+const TEXT = 'Automated check of the bounce and complaint pipeline. No action needed.'
+
+async function sendSes({ to, refId }) {
   const r = await ses.send(new SendEmailCommand({
     FromEmailAddress: FROM,
     Destination: { ToAddresses: [to] },
     ConfigurationSetName: CONFIG_SET,
-    EmailTags: [
-      { Name: 'tenantId', Value: TENANT },
-      { Name: 'refType', Value: 'quote' },
-      { Name: 'refId', Value: refId },
-      { Name: 'audience', Value: 'customer' },
-    ],
-    Content: {
-      Simple: {
-        Subject: { Data: 'MakerBay delivery pipeline check' },
-        Body: { Text: { Data: 'Automated check of the bounce and complaint pipeline. No action needed.' } },
-      },
-    },
+    EmailTags: Object.entries(TAGS(refId)).map(([Name, Value]) => ({ Name, Value })),
+    Content: { Simple: { Subject: { Data: SUBJECT }, Body: { Text: { Data: TEXT } } } },
   }))
   return r.MessageId
 }
+
+async function sendResend({ to, refId }) {
+  const key = process.env.RESEND_API_KEY
+  if (!key) throw Object.assign(new Error('RESEND_API_KEY is not set'), { name: 'NotConfigured' })
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: FROM,
+      to: [to],
+      subject: SUBJECT,
+      text: TEXT,
+      tags: Object.entries(TAGS(refId)).map(([name, value]) => ({ name, value })),
+    }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw Object.assign(new Error(json.message ?? `HTTP ${res.status}`), { name: json.name ?? `http_${res.status}` })
+  // The webhook reports this id as email_id, and mail-events stores it as the
+  // messageId, so it is what we poll for.
+  return json.id
+}
+
+const send = PROVIDER === 'resend' ? sendResend : sendSes
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -88,6 +129,7 @@ async function addressStatus(email) {
   return r.Item?.state
 }
 
+console.log(`provider: ${PROVIDER}`)
 const results = []
 for (const c of CASES) {
   process.stdout.write(`sending ${c.name} ... `)

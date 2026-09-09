@@ -10,6 +10,7 @@ import {
   Skeleton,
   api,
   explain,
+  getAccessToken,
   type DashboardModule,
   type Me,
 } from '@makerbay/web-kit'
@@ -72,11 +73,11 @@ function PagePage({ me }: { me: Me }) {
   useEffect(() => {
     if (!config || !dirtyRef.current) return
     window.clearTimeout(draftTimer.current)
-    draftTimer.current = window.setTimeout(() => {
+    draftTimer.current = window.setTimeout(async () => {
       void fetch(`${(window as unknown as { __MB_API?: string }).__MB_API ?? 'https://api.makerbay.app'}/v1/presence/preview`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${localStorage.getItem('mb.idToken') ?? ''}`,
+          authorization: `Bearer ${await getAccessToken()}`,
           'content-type': 'application/json',
         },
         body: JSON.stringify({

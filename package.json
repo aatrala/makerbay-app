@@ -20,7 +20,8 @@
     "typecheck:api": "tsc --noEmit -p tsconfig.check.json",
     "typecheck:ui": "tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:adapter": "vitest run -c vitest.adapter.config.ts"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

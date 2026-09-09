@@ -8,7 +8,9 @@ import {
   getTenantBySlug,
   getUser,
   hashApiKey,
+  isPlatformJwt,
   ulid,
+  verifyPlatformJwt,
 } from '@makerbay/core'
 import { businessFacts, getConfig, getSessionMessages, putMessage } from './db'
 import { buildCitations, classifyAnswer, retrieveChunks, streamAnswer } from './rag'
@@ -168,8 +170,12 @@ async function resolveTenant(event: FunctionUrlEvent, body: Record<string, unkno
   if (auth && !auth.startsWith('mb_sk_')) {
     if (auth.startsWith('mb_pk_')) return (await keyTenant(auth)) ?? ''
     try {
-      const payload = await verifier.verify(auth)
-      return (await getUser(payload.sub))?.tenantId ?? ''
+      // Either issuer during the transition (issue 157): a Better Auth JWT
+      // against its JWKS, or a Cognito ID token as before.
+      const sub = isPlatformJwt(auth)
+        ? (await verifyPlatformJwt(auth)).sub
+        : (await verifier.verify(auth)).sub
+      return (await getUser(sub))?.tenantId ?? ''
     } catch {
       return ''
     }

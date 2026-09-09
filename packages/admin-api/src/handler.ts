@@ -3,7 +3,6 @@ import {
   DeleteSuppressedDestinationCommand,
   GetSuppressedDestinationCommand,
   SESv2Client,
-  SendEmailCommand,
 } from '@aws-sdk/client-sesv2'
 import {
   AdminResetUserPasswordCommand,
@@ -22,6 +21,10 @@ import {
   listTenantUsers,
   MODULES,
   PLATFORM_VERSION,
+  activeMailProvider,
+  deliver,
+  removeResendSuppression,
+  resendSuppression,
   revokeGrant,
   sendEmail,
   setTenantStatus,
@@ -188,9 +191,14 @@ export const handler = async (event: Event): Promise<APIGatewayProxyResultV2> =>
 }
 
 /**
- * Proves the SES setup end to end: domain verified, DKIM signing, config set
- * applied, and out of the sandbox. Staff-only, and it will only send to a
- * staff member's own address so this can never become an open relay.
+ * Proves the active mail provider end to end: domain verified, DKIM signing,
+ * credentials present, and (for SES) out of the sandbox. Staff-only, and it
+ * will only send to a staff member's own address so this can never become an
+ * open relay.
+ *
+ * It calls the provider layer directly rather than sendEmail, on purpose:
+ * the button exists to prove the provider works, and going through sendEmail
+ * would test sendEmail instead.
  */
 async function sendTestEmail(staff: StaffContext, event: Event): Promise<APIGatewayProxyResultV2> {
   const body = JSON.parse(event.body ?? '{}')
@@ -205,45 +213,36 @@ async function sendTestEmail(staff: StaffContext, event: Event): Promise<APIGate
   }
 
   const from = process.env.EMAIL_FROM!
-  try {
-    await ses.send(
-      new SendEmailCommand({
-        FromEmailAddress: from,
-        Destination: { ToAddresses: [to] },
-        ConfigurationSetName: process.env.EMAIL_CONFIG_SET,
-        Content: {
-          Simple: {
-            Subject: { Data: 'MakerBay email test' },
-            Body: {
-              Text: {
-                Data: [
-                  'This is a test from the MakerBay staff console.',
-                  '',
-                  `Sent from ${from} at ${new Date().toISOString()}.`,
-                  'If it arrived, DKIM signing and the configuration set are working.',
-                  'Check the raw headers for a DKIM pass.',
-                ].join('\n'),
-              },
-            },
-          },
-        },
-      }),
-    )
-  } catch (err) {
-    const name = (err as { name?: string }).name ?? 'unknown'
-    await audit(staff, 'email.test', '-', { to, error: name }, 'error')
-    // The sandbox is the overwhelmingly likely cause; say so plainly.
+  const provider = activeMailProvider()
+  const r = await deliver({
+    from,
+    to,
+    subject: 'MakerBay email test',
+    text: [
+      'This is a test from the MakerBay staff console.',
+      '',
+      `Sent from ${from} through ${provider} at ${new Date().toISOString()}.`,
+      'If it arrived, DKIM signing is working for this provider.',
+      'Check the raw headers for a DKIM pass.',
+    ].join('\n'),
+  })
+  if (!r.ok) {
+    await audit(staff, 'email.test', '-', { to, provider, error: r.error }, 'error')
     return json(502, {
       error: 'send_failed',
       message:
-        name === 'MessageRejected'
-          ? 'SES rejected the message. The account is probably still in the sandbox, where you can only send to verified addresses.'
-          : `SES refused the request (${name}).`,
+        r.error === 'sandbox_or_rejected'
+          ? provider === 'ses'
+            ? 'SES rejected the message. The account is probably still in the sandbox, where you can only send to verified addresses.'
+            : 'Resend rejected the message. The sending domain is probably not verified yet - check Domains in the Resend dashboard.'
+          : r.error === 'resend_not_configured'
+            ? 'Resend has no usable API key. Put the real key into the makerbay/resend secret in Secrets Manager.'
+            : `${provider} refused the request (${r.error}).`,
     })
   }
 
-  await audit(staff, 'email.test', '-', { to })
-  return json(200, { sent: to, from })
+  await audit(staff, 'email.test', '-', { to, provider })
+  return json(200, { sent: to, from, provider })
 }
 
 /**
@@ -585,26 +584,44 @@ async function auditLog(event: Event): Promise<APIGatewayProxyResultV2> {
 }
 
 /**
- * G5: is this address on the SES suppression list, and the audited way off
- * it. A bounced address stays suppressed until removed - the single most
- * common reason "my customer never got the email".
+ * G5: is this address on the active provider's suppression list, and the
+ * audited way off it. A bounced address stays suppressed until removed - the
+ * single most common reason "my customer never got the email".
+ *
+ * This is the provider's ACCOUNT-WIDE list, whichever provider is live.
+ * The per-tenant status sendEmail actually checks lives in MailLog and is
+ * cleared by the owner correcting the address; this tool is the staff escape
+ * hatch for the case where the provider itself refuses the address.
  */
 async function suppressionLookup(staff: StaffContext, event: Event): Promise<APIGatewayProxyResultV2> {
   const email = String(event.queryStringParameters?.email ?? '').trim().toLowerCase()
   if (!email.includes('@')) return json(400, { error: 'email_required' })
-  try {
-    const r = await ses.send(new GetSuppressedDestinationCommand({ EmailAddress: email }))
-    await audit(staff, 'email.suppression_lookup', '-', { email, suppressed: true })
+  const provider = activeMailProvider()
+  if (provider === 'resend') {
+    const r = await resendSuppression(email)
+    await audit(staff, 'email.suppression_lookup', '-', { email, provider, suppressed: r.suppressed })
     return json(200, {
       email,
+      provider,
+      suppressed: r.suppressed,
+      reason: r.reason ?? null,
+      since: r.since ?? null,
+    })
+  }
+  try {
+    const r = await ses.send(new GetSuppressedDestinationCommand({ EmailAddress: email }))
+    await audit(staff, 'email.suppression_lookup', '-', { email, provider, suppressed: true })
+    return json(200, {
+      email,
+      provider,
       suppressed: true,
       reason: r.SuppressedDestination?.Reason ?? null,
       since: r.SuppressedDestination?.LastUpdateTime?.toISOString() ?? null,
     })
   } catch (err) {
     if ((err as { name?: string }).name === 'NotFoundException') {
-      await audit(staff, 'email.suppression_lookup', '-', { email, suppressed: false })
-      return json(200, { email, suppressed: false })
+      await audit(staff, 'email.suppression_lookup', '-', { email, provider, suppressed: false })
+      return json(200, { email, provider, suppressed: false })
     }
     throw err
   }
@@ -613,15 +630,23 @@ async function suppressionLookup(staff: StaffContext, event: Event): Promise<API
 async function suppressionRemove(staff: StaffContext, email: string): Promise<APIGatewayProxyResultV2> {
   const addr = email.trim().toLowerCase()
   if (!addr.includes('@')) return json(400, { error: 'email_required' })
-  try {
-    await ses.send(new DeleteSuppressedDestinationCommand({ EmailAddress: addr }))
-  } catch (err) {
-    if ((err as { name?: string }).name === 'NotFoundException') {
+  const provider = activeMailProvider()
+  if (provider === 'resend') {
+    const removed = await removeResendSuppression(addr)
+    if (!removed) {
       return json(404, { error: 'not_suppressed', message: 'That address is not on the suppression list.' })
     }
-    throw err
+  } else {
+    try {
+      await ses.send(new DeleteSuppressedDestinationCommand({ EmailAddress: addr }))
+    } catch (err) {
+      if ((err as { name?: string }).name === 'NotFoundException') {
+        return json(404, { error: 'not_suppressed', message: 'That address is not on the suppression list.' })
+      }
+      throw err
+    }
   }
-  await audit(staff, 'email.suppression_removed', '-', { email: addr })
+  await audit(staff, 'email.suppression_removed', '-', { email: addr, provider })
   return json(200, { removed: addr, note: 'If the mailbox bounces again it will be re-suppressed automatically.' })
 }
 

@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -22,7 +23,14 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
 let complaintCount = 1
 const restricted: Array<{ tenantId: string; reason: string }> = []
 
-vi.mock('@makerbay/core', () => ({
+// The Resend webhook's signing secret, as the Lambda would read it from
+// Secrets Manager. The verifier itself is the real one: a mocked "yes" would
+// make the signature tests below prove nothing.
+const WEBHOOK_SECRET = 'whsec_' + Buffer.from('mail-events-test-key').toString('base64')
+
+vi.mock('@makerbay/core', async () => ({
+  verifySvix: (await vi.importActual<typeof import('../../core/src/mail/svix')>('../../core/src/mail/svix')).verifySvix,
+  resendWebhookSecret: async () => WEBHOOK_SECRET,
   ddb: { send: async (c: { input: Record<string, unknown> }) => void writes.push(c.input) },
   // The owner notice renders a template now, and renderEmail reaches back into
   // core for the two colour helpers. Real implementations, not stubs, so the
@@ -278,5 +286,149 @@ describe('row write-back', () => {
       tenantId: ['T1'], refType: ['request'], refId: ['digest-R1'], audience: ['owner'],
     }) as never)
     expect(writes).toHaveLength(0)
+  })
+})
+
+/**
+ * The second door (issue 156). Resend posts a signed webhook; it must be
+ * verified over the raw body, then become exactly the event the SES path
+ * produces, so the rules above are tested once and hold for both.
+ */
+const { fromResend } = await import('./mail-events')
+
+const signed = (payload: unknown, opts: { secret?: string; ts?: number; base64?: boolean } = {}) => {
+  const body = JSON.stringify(payload)
+  const ts = String(opts.ts ?? Math.floor(Date.now() / 1000))
+  const key = Buffer.from((opts.secret ?? WEBHOOK_SECRET).slice(6), 'base64')
+  const sig = createHmac('sha256', key).update(`msg_1.${ts}.${body}`).digest('base64')
+  return {
+    requestContext: { http: { method: 'POST', path: '/v1/mail/webhook' } },
+    // Mixed header casing on purpose: API Gateway does not normalise it.
+    headers: { 'Svix-Id': 'msg_1', 'svix-timestamp': ts, 'svix-signature': `v1,${sig}` },
+    body: opts.base64 ? Buffer.from(body).toString('base64') : body,
+    isBase64Encoded: opts.base64 === true,
+  }
+}
+
+const resendBounce = {
+  type: 'email.bounced',
+  created_at: '2026-09-08T00:00:00.000Z',
+  data: {
+    email_id: 'em_9',
+    from: 'Southside Plumbing <hello@send.makerbay.app>',
+    to: ['dead@example.com'],
+    subject: 'Your quote',
+    bounce: { message: '550 no such user', subType: 'General', type: 'Permanent' },
+    tags: { tenantId: 'T1', refType: 'quote', refId: 'Q1', audience: 'customer' },
+  },
+}
+
+describe('resend webhook', () => {
+  it('accepts a signed bounce and suppresses the address exactly like SES', async () => {
+    const res = await handler(signed(resendBounce) as never)
+    expect(res).toMatchObject({ statusCode: 200 })
+    expect(recorded[0]).toMatchObject({
+      tenantId: 'T1', messageId: 'em_9', state: 'bounced', to: 'dead@example.com',
+      refKey: 'quote#Q1', bounceType: 'Permanent', bounceSubType: 'General', diagnostic: '550 no such user',
+    })
+    expect(statuses[0]).toEqual(['T1', 'dead@example.com', 'bounced', 'General'])
+    expect(writes[0]).toMatchObject({ TableName: 'makerbay-quotes', Key: { tenantId: 'T1', quoteId: 'Q1' } })
+  })
+
+  it('rejects a bad signature before touching anything', async () => {
+    const other = 'whsec_' + Buffer.from('somebody-else').toString('base64')
+    const res = await handler(signed(resendBounce, { secret: other }) as never)
+    expect(res).toMatchObject({ statusCode: 400 })
+    expect(recorded).toHaveLength(0)
+    expect(statuses).toHaveLength(0)
+  })
+
+  it('rejects a replay from outside the window', async () => {
+    const res = await handler(signed(resendBounce, { ts: Math.floor(Date.now() / 1000) - 3600 }) as never)
+    expect(res).toMatchObject({ statusCode: 400 })
+    expect(recorded).toHaveLength(0)
+  })
+
+  // API Gateway hands a JSON body over base64-encoded when the content type
+  // is not one it recognises as text. The signature is over the decoded
+  // bytes, so decoding has to happen before verification, not after.
+  it('verifies the decoded body when API Gateway base64-encodes it', async () => {
+    const res = await handler(signed(resendBounce, { base64: true }) as never)
+    expect(res).toMatchObject({ statusCode: 200 })
+    expect(recorded).toHaveLength(1)
+  })
+
+  it('treats a complaint the same way, including the brake', async () => {
+    complaintCount = 3
+    await handler(signed({
+      type: 'email.complained',
+      data: {
+        email_id: 'em_c', to: ['cross@example.com'],
+        tags: { tenantId: 'T1', refType: 'review', refId: 'C1', audience: 'customer' },
+      },
+    }) as never)
+    expect(statuses[0]).toEqual(['T1', 'cross@example.com', 'complained', undefined])
+    expect(restricted).toHaveLength(1)
+    expect(sent).toHaveLength(0)
+  })
+
+  it('reads a provider-side suppression as a permanent bounce, because the message did not go', async () => {
+    await handler(signed({
+      type: 'email.suppressed',
+      data: {
+        email_id: 'em_s', to: ['dead@example.com'],
+        tags: { tenantId: 'T1', refType: 'quote', refId: 'Q3', audience: 'customer' },
+      },
+    }) as never)
+    expect(statuses[0]).toEqual(['T1', 'dead@example.com', 'bounced', 'Suppressed'])
+    expect(writes[0]).toMatchObject({ Key: { tenantId: 'T1', quoteId: 'Q3' }, ExpressionAttributeValues: { ':e': 'bounced' } })
+  })
+
+  it('records a send failure without suppressing an address it knows nothing about', async () => {
+    await handler(signed({
+      type: 'email.failed',
+      data: {
+        email_id: 'em_f', to: ['fine@example.com'], failed: { reason: 'reached_daily_quota' },
+        tags: { tenantId: 'T1', refType: 'quote', refId: 'Q2', audience: 'customer' },
+      },
+    }) as never)
+    expect(recorded[0]).toMatchObject({ state: 'rejected', diagnostic: 'reached_daily_quota' })
+    expect(statuses).toHaveLength(0)
+  })
+
+  it('answers 200 to an event it does not model, so the provider stops retrying it', async () => {
+    const res = await handler(signed({ type: 'email.opened', data: { email_id: 'em_o', to: ['x@example.com'] } }) as never)
+    expect(res).toMatchObject({ statusCode: 200 })
+    expect(recorded).toHaveLength(0)
+  })
+
+  it('still ignores untagged mail', async () => {
+    await handler(signed({
+      type: 'email.bounced',
+      data: { email_id: 'em_u', to: ['x@example.com'], bounce: { type: 'Permanent' } },
+    }) as never)
+    expect(recorded).toHaveLength(0)
+  })
+})
+
+describe('fromResend', () => {
+  it('accepts tags as either an object or a name/value list', () => {
+    const asObject = fromResend({ type: 'email.delivered', data: { email_id: 'a', to: ['x@y.z'], tags: { tenantId: 'T1' } } })
+    const asList = fromResend({ type: 'email.delivered', data: { email_id: 'a', to: ['x@y.z'], tags: [{ name: 'tenantId', value: 'T1' }] } })
+    expect(asObject?.mail?.tags).toEqual({ tenantId: ['T1'] })
+    expect(asList?.mail?.tags).toEqual({ tenantId: ['T1'] })
+  })
+
+  it('maps every event it models onto an SES event type', () => {
+    const cases: Array<[string, string]> = [
+      ['email.sent', 'Send'], ['email.delivered', 'Delivery'], ['email.delivery_delayed', 'DeliveryDelay'],
+      ['email.bounced', 'Bounce'], ['email.complained', 'Complaint'], ['email.failed', 'Reject'],
+      ['email.suppressed', 'Bounce'],
+    ]
+    for (const [type, expected] of cases) {
+      expect(fromResend({ type, data: { email_id: 'a', to: ['x@y.z'] } })?.eventType).toBe(expected)
+    }
+    expect(fromResend({ type: 'domain.created' })).toBeUndefined()
+    expect(fromResend(undefined)).toBeUndefined()
   })
 })

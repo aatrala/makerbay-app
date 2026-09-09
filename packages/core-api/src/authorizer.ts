@@ -1,5 +1,7 @@
 import { CognitoJwtVerifier } from 'aws-jwt-verify'
-import { findApiKeyByHash, getEntitlements, getTenant, getUser, hashApiKey } from '@makerbay/core'
+import {
+  findApiKeyByHash, getEntitlements, getTenant, getUser, hashApiKey, isPlatformJwt, verifyPlatformJwt,
+} from '@makerbay/core'
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.USER_POOL_ID!,
@@ -39,16 +41,25 @@ export const handler = async (event: {
       }
     }
 
-    const payload = await verifier.verify(token)
-    const user = await getUser(payload.sub)
+    /*
+     * Two issuers during the transition (issue 157). A Better Auth token is
+     * verified against its JWKS; anything else is a Cognito ID token as
+     * before. Both end in the same context, keyed by the same userId - the
+     * migration wrote Better Auth users with their Cognito sub as the id -
+     * so every route downstream is unchanged.
+     */
+    const { sub, email } = isPlatformJwt(token)
+      ? await verifyPlatformJwt(token)
+      : await verifier.verify(token).then((p) => ({ sub: p.sub, email: String(p.email ?? '') }))
+    const user = await getUser(sub)
     const tenantId = user?.tenantId ?? ''
     if (tenantId && (await suspended(tenantId))) return { isAuthorized: false }
     const entitlements = tenantId ? await getEntitlements(tenantId) : { modules: {} }
     return {
       isAuthorized: true,
       context: {
-        userId: payload.sub,
-        email: String(payload.email ?? ''),
+        userId: sub,
+        email,
         tenantId,
         scopes: '*',
         entitlements: JSON.stringify(entitlements),

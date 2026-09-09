@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
+import { activeMailProvider, deliver, type OutboundMail } from './mail'
 import { emailBlocked, type MailRef } from './maillog'
 import { unsubTokenFor, unsubUrl } from './unsubscribe'
 
@@ -11,9 +11,13 @@ import { unsubTokenFor, unsubUrl } from './unsubscribe'
  * it to a mail problem would be far worse than a missing email. Callers store
  * the returned error on the row and show it in the dashboard so the owner
  * knows to follow up by hand.
+ *
+ * Which service carries the message is decided in ./mail (SES or Resend,
+ * per deploy). Everything that makes a MakerBay email a MakerBay email - the
+ * suppression check, the cap, the escaping, the unsubscribe headers, the
+ * tags a bounce needs to find its row - happens here, above that line, so
+ * it is true whichever provider is active (issue 156).
  */
-
-const ses = new SESv2Client({})
 
 export interface EmailResult {
   sent: boolean
@@ -207,91 +211,67 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
     if (token) unsub = unsubUrl(token)
   }
 
-  try {
-    const envelope = input.audience === 'customer' ? (FROM_CUSTOMER() ?? FROM()) : FROM()
-    await ses.send(
-      new SendEmailCommand({
-        FromEmailAddress: addressWithName(input.fromName, envelope),
-        Destination: { ToAddresses: [to] },
-        ...(input.replyTo ? { ReplyToAddresses: [input.replyTo] } : {}),
-        ConfigurationSetName: CONFIG_SET(),
-        // Carried back on every delivery, bounce and complaint event, so the
-        // handler can find the row that caused the message without keeping a
-        // second index of its own.
-        ...(input.ref
-          ? {
-              EmailTags: [
-                { Name: 'tenantId', Value: input.ref.tenantId },
-                { Name: 'refType', Value: input.ref.refType },
-                { Name: 'refId', Value: input.ref.refId },
-                { Name: 'audience', Value: input.audience },
-              ],
-            }
-          : {}),
-        Content: {
-          Simple: {
-            Subject: { Data: headerSafe(input.subject).slice(0, 200) },
-            Body: {
-              Text: {
-                /*
-                 * The line is appended only for an UNTEMPLATED message. A
-                 * templated one already carries the address in both parts,
-                 * because renderEmail writes it into the HTML footer and the
-                 * text together from one source - appending again would print
-                 * it twice.
-                 */
-                Data: unsub && !input.html
-                  ? `${input.text}
+  const envelope = input.audience === 'customer' ? (FROM_CUSTOMER() ?? FROM()) : FROM()
+  const mail: OutboundMail = {
+    from: addressWithName(input.fromName, envelope),
+    to,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    subject: headerSafe(input.subject).slice(0, 200),
+    /*
+     * The line is appended only for an UNTEMPLATED message. A templated one
+     * already carries the address in both parts, because renderEmail writes
+     * it into the HTML footer and the text together from one source -
+     * appending again would print it twice.
+     */
+    text: unsub && !input.html
+      ? `${input.text}
 
 —
 Don't want these? Stop them here:
 ${unsub}`
-                  : input.text,
-              },
-              // Both parts, so a client that refuses HTML still gets a whole
-              // message rather than an empty one.
-              ...(input.html ? { Html: { Data: input.html } } : {}),
-            },
-            // SESv2 carries custom headers on Simple content, so this needs no
-            // move to raw MIME - which the codebase had been bracing for since
-            // issue 109 and which would have meant hand-building every message.
-            ...(unsub
-              ? {
-                  Headers: [
-                    { Name: 'List-Unsubscribe', Value: `<${unsub}>` },
-                    // RFC 8058. Without it the mail client shows a link rather
-                    // than its own one-tap control, and the bulk-sender rules
-                    // are not satisfied.
-                    { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
-                  ],
-                }
-              : {}),
+      : input.text,
+    // Both parts, so a client that refuses HTML still gets a whole message
+    // rather than an empty one.
+    ...(input.html ? { html: input.html } : {}),
+    ...(unsub
+      ? {
+          headers: {
+            'List-Unsubscribe': `<${unsub}>`,
+            // RFC 8058. Without it the mail client shows a link rather than
+            // its own one-tap control, and the bulk-sender rules are not
+            // satisfied.
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
           },
-        },
-      }),
-    )
-    return { sent: true }
-  } catch (err) {
-    const name = (err as { name?: string }).name ?? 'unknown'
-    // The name alone is useless for diagnosis - AccessDeniedException does not
-    // say which permission. Log the message; never surface it to a customer.
-    console.warn('email send detail', {
-      name,
-      message: (err as { message?: string }).message,
-      from: FROM(),
-      configSet: CONFIG_SET(),
-    })
-    // The sandbox shows up in two different disguises. MessageRejected is the
-    // documented one; the other is an AccessDeniedException naming the
-    // *recipient* as an SES identity, because in the sandbox SES authorises
-    // against the destination rather than the sender. Both mean the same thing
-    // to a customer, and neither is a permissions bug to chase.
-    const message = String((err as { message?: string }).message ?? '')
-    const sandboxDenial = name === 'AccessDeniedException' && /identity\/[^'\s]+@/.test(message)
-    const error = name === 'MessageRejected' || sandboxDenial ? 'sandbox_or_rejected' : name
-    console.warn('email send failed', { to: to.replace(/^(.).*(@.*)$/, '$1***$2'), error })
-    return { sent: false, error }
+        }
+      : {}),
+    // Carried back on every delivery, bounce and complaint event, so the
+    // handler can find the row that caused the message without keeping a
+    // second index of its own.
+    ...(input.ref
+      ? {
+          tags: {
+            tenantId: input.ref.tenantId,
+            refType: input.ref.refType,
+            refId: input.ref.refId,
+            audience: input.audience,
+          },
+        }
+      : {}),
   }
+
+  const r = await deliver(mail)
+  if (r.ok) return { sent: true }
+  // The short code alone is useless for diagnosis. Log the provider's
+  // message; never surface it to a customer.
+  console.warn('email send detail', {
+    provider: activeMailProvider(),
+    error: r.error,
+    detail: r.detail,
+    from: envelope,
+    configSet: CONFIG_SET(),
+  })
+  console.warn('email send failed', { to: to.replace(/^(.).*(@.*)$/, '$1***$2'), error: r.error })
+  return { sent: false, error: r.error }
 }
 
 /** Human wording for a stored send failure. */
@@ -337,6 +317,17 @@ export function explainEmailError(error?: string): string | undefined {
   }
   if (error === 'sandbox_or_rejected') {
     return 'Email is not switched on for this account yet, so nothing was sent. Send the link yourself for now.'
+  }
+  // The provider layer (issue 156). Neither is the customer's fault and
+  // neither is permanent, so the wording says try again rather than fix.
+  if (error === 'provider_quota') {
+    return 'Our email service has reached its limit for today, so nothing was sent. Send the link yourself, or try again tomorrow.'
+  }
+  if (error === 'rate_limited' || error === 'network_error') {
+    return 'Our email service was briefly unavailable, so nothing was sent. Try again in a minute.'
+  }
+  if (error === 'resend_not_configured') {
+    return 'Email is not set up on this deployment, so nothing was sent. Send the link yourself for now.'
   }
   return `The notification could not be sent (${error}). Follow up by hand.`
 }

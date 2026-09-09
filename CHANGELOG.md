@@ -11,6 +11,27 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 `booking`, `quotes`, `reviews`). Kinds are `Added`, `Changed`, `Fixed`,
 `Security`.
 
+## 2.29.0 - 2026-09-08
+
+> **A second way out of the building** - the email provider is now a
+> switch, not a dependency, so a customer's customer can get their invoice
+> whatever AWS decides.
+
+- Added `platform` **Email can now be carried by Resend as well as Amazon
+  SES.** Both providers sign both of our sending domains, both feed the same
+  bounce and complaint tracking, and one is live per deploy. The per-workspace
+  suppression check, the daily send caps, the unsubscribe headers and the
+  "did she get it?" delivery status all sit above the switch, so they behave
+  identically whichever provider carries the message. The reason: AWS
+  declined production access for SES a second time, and while the account
+  stays in its sandbox no customer of a customer can receive email from it.
+- Changed `platform` Delivery failures now say which provider refused the
+  message and why in plain words, including a spent daily quota and a brief
+  provider outage, instead of an error code.
+- Changed `platform` The staff console's email page reports which provider
+  it tested, and its suppression tool reads and clears the live provider's
+  list - saying plainly that removal is global across every workspace.
+
 ## 2.28.0 - 2026-08-29
 
 > **The honesty pass** - four claims on the new legal pages turned out not to

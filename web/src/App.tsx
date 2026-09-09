@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { getBillingSummary, getMe, isLoggedIn, type Me } from '@makerbay/web-kit'
+import { finishExternalSignIn, getBillingSummary, getMe, isLoggedIn, type Me } from '@makerbay/web-kit'
 import { enabledModules } from './modules'
 import Login from './pages/Login'
 import Onboarding from './pages/Onboarding'
@@ -14,10 +14,17 @@ import Home from './pages/Home'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
-  const [loading, setLoading] = useState(isLoggedIn())
+  // Loading while signed in, or while returning from an upstream sign-in
+  // with a one-time token in the fragment (issue 157).
+  const [loading, setLoading] = useState(isLoggedIn() || /[#&]ott=/.test(window.location.hash))
   const [stripeMode, setStripeMode] = useState<'test' | 'live' | null>(null)
 
   const reload = useCallback(async () => {
+    try {
+      await finishExternalSignIn()
+    } catch (err) {
+      console.warn('external sign-in did not complete', err)
+    }
     if (!isLoggedIn()) { setLoading(false); return }
     try {
       setMe(await getMe())

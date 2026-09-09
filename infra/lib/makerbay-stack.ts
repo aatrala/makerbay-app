@@ -30,6 +30,8 @@ import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-ap
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 import { authEmail } from '@makerbay/email'
 import { MonitoringStack } from './monitoring-stack'
+import { AuthStack } from './auth-stack'
+import { EmailProviderStack } from './email-provider-stack'
 import { LogRetentionStack } from './log-retention-stack'
 import { SetupStack } from './setup-stack'
 
@@ -52,6 +54,45 @@ const CHAT_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
  *   aws sesv2 get-account --profile makerbay --query ProductionAccessEnabled
  */
 const SES_LEFT_THE_SANDBOX = false
+
+/**
+ * Which service carries transactional mail (issue 156).
+ *
+ * One provider live at a time, chosen here and nowhere else. Both are fully
+ * wired - DNS, credentials, the bounce and complaint pipeline - so a cutover
+ * in either direction is this constant and a deploy. Deliberately not a
+ * failover: two live providers means two suppression lists that never
+ * reconcile, and a retry after one accepted the message sends a customer
+ * two invoices.
+ *
+ * `resend` while SES sits in its sandbox: with production access denied
+ * twice, SES cannot reach a customer's inbox at all. Cognito's own code
+ * emails are unaffected by this constant; see SES_LEFT_THE_SANDBOX above.
+ *
+ * Before switching TO resend, the `makerbay/resend` secret must hold a real
+ * API key and webhook signing secret - with the placeholder still in place
+ * every send fails closed as `resend_not_configured`, so the first deploy
+ * of this feature keeps `ses` and the flip is a second deploy once
+ * `aws secretsmanager describe-secret --secret-id makerbay/resend` shows a
+ * version newer than the stack's. Before switching BACK to ses, check
+ * `aws sesv2 get-account --query ProductionAccessEnabled`.
+ */
+const EMAIL_PROVIDER: 'ses' | 'resend' = 'resend'
+
+/**
+ * Who signs customers in (issue 157, docs/spec-auth.md).
+ *
+ * `cognito`: the dashboard signs in against the user pool exactly as it
+ * always has. `better-auth`: the dashboard signs in with an emailed code
+ * through the AuthStack below, with the user pool kept as an upstream
+ * "sign in with your MakerBay password" option.
+ *
+ * The AuthStack is deployed and the authorizer verifies BOTH issuers
+ * whatever this says, so the Better Auth path can be exercised dark at
+ * app.makerbay.app/?auth=better-auth before anything flips. Flipping this
+ * changes the dashboard build's default and nothing on the API.
+ */
+const AUTH_PROVIDER: 'cognito' | 'better-auth' = 'cognito'
 
 export class MakerbayStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -576,6 +617,15 @@ export class MakerbayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
 
+    // The second mail provider's DNS records and credentials (issue 156).
+    // A nested stack: seven resources is past the budget rule for the parent.
+    const emailProvider = new EmailProviderStack(this, 'EmailProvider', {
+      hostedZoneId: HOSTED_ZONE_ID,
+      zoneName: DOMAIN,
+      secretsKey,
+    })
+    const resendSecret = emailProvider.resendSecret
+
     // ── Staff identity (separate from customers on purpose) ──────────────
     // A customer token fails signature validation against this pool, so admin
     // access cannot be reached by a claims check somebody forgot to add.
@@ -664,6 +714,35 @@ export class MakerbayStack extends cdk.Stack {
       authFlows: { userPassword: true, userSrp: true },
     })
 
+    /**
+     * Cognito as an UPSTREAM of Better Auth (issue 157).
+     *
+     * A hosted domain and a public PKCE client are all the OpenID Connect
+     * flow needs: the browser is sent to Cognito's hosted page, types the
+     * password it already has, and comes back with a code that Better Auth
+     * exchanges and links to its own user. Cognito sends no email in that
+     * flow, so the sandbox that broke sign-up has no bearing on it.
+     *
+     * The classic hosted UI on the free prefix domain, deliberately: it is
+     * on screen for the two seconds of the redirect, and the branded managed
+     * login costs another resource and an ACM certificate.
+     */
+    userPool.addDomain('UpstreamDomain', {
+      cognitoDomain: { domainPrefix: 'makerbay-auth' },
+    })
+    const upstreamClient = userPool.addClient('BetterAuthUpstream', {
+      generateSecret: false,
+      authFlows: {},
+      oAuth: {
+        flows: { authorizationCodeGrant: true },
+        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
+        callbackUrls: [`https://api.${DOMAIN}/auth/callback/cognito`],
+        logoutUrls: [`https://app.${DOMAIN}/`],
+      },
+      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
+      preventUserExistenceErrors: true,
+    })
+
     // ── Functions ────────────────────────────────────────────────────────
     const fn = (
       name: string,
@@ -682,6 +761,20 @@ export class MakerbayStack extends cdk.Stack {
         environment: env,
       }))
 
+    /**
+     * Everything a function needs to send mail, whichever provider is live
+     * (issue 156): the SES grant, the provider switch, and read access to the
+     * Resend credentials. One helper so the set of senders is visible in one
+     * grep, and so a function that can send with one provider can send with
+     * the other - a cutover must never turn into a permissions hunt.
+     */
+    const grantMailSending = (f: lambda.Function) => {
+      f.addToRolePolicy(sesSendPolicy)
+      f.addEnvironment('EMAIL_PROVIDER', EMAIL_PROVIDER)
+      f.addEnvironment('RESEND_SECRET_ARN', resendSecret.secretArn)
+      resendSecret.grantRead(f)
+    }
+
     const tableEnv = {
       TABLE_TENANTS: tenants.tableName,
       TABLE_SLUGALIASES: slugAliases.tableName,
@@ -695,10 +788,21 @@ export class MakerbayStack extends cdk.Stack {
       EVENT_BUS: bus.eventBusName,
     }
 
+    /**
+     * The second issuer (issue 157). Set unconditionally: verification of a
+     * Better Auth token is always on, so the dark path is testable, and a
+     * token from an issuer nobody minted is just a token that fails.
+     */
+    const platformIssuerEnv = {
+      AUTH_ISSUER: `https://api.${DOMAIN}`,
+      AUTH_JWKS_URL: `https://api.${DOMAIN}/auth/jwks`,
+      AUTH_AUDIENCE: `https://api.${DOMAIN}`,
+    }
     const authorizerFn = fn('AuthorizerFn', 'packages/core-api/src/authorizer.ts', {
       ...tableEnv,
       USER_POOL_ID: userPool.userPoolId,
       USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+      ...platformIssuerEnv,
     })
     // Cognito's `userVerification` above covers sign-up and nothing else.
     // Password reset, resend and the MFA code all ignore it, so the email
@@ -716,7 +820,7 @@ export class MakerbayStack extends cdk.Stack {
       EMAIL_FROM: `hello@${DOMAIN}`,
       EMAIL_CONFIG_SET: emailConfigSet.configurationSetName,
     })
-    coreFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(coreFn)
     tickets.grantReadWriteData(coreFn)
     const contactsFn = fn('ContactsApiFn', 'modules/contacts/api/src/handler.ts', {
       ...tableEnv,
@@ -1064,6 +1168,7 @@ export class MakerbayStack extends cdk.Stack {
         CHAT_MODEL_ID,
         USER_POOL_ID: userPool.userPoolId,
         USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+        ...platformIssuerEnv,
       },
       { timeoutSeconds: 120, memorySize: 512 },
     )
@@ -1125,7 +1230,7 @@ export class MakerbayStack extends cdk.Stack {
     mailLog.grantReadWriteData(adminApiFn)
     // Staff can send a test email so SES setup is verifiable rather than
     // merely declared. The first real sender will be the Requests module.
-    adminApiFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(adminApiFn)
     // Password resets send Cognito's own code to the user's mailbox; staff
     // never see or choose a password.
     adminApiFn.addToRolePolicy(
@@ -1286,7 +1391,7 @@ export class MakerbayStack extends cdk.Stack {
     // deliverability (issue 134).
     tenants.grantReadWriteData(mailEventsFn)
     mailEventsFn.addEnvironment('TABLE_TENANTS', tenants.tableName)
-    mailEventsFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(mailEventsFn)
     new events.Rule(this, 'MailEventsRule', {
       // Default bus, because that is the only one SES will publish to. The
       // source filter is what keeps this rule from seeing every other AWS
@@ -1357,11 +1462,11 @@ export class MakerbayStack extends cdk.Stack {
         t.grantReadWriteData(f)
       }
       bus.grantPutEventsTo(f)
-      f.addToRolePolicy(sesSendPolicy)
+      grantMailSending(f)
     }
     for (const t of [requests, requestsConfig]) t.grantReadWriteData(requestsFn)
     for (const t of [requests, requestsConfig, tenants, users, entitlements, grants]) t.grantReadData(requestsDigestFn)
-    requestsDigestFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(requestsDigestFn)
     for (const t of [bookingServices, bookings, bookingConfig, configVersions]) t.grantReadWriteData(bookingFn)
     for (const t of [priceItems, quotes, quotesConfig, invoices]) t.grantReadWriteData(quotesFn)
     // The business photo doubles as the document logo (issue 61b).
@@ -1373,12 +1478,12 @@ export class MakerbayStack extends cdk.Stack {
     for (const t of [tenants, users, apiKeys, entitlements, grants]) t.grantReadData(reviewsFn)
     visibilityConfig.grantReadData(reviewsFn)
     bus.grantPutEventsTo(reviewsFn)
-    reviewsFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(reviewsFn)
 
     // The reminder Lambda reads the diary and emails the customer.
     for (const t of [bookings, bookingConfig, tenants, users]) t.grantReadData(reminderFn)
     bus.grantPutEventsTo(reminderFn)
-    reminderFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(reminderFn)
     // Booking creates and deletes its own one-off reminder schedules. The
     // name prefix bounds it: this function manages rem-* and nothing else.
     bookingFn.addEnvironment('REMINDER_FN_ARN', reminderFn.functionArn)
@@ -1450,7 +1555,7 @@ export class MakerbayStack extends cdk.Stack {
     contactEvents.grantReadWriteData(visibilityFn)
     contacts.grantReadWriteData(visibilityFn)
     bus.grantPutEventsTo(visibilityFn)
-    visibilityFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(visibilityFn)
     // Booking marks jobs done and closes rescued requests, so it needs both.
     visibilityConfig.grantReadData(bookingFn)
     requests.grantReadWriteData(bookingFn)
@@ -1463,7 +1568,7 @@ export class MakerbayStack extends cdk.Stack {
       t.grantReadWriteData(rescueProcessorFn)
     }
     bus.grantPutEventsTo(rescueProcessorFn)
-    rescueProcessorFn.addToRolePolicy(sesSendPolicy)
+    grantMailSending(rescueProcessorFn)
     // Read-only views: presence renders what other modules own, never writes it.
     for (const t of [bookingServices, bookingConfig, assistantConfig, reviews, visibilityConfig, quotesConfig, tenants, users, entitlements, grants, slugAliases]) {
       t.grantReadData(presenceFn)
@@ -1598,6 +1703,9 @@ export class MakerbayStack extends cdk.Stack {
         allowOrigins: ['*'],
         allowMethods: [apigwv2.CorsHttpMethod.ANY],
         allowHeaders: ['authorization', 'content-type'],
+        // Better Auth returns the session token and the JWT as headers on
+        // sign-in; without this the browser hides them from the SPA.
+        exposeHeaders: ['set-auth-token', 'set-auth-jwt'],
       },
     })
     // Invisible abuse damping at zero cost (issue 47): stage-level throttling
@@ -1619,6 +1727,28 @@ export class MakerbayStack extends cdk.Stack {
     })
     abuseAlerts.addSubscription(new snsSubscriptions.EmailSubscription('aatrala@gmail.com'))
     const alarmEmail = new cloudwatchActions.SnsAction(abuseAlerts)
+
+    // Customer sign-in on Better Auth (issue 157). Deployed dark: the
+    // routes and the JWKS exist whatever AUTH_PROVIDER says. Sits here,
+    // after the alerts topic, because a sign-in code that fails to send
+    // must page rather than log - Better Auth swallows the send error.
+    const authStack = new AuthStack(this, 'Auth', {
+      repoRoot,
+      httpApi,
+      domain: DOMAIN,
+      secretsKey,
+      userPool,
+      upstreamClient,
+      upstreams: ['cognito'],
+      alerts: abuseAlerts,
+      mail: {
+        provider: EMAIL_PROVIDER,
+        from: `hello@${DOMAIN}`,
+        configSetName: emailConfigSet.configurationSetName,
+        resendSecret,
+        sesSendPolicy,
+      },
+    })
 
     const bedrockSpike = new cloudwatch.Alarm(this, 'BedrockInvocationSpike', {
       alarmName: 'makerbay-abuse-bedrock-invocations',
@@ -1908,6 +2038,16 @@ export class MakerbayStack extends cdk.Stack {
       path: '/v1/billing/webhook',
       methods: [apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration('BillingWebhookIntegration', billingWebhookFn),
+    })
+
+    // Resend posts delivery, bounce and complaint events here (issue 156).
+    // No authorizer: the Svix signature over the raw body is the
+    // authentication, checked before anything is parsed. Same function as
+    // the SES EventBridge rule, so both providers' events take one path.
+    httpApi.addRoutes({
+      path: '/v1/mail/webhook',
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('MailWebhookIntegration', mailEventsFn),
     })
 
     httpApi.addRoutes({
@@ -2518,9 +2658,15 @@ function handler(event) {
     new cdk.CfnOutput(this, 'ApiCustomUrl', { value: `https://api.${DOMAIN}` })
     new cdk.CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId })
     new cdk.CfnOutput(this, 'UserPoolClientId', { value: userPoolClient.userPoolClientId })
+    new cdk.CfnOutput(this, 'AuthProvider', { value: AUTH_PROVIDER })
+    new cdk.CfnOutput(this, 'AuthUrl', { value: `https://api.${DOMAIN}/auth` })
+    new cdk.CfnOutput(this, 'AuthUpstreamClientId', { value: upstreamClient.userPoolClientId })
+    new cdk.CfnOutput(this, 'AuthTable', { value: authStack.table.tableName })
     new cdk.CfnOutput(this, 'KnowledgeBaseId', { value: kb.attrKnowledgeBaseId })
     new cdk.CfnOutput(this, 'StripeSecretArn', { value: stripeSecret.secretArn })
     new cdk.CfnOutput(this, 'WebhookUrl', { value: `https://api.${DOMAIN}/v1/billing/webhook` })
+    new cdk.CfnOutput(this, 'MailWebhookUrl', { value: `https://api.${DOMAIN}/v1/mail/webhook` })
+    new cdk.CfnOutput(this, 'MailProvider', { value: EMAIL_PROVIDER })
     new cdk.CfnOutput(this, 'DataSourceId', { value: dataSource.attrDataSourceId })
 
     /*
@@ -2553,6 +2699,12 @@ function handler(event) {
       const keep = new Map<string, { functionName: string; api: apigwv2.HttpApi; fnId: string }>()
       for (const c of this.node.findAll()) {
         if (!(c instanceof lambda.CfnPermission) || c.principal !== 'apigateway.amazonaws.com') continue
+        // Only this stack's own permissions. A nested stack that mounts
+        // routes on the API (Auth, issue 157) keeps its per-route permissions
+        // inside itself: lifting them up here made the parent depend on the
+        // nested function while the nested stack depends on the parent's
+        // API - a circular dependency CloudFormation refuses.
+        if (cdk.Stack.of(c) !== this) continue
         const resolvedFn = this.resolve(c.functionName)
         const apiRef = refIn(this.resolve(c.sourceArn)) ?? ''
         const api = apiByRef.get(apiRef)

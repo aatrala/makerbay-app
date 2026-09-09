@@ -232,7 +232,7 @@ founding-member pricing approved; hero must not look cheap (design
 consult before build). Deferred by founder: Google sign-in, Google
 Calendar two-way sync, QuickBooks/Xero, WhatsApp.
 
-### 76 — SES production access ⛔ founder appeal needed (case 178755823800807)
+### 76 — SES production access ⏳ appeal submitted 2026-09-04 as a reply on case 178755823800807, awaiting AWS
 Submitting hit a wall worth knowing about: a PREVIOUS request (contact
 aatral@makerbay.xyz) was already DENIED, and after a denial the API
 refuses re-submission. **Do:** AWS Console → Support → Your support cases → case
@@ -2631,7 +2631,7 @@ refuses suspended tenants and would lock the owner out of the explanation.
 Checked against the live account before deploying: of six workspaces three
 land on tier 0 and all three are test accounts.
 
-### 76 — SES appeal ✅ rewritten, NOT submitted
+### 76 — SES appeal ⛔ denied again 2026-09-08 (template reply); no longer the critical path, see 156 and planning/ses-appeal-round-3.md
 The do-not-send warning is gone. The appeal now owns the correction rather
 than hiding it: it says plainly that the earlier draft's "no mechanism for
 uploading a list or sending in bulk" was not accurate, explains why CSV import
@@ -2873,7 +2873,7 @@ below exist to close that gap, in this order.
 ### 150 — Founder gate-clearing week ⛔ founder, bundles existing items
 Four errands, none of them code, that together unblock the whole loop:
 
-1. Submit the SES production-access appeal (issue 76 - the appeal text is
+1. ✅ 2026-09-04 Submitted the SES production-access appeal (issue 76 - the appeal text is
    rewritten and ready in planning/ses-appeal.md, it has only to be sent).
 2. Create one live Stripe subscription end to end with a real card, then
    refund it (issue 123 - webhook and handler are proven in test mode only).
@@ -2982,3 +2982,94 @@ metering and insights endpoints already record what the measurement reads.
 **Manual test:** the trigger and metric are written here and in
 docs/vision.md §4, replacing "worth revisiting once there are paying
 customers" with the number that causes the revisit.
+
+### 156 — Resend as the active mail provider ⏳ code shipped 2026-09-08, cutover waits on the founder's API key
+AWS declined the SES appeal (issue 76) a second time on 2026-09-08 with a
+template reply naming nothing from the appeal. That reads as an
+account-age signal, not a content one, so SES stops being the critical
+path: the Resend cutover decided in docs/spec-email.md §3 is built.
+
+**What shipped.** `packages/core/src/mail/` is the provider layer under
+`sendEmail`: `ses.ts` (the old SendEmailCommand, moved), `resend.ts`
+(plain fetch, idempotency key on the one retry, quota and rate-limit
+errors mapped to words the dashboard already explains), `svix.ts` (the
+webhook signature, hand-rolled and tested), and `deliver()` choosing on
+`EMAIL_PROVIDER`. Everything above that line - suppression check, caps,
+escaping, unsubscribe headers, tags - is untouched, so it holds for both.
+`mail-events.ts` grew a second door: `/v1/mail/webhook` verifies the Svix
+signature over the raw body and translates Resend's events into the SES
+shape the consumer already handles, so the suppression rule and the
+complaint brake exist once. `senders.test.ts` now also forbids
+`api.resend.com` outside the adapter. Admin test-send and suppression
+tools are provider-aware. New nested stack `EmailProvider` (8 resources,
+parent at 417) holds the six Route 53 records and the `makerbay/resend`
+secret. Both domains are added to the Resend account (region us-east-1,
+TLS enforced, tracking off, Return-Path `rs.`). 452 tests green,
+typecheck clean.
+
+**Deliberately NOT a failover.** Two live providers means two suppression
+lists that never reconcile, and a retry after one accepted the message
+sends the customer two invoices. One active, chosen in the stack.
+
+**Founder, in order (about ten minutes):**
+1. Resend dashboard → API Keys → create one named `makerbay-prod`, sending
+   access, no domain restriction.
+2. Resend dashboard → Webhooks → add `https://api.makerbay.app/v1/mail/webhook`
+   with events email.sent, email.delivered, email.delivery_delayed,
+   email.bounced, email.complained, email.failed, email.suppressed. Copy the
+   signing secret (`whsec_...`).
+3. Put both in the secret WITHOUT pasting them into a chat or a shell
+   history: write `{"apiKey":"re_...","webhookSecret":"whsec_..."}` to a
+   temporary file, then
+   `aws secretsmanager put-secret-value --profile makerbay --region us-east-1 --secret-id makerbay/resend --secret-string file://resend.json`
+   and delete the file.
+4. Say so. The second deploy flips `EMAIL_PROVIDER` to `resend`, and
+   `node scripts/verify-mail-events.mjs --provider resend` proves bounce,
+   complaint and delivery end to end through the webhook.
+
+**Manual test:** staff console → Email → Send a test; the notice names the
+provider. Then a booking on the demo tenant to `delivered@resend.dev`
+shows "delivered" in MailLog within a minute.
+
+**Left alone on purpose:** Cognito's sign-up and reset codes still go
+through Cognito's own sender (50/day, unbranded). That is issue 110's
+`CustomEmailSender` question, now reframed by the Clerk evaluation.
+
+### 157 — Customer sign-in on Better Auth ⏳ phases 0-1 shipped dark 2026-09-09; flip awaits founder
+Spec: docs/spec-auth.md. Decision after evaluating every hosted and
+self-hosted alternative (WorkOS, Clerk, Kinde, Stytch, Auth0, Descope,
+Hexclave, Ory, Zitadel, Logto, SuperTokens, Hanko, FusionAuth, Firebase,
+Supabase, Keycloak, Authentik, Better Auth): Better Auth is the only option
+that keeps auth inside the stack with no server, no Postgres and no vendor
+in the request path. It is the identity provider, not an adapter over
+others; the swappable seam is its upstream provider list, where Cognito is
+wired today so existing passwords keep working, and WorkOS or any OIDC IdP
+is a config addition.
+
+**Shipped.** `packages/auth`: a DynamoDB adapter built on Better Auth's
+`createAdapterFactory` (single table `makerbay-auth`, three GSIs, TTL,
+planner in `where.ts`, uniqueness marker for emails), passing the official
+conformance suites; the auth Lambda with email-code sign-in through the
+Resend pipeline and our own template, bearer sessions, a JWT plugin with
+JWKS, the Cognito upstream over PKCE (no client secret), and the
+`/auth-bridge` cookie-to-bearer handoff. Nested `AuthStack` (14 resources;
+parent at 421). The authorizer and the streaming chat verifier accept both
+issuers. `scripts/migrate-cognito-users.mjs` wrote the six existing users
+with their Cognito sub as the Better Auth id. Dashboard: `authProvider()`
+switch, `getAccessToken()` as the one bearer source, a code login page
+with a "sign in with your MakerBay password" link. 489 tests green.
+
+**Two deploy lessons** (both in code comments): the parent's permission
+sweep must skip nested stacks, and a nested function must NOT use
+`secret.grantRead` on a parent-key secret - both create parent/nested
+cycles.
+
+**Manual test (dark):** app.makerbay.app/?auth=better-auth → "Email me a
+code" → with SES active only a verified address receives it; with Resend
+any address does. Then the code → dashboard. "Sign in with it" → Cognito
+hosted page → back to the dashboard signed in as the same user.
+
+**Founder, before 1b:** confirm the defaults in docs/spec-auth.md, put the
+Resend key in (issue 156) so any address can receive a code, sign in once
+each way on the dark path. Then the flip is `AUTH_PROVIDER` in the stack,
+`DEFAULT_AUTH_PROVIDER` in web-kit, deploy, publish the dashboard.
