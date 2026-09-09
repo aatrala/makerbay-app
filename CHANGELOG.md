@@ -40,6 +40,16 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   password can still use it: the sign-in page offers "sign in with it" and
   takes you to the familiar password screen and back. Sessions last seven
   days.
+- Security `platform` **Your sign-in now lives in a cookie your browser
+  keeps to itself.** Sign-in moved onto the dashboard's own address, so the
+  session is held in an HttpOnly cookie that no script on the page can read,
+  and the short-lived token the API checks is kept in memory only. Nothing
+  changes in how you sign in; a script that found its way onto the page
+  would simply have nothing to steal.
+- Changed `platform` The hourly check that sign-in codes can be delivered
+  now watches the delivery receipt come back through our own mail log,
+  rather than asking the provider's log, so it needs no extra access to
+  prove the pipeline works.
 
 ## 2.28.0 - 2026-08-29
 

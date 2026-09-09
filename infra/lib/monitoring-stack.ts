@@ -35,9 +35,12 @@ export interface MonitoringStackProps extends cdk.NestedStackProps {
   /** Where the code sign-in lives, e.g. https://api.makerbay.app (issue 158). */
   authBaseUrl: string
   spaUrl: string
-  /** The canary reads Resend's log to confirm delivery, so it needs the same key. */
+  /** The canary sends a probe through the platform's own mail pipeline. */
   resendSecretArn: string
   secretsKeyArn: string
+  mail: { provider: string; from: string; configSetName: string; sesSendPolicy: iam.PolicyStatement }
+  /** Where the webhook writes delivery outcomes; the canary polls it. */
+  mailLogTableName: string
   /** Where an alarm goes. The same topic the abuse alarms already use. */
   alerts: sns.ITopic
 }
@@ -62,15 +65,30 @@ export class MonitoringStack extends cdk.NestedStack {
       runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
       memorySize: 256,
-      // A minute of polling Resend's log, plus the request itself (issue 158).
+      // A minute of polling the mail log for the probe's delivery event, plus the request itself (issue 158).
       timeout: cdk.Duration.seconds(90),
       depsLockFilePath: path.join(props.repoRoot, 'package-lock.json'),
       environment: {
         AUTH_BASE_URL: props.authBaseUrl,
         AUTH_SPA_URL: props.spaUrl,
         RESEND_SECRET_ARN: props.resendSecretArn,
+        EMAIL_PROVIDER: props.mail.provider,
+        EMAIL_FROM: props.mail.from,
+        EMAIL_CONFIG_SET: props.mail.configSetName,
+        TABLE_MAILLOG: props.mailLogTableName,
       },
     })
+    canary.addToRolePolicy(props.mail.sesSendPolicy)
+    // The mail log by name, not by reference, for the same cycle reason as
+    // the secret below: a nested role policy must not point at a parent
+    // output while the parent points back at this stack.
+    canary.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query', 'dynamodb:GetItem'],
+      resources: [
+        `arn:${this.partition}:dynamodb:${this.region}:${this.account}:table/${props.mailLogTableName}`,
+        `arn:${this.partition}:dynamodb:${this.region}:${this.account}:table/${props.mailLogTableName}/index/*`,
+      ],
+    }))
     /*
      * Identity-policy grants only (issue 158). `secret.grantRead` would also
      * write this role into the parent's KMS key policy, and a parent key that

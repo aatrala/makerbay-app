@@ -1,29 +1,30 @@
-import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager'
+import { mailForRef, sendEmail } from '@makerbay/core'
 
 /**
- * Asks for a sign-in code, every hour, so a human does not have to
- * (issue 145, rewritten for issue 158).
+ * Asks the front door for a sign-in code, every hour, so a human does not
+ * have to (issue 145, rewritten for issue 158).
  *
  * Between 27 and 29 August nobody could create a MakerBay account, and it
  * was found by a code review three days later because no alarm watched the
  * front door. The front door is now Better Auth's code sign-in through
- * Resend, so that is what this exercises: request a code for one of
- * Resend's delivery test addresses, then confirm through Resend's own log
- * that a message to that address was created after the request and was
- * delivered.
+ * Resend. Two things have to be true for it to work, and this checks both:
  *
- * **Why not assert on the API's answer.** Better Auth answers `success`
- * to a code request even when the email failed to send - it swallows the
- * send error in its background-task wrapper. A canary that trusted that
- * answer would be green during exactly the outage it exists to catch. The
- * delivery record is the only honest signal.
+ * 1. **The auth endpoint accepts a code request.** A real POST to the live
+ *    endpoint, as a customer's browser would make it.
+ * 2. **Mail actually leaves and arrives.** Better Auth answers `success`
+ *    even when the email failed to send (it swallows the error), so the
+ *    answer to step 1 proves nothing about delivery. The canary therefore
+ *    sends its own probe through the same `sendEmail` the code goes
+ *    through, to one of Resend's delivery test addresses, tagged so the
+ *    provider's delivery event comes back through our webhook into the
+ *    mail log - and waits for that row to read `delivered`. Same provider,
+ *    same key, same pipeline, observed end to end.
  *
- * **Why hourly.** Each run is one Resend message. Twenty-four a day is
- * noise on a paid tier and a quarter of the free tier's daily cap; four a
- * day, the old cadence, would leave an outage unnoticed for six hours.
+ * Reading Resend's own log was the first design; it needs a full-access
+ * key, and the key in the secret is sending-only on purpose.
  */
 const NAMESPACE = 'MakerBay/Canary'
-const sm = new SecretsManagerClient({})
+const TENANT = 'CANARY'
 
 function publish(ok: boolean, detail: string): void {
   console.log(JSON.stringify({
@@ -37,28 +38,20 @@ function publish(ok: boolean, detail: string): void {
   }))
 }
 
-async function resendKey(): Promise<string> {
-  const r = await sm.send(new GetSecretValueCommand({ SecretId: process.env.RESEND_SECRET_ARN! }))
-  const parsed = JSON.parse(r.SecretString ?? '{}') as Record<string, string>
-  const key = parsed.apiKey ?? parsed.api_key ?? ''
-  if (!key.startsWith('re_')) throw new Error('resend key unusable')
-  return key
-}
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export const handler = async (): Promise<void> => {
   const base = process.env.AUTH_BASE_URL
-  if (!base || !process.env.RESEND_SECRET_ARN) {
-    publish(false, 'canary is misconfigured: no auth base URL or resend secret')
+  if (!base) {
+    publish(false, 'canary is misconfigured: no auth base URL')
     return
   }
+  const stamp = Date.now()
   // Unique per run, and a Resend test address: delivered on their side,
-  // never handed to a real mailbox, and plus-addressed so each run can be
-  // told apart in the log.
-  const email = `delivered+canary-${Date.now()}@resend.dev`
-  const startedAt = Date.now()
+  // never handed to a real mailbox.
+  const email = `delivered+canary-${stamp}@resend.dev`
 
+  // 1. The front door.
   try {
     const r = await fetch(`${base}/auth/email-otp/send-verification-otp`, {
       method: 'POST',
@@ -75,39 +68,32 @@ export const handler = async (): Promise<void> => {
     return
   }
 
-  // Delivery to resend.dev takes seconds; give it a minute, checking as it goes.
-  let key: string
-  try {
-    key = await resendKey()
-  } catch (err) {
-    publish(false, `cannot read the resend key: ${String((err as Error)?.message ?? err)}`)
+  // 2. The pipeline, observed through our own webhook.
+  const refId = `probe-${stamp}`
+  const sent = await sendEmail({
+    to: email,
+    audience: 'staff',
+    subject: 'MakerBay canary: the mail pipeline works',
+    text: 'Automated check that sign-in codes can leave the building. No action needed.',
+    ref: { tenantId: TENANT, moduleId: 'platform', refType: 'auth', refId },
+  })
+  if (!sent.sent) {
+    publish(false, `probe email not accepted by the provider: ${sent.error ?? 'unknown'}`)
     return
   }
   for (let attempt = 0; attempt < 6; attempt++) {
     await sleep(10_000)
-    try {
-      const res = await fetch('https://api.resend.com/emails?limit=20', {
-        headers: { authorization: `Bearer ${key}` },
-        signal: AbortSignal.timeout(10_000),
-      })
-      const json = (await res.json()) as { data?: Array<{ to?: string[]; created_at?: string; last_event?: string }> }
-      // The address is unique to this run, so any message to it is ours; no
-      // time comparison, because Resend's `created_at` ("2026-09-09
-      // 14:10:52.520000+00") is not something Date.parse understands.
-      const mine = (json.data ?? []).find((e) => (e.to ?? []).includes(email))
-      if (mine) {
-        if (mine.last_event === 'delivered' || mine.last_event === 'opened') {
-          publish(true, `code requested and delivered (${Date.now() - startedAt} ms)`)
-          return
-        }
-        if (mine.last_event === 'bounced' || mine.last_event === 'failed' || mine.last_event === 'complained') {
-          publish(false, `code email ended as ${mine.last_event}`)
-          return
-        }
-      }
-    } catch (err) {
-      console.warn('resend log check failed', { attempt, err: String(err) })
+    const rows = await mailForRef(TENANT, 'auth', refId)
+    const states = rows.map((r) => r.state)
+    if (states.includes('delivered')) {
+      publish(true, `code request accepted and a probe email was delivered (${Date.now() - stamp} ms)`)
+      return
+    }
+    const bad = states.find((s) => s === 'bounced' || s === 'complained' || s === 'rejected')
+    if (bad) {
+      publish(false, `probe email ended as ${bad}`)
+      return
     }
   }
-  publish(false, 'code requested but no delivered message appeared in the Resend log within a minute')
+  publish(false, 'code request accepted but no delivery event reached the mail log within a minute')
 }

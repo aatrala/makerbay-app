@@ -39,7 +39,13 @@ async function build() {
     basePath: '/auth',
     secret,
     database: dynamoAdapter({ client, tableName: required('TABLE_AUTH') }),
-    trustedOrigins: [spa, ...(process.env.AUTH_EXTRA_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean)],
+    // The dashboard origin (also the base URL), plus the API host for the
+    // canary and other server-side callers that reach the endpoints directly.
+    trustedOrigins: [
+      spa,
+      ...(process.env.AUTH_ISSUER ? [process.env.AUTH_ISSUER] : []),
+      ...(process.env.AUTH_EXTRA_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    ],
     emailAndPassword: { enabled: false },
     session: {
       expiresIn: 7 * SECONDS.day,
@@ -73,8 +79,12 @@ async function build() {
       bearer(),
       jwt({
         jwt: {
-          issuer: baseURL,
-          audience: baseURL,
+          // An opaque identifier the authorizer compares against - NOT the
+          // base URL, which moved to the dashboard origin in issue 158 part
+          // B. Tying the two together would reject every token in flight
+          // whenever the public URL changes.
+          issuer: process.env.AUTH_ISSUER ?? baseURL,
+          audience: process.env.AUTH_ISSUER ?? baseURL,
           expirationTime: '15m',
           // The default embeds the whole user row. The authorizer needs the
           // subject and the email, nothing else.

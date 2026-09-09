@@ -3090,7 +3090,7 @@ to a code request even when the send fails (it swallows the error).
 in once each way on the dark path (the password leg needs your Cognito
 password, which nothing here can exercise).
 
-### 158 — People in a workspace, and passkeys ⏳ Part A live 2026-09-09; Part B next
+### 158 — People in a workspace, and passkeys ⏳ Part A and B0 live 2026-09-09; B1 passkeys next
 Spec: docs/spec-auth-phase2.md, v2 after a product review and a security
 review of v1 both rejected mirroring Better Auth's organization plugin
 into the Users table. Membership stays in core: a Users row (now with
@@ -3107,16 +3107,26 @@ Join prompt before Onboarding, Account page with Leave, close-workspace
 card, role-aware account menu, activity names the actor. Staff console
 shows role, notify and pending invitations. `privacy-delete.mjs` now
 clears the auth table for the tenant's people. The signup canary asks the
-live front door for a code hourly and confirms delivery in Resend's log
-(Better Auth answers success even when the send fails, so the API answer
-alone proves nothing).
+live front door for a code hourly, then sends a tagged probe through the
+same `sendEmail` pipeline and passes only when the provider's delivery
+event lands in our mail log (Better Auth answers success even when the
+send fails, so the API answer alone proves nothing; Resend's list API
+needs a full-access key, which ours deliberately is not).
 
 **Proven live:** two test addresses through the whole loop, see the spec
 status line. **Manual test:** Workspace → People → Invite; the invitee
 signs in with a code and sees "Join …?" first.
 
-**Part B (next):** `/auth/*` on the dashboard's origin via CloudFront,
-explicit JWT issuer, cookie sessions, retire the bridge; then passkeys
-("Sign in with your fingerprint next time"), fingerprint required.
+**Part B0 (live 2026-09-09):** `/auth/*` is proxied on the dashboard's
+origin by CloudFront (caching disabled, all methods), SPA routing moved
+from error rewrites to a CloudFront Function so a CSRF 403 stays a 403,
+Better Auth's baseURL is app.makerbay.app with the JWT issuer pinned to
+api.makerbay.app, sessions live in an HttpOnly first-party cookie with
+the access JWT in memory only, and the bridge route is gone. The `api.`
+Cognito callback stays until the founder re-tests password sign-in on
+the new path, then it is removed so there is one.
+
+**Part B1 (next):** passkeys ("Sign in with your fingerprint next time"),
+fingerprint required, rpID makerbay.app, Account page list.
  Then the flip is `AUTH_PROVIDER` in the stack,
 `DEFAULT_AUTH_PROVIDER` in web-kit, deploy, publish the dashboard.

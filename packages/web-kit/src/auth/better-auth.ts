@@ -1,24 +1,33 @@
 /**
- * The Better Auth client (issue 157), over plain fetch.
+ * The Better Auth client (issue 157, reshaped in issue 158 part B), over
+ * plain fetch. The endpoints are a handful of JSON calls; the SPA has no
+ * reason to bundle an auth SDK to make them.
  *
- * Same choice the Cognito client made: the endpoints are a handful of JSON
- * calls, and the SPA has no reason to bundle an auth SDK to make them. Two
- * tokens live here:
+ * Two modes, decided once from where the page is running:
  *
- * - the SESSION token, sent as a bearer to /auth/* so the API can find the
- *   session (the `bearer` plugin), seven days, refreshed by the server;
- * - the ACCESS token, a 15-minute JWT minted from the session and sent to
- *   everything else, where the Lambda authorizer verifies it against
- *   /auth/jwks. It is re-minted a minute before it expires, or on a 401.
+ * - **First-party** (the real dashboard at app.makerbay.app): `/auth/*` is
+ *   proxied to the API on the dashboard's own origin, so the SESSION lives
+ *   in an HttpOnly cookie the browser sends by itself. Nothing a script
+ *   can read holds the session. A small localStorage marker only remembers
+ *   that a session probably exists, so the app can decide synchronously
+ *   whether to show the sign-in page; the cookie is the truth.
+ * - **Bearer** (a local dev server, or anything not on the dashboard
+ *   origin): the API is cross-origin and its CORS allows every origin,
+ *   which rules out cookies, so the session token travels as a bearer
+ *   header from localStorage, as it did in phase 1.
  *
- * Nothing is in a cookie: app. and api. are different origins and the API's
- * CORS allows every origin, which rules credentials out.
+ * In both modes the ACCESS token - the 15-minute JWT the API authorizer
+ * verifies - is held in memory only and re-minted from the session when it
+ * is about to expire or on a 401.
  */
 import { API_BASE } from '../config'
 
-const AUTH_BASE = `${API_BASE}/auth`
+const FIRST_PARTY_HOST = 'app.makerbay.app'
+const firstParty = (): boolean => typeof window !== 'undefined' && window.location.hostname === FIRST_PARTY_HOST
+const authBase = (): string => (firstParty() ? `${window.location.origin}/auth` : `${API_BASE}/auth`)
+
+const MARKER_KEY = 'mb.signedIn'
 const SESSION_KEY = 'mb.sessionToken'
-const ACCESS_KEY = 'mb.accessToken'
 
 export class AuthError extends Error {
   constructor(public status: number, public code: string, message?: string) {
@@ -32,17 +41,27 @@ const storage = {
   del(k: string) { try { localStorage.removeItem(k) } catch { /* private mode */ } },
 }
 
-export const isSignedIn = (): boolean => Boolean(storage.get(SESSION_KEY))
+let accessJwt: string | undefined
+
+export const isSignedIn = (): boolean =>
+  firstParty() ? storage.get(MARKER_KEY) === '1' : Boolean(storage.get(SESSION_KEY))
+
+const remember = (token?: string) => {
+  if (firstParty()) storage.set(MARKER_KEY, '1')
+  else if (token) storage.set(SESSION_KEY, token)
+}
 
 export function clear(): void {
+  storage.del(MARKER_KEY)
   storage.del(SESSION_KEY)
-  storage.del(ACCESS_KEY)
+  accessJwt = undefined
 }
 
 async function call(path: string, body?: unknown, method = 'POST'): Promise<any> {
-  const session = storage.get(SESSION_KEY)
-  const r = await fetch(`${AUTH_BASE}${path}`, {
+  const session = firstParty() ? null : storage.get(SESSION_KEY)
+  const r = await fetch(`${authBase()}${path}`, {
     method,
+    credentials: firstParty() ? 'include' : 'omit',
     headers: {
       ...(session ? { authorization: `Bearer ${session}` } : {}),
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
@@ -54,9 +73,9 @@ async function call(path: string, body?: unknown, method = 'POST'): Promise<any>
     const code = typeof data.code === 'string' ? data.code : `http_${r.status}`
     throw new AuthError(r.status, code, typeof data.message === 'string' ? data.message : undefined)
   }
-  // The bearer plugin also returns the session token as a header on sign-in.
+  // In bearer mode the plugin also returns the session token as a header.
   const issued = r.headers.get('set-auth-token')
-  if (issued) storage.set(SESSION_KEY, issued)
+  if (issued && !firstParty()) storage.set(SESSION_KEY, issued)
   return data
 }
 
@@ -65,42 +84,49 @@ export async function sendCode(email: string): Promise<void> {
   await call('/email-otp/send-verification-otp', { email: email.trim().toLowerCase(), type: 'sign-in' })
 }
 
-/** Step two. Stores the session and mints the first access token. */
+/** Step two. Remembers the session and mints the first access token. */
 export async function signInWithCode(email: string, otp: string): Promise<void> {
   const data = await call('/sign-in/email-otp', { email: email.trim().toLowerCase(), otp: otp.trim() })
-  if (typeof data.token === 'string') storage.set(SESSION_KEY, data.token)
-  if (!storage.get(SESSION_KEY)) throw new AuthError(500, 'no_session', 'Signed in, but no session was returned.')
+  remember(typeof data.token === 'string' ? data.token : undefined)
+  if (!isSignedIn()) throw new AuthError(500, 'no_session', 'Signed in, but no session was returned.')
   await mintAccessToken()
 }
 
 /**
- * Step one of the upstream sign-in. The server answers with the provider's
- * page to go to; on the way back the bridge hands the SPA a one-time token
- * in the URL fragment, which `finishExternalSignIn` consumes.
+ * The upstream sign-in ("sign in with your MakerBay password"). The server
+ * answers with the provider's page to go to; the provider sends the
+ * browser back to the auth callback, which sets the session cookie on this
+ * origin and redirects to the dashboard root. `finishExternalSignIn` then
+ * notices the session on the next load.
  */
 export async function startUpstreamSignIn(provider = 'cognito'): Promise<void> {
+  if (!firstParty()) throw new AuthError(400, 'first_party_only', 'Password sign-in works on app.makerbay.app.')
   const data = await call('/sign-in/social', {
     provider,
-    callbackURL: `${API_BASE}/auth-bridge`,
-    errorCallbackURL: `${window.location.origin}/#auth_error=upstream`,
+    callbackURL: `${window.location.origin}/`,
+    errorCallbackURL: `${window.location.origin}/?auth_error=upstream`,
   })
   if (typeof data.url !== 'string') throw new AuthError(500, 'no_redirect', 'The sign-in provider gave no address to go to.')
   window.location.href = data.url
 }
 
-/** True when a one-time token was found in the URL and exchanged for a session. */
+/**
+ * On load: if this browser is not marked as signed in but holds a session
+ * cookie (the way back from an upstream sign-in, or a cleared marker), pick
+ * the session up. One small same-origin request; nothing for a browser
+ * that has never signed in beyond a fast null.
+ */
 export async function finishExternalSignIn(): Promise<boolean> {
-  const hash = window.location.hash
-  const m = /[#&]ott=([^&]+)/.exec(hash)
-  if (!m) return false
-  // Strip it before anything can log or bookmark it.
-  history.replaceState(null, '', window.location.pathname + window.location.search)
-  const data = await call('/one-time-token/verify', { token: decodeURIComponent(m[1]) })
-  const token = data?.session?.token
-  if (typeof token !== 'string') throw new AuthError(500, 'no_session', 'The sign-in could not be completed.')
-  storage.set(SESSION_KEY, token)
-  await mintAccessToken()
-  return true
+  if (!firstParty() || isSignedIn()) return false
+  try {
+    const session = await call('/get-session', undefined, 'GET')
+    if (!session || !session.user) return false
+    remember()
+    await mintAccessToken()
+    return true
+  } catch {
+    return false
+  }
 }
 
 function expiryOf(jwt: string): number {
@@ -115,15 +141,14 @@ function expiryOf(jwt: string): number {
 export async function mintAccessToken(): Promise<string> {
   const data = await call('/token', undefined, 'GET')
   if (typeof data.token !== 'string') throw new AuthError(401, 'unauthorized')
-  storage.set(ACCESS_KEY, data.token)
+  accessJwt = data.token
   return data.token
 }
 
-/** The bearer for API calls: the cached JWT while it has a minute left, else a fresh one. */
+/** The bearer for API calls: the in-memory JWT while it has a minute left, else a fresh one. */
 export async function accessToken(force = false): Promise<string> {
   if (!isSignedIn()) return ''
-  const cached = storage.get(ACCESS_KEY)
-  if (!force && cached && expiryOf(cached) > Date.now() + 60_000) return cached
+  if (!force && accessJwt && expiryOf(accessJwt) > Date.now() + 60_000) return accessJwt
   try {
     return await mintAccessToken()
   } catch (err) {

@@ -115,7 +115,15 @@ export class AuthStack extends cdk.NestedStack {
       environment: {
         TABLE_AUTH: table.tableName,
         AUTH_SECRET_ARN: secret.secretArn,
-        AUTH_BASE_URL: apiUrl,
+        /*
+         * Public URL of the auth endpoints: the dashboard's origin, where
+         * /auth/* is proxied to this API so cookies are first-party (issue
+         * 158). The token issuer is separate and deliberately stays on api.:
+         * it is an opaque identifier the authorizer compares against, and
+         * moving it with the base URL would reject every token in flight.
+         */
+        AUTH_BASE_URL: `https://app.${props.domain}`,
+        AUTH_ISSUER: apiUrl,
         AUTH_SPA_URL: `https://app.${props.domain}`,
         AUTH_UPSTREAMS: props.upstreams.join(','),
         COGNITO_ISSUER: `https://cognito-idp.${this.region}.amazonaws.com/${props.userPool.userPoolId}`,
@@ -186,10 +194,12 @@ export class AuthStack extends cdk.NestedStack {
     // Explicit methods, never ANY, so the CORS preflight is answered by the
     // API and not by the function (the parent's rule).
     const integration = new HttpLambdaIntegration('AuthIntegration', fn)
+    // /auth-bridge is gone (issue 158 part B): with cookies first-party on
+    // the dashboard origin, the redirect back from an upstream sign-in lands
+    // on the dashboard already holding a session.
     for (const [name, routePath, method] of [
       ['AuthGet', '/auth/{proxy+}', apigwv2.HttpMethod.GET],
       ['AuthPost', '/auth/{proxy+}', apigwv2.HttpMethod.POST],
-      ['AuthBridge', '/auth-bridge', apigwv2.HttpMethod.GET],
     ] as const) {
       new apigwv2.HttpRoute(this, name, {
         httpApi: props.httpApi,

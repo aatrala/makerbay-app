@@ -1,12 +1,21 @@
 # Spec: sign-in phase 2 - people in a workspace, and passkeys (issue 158)
 
-Status: **v2 APPROVED 2026-09-09 on the defaults; Part A LIVE 2026-09-09.**
+Status: **v2 APPROVED 2026-09-09 on the defaults; Part A LIVE 2026-09-09; Part B0 (auth on the dashboard's origin) LIVE 2026-09-09; B1 passkeys next.**
 Proven end to end against the deployed API with two test addresses: invite
 (email delivered, no link), seat wall on the third person, invitee sees the
 invitation at sign-in, joins as member, is refused every owner route, leaves
 and is signed out everywhere; privacy pass removed the test workspace's
-identity rows; the canary confirms code delivery through Resend hourly.
-Part B (origin move, passkeys) follows. Builds on
+identity rows; the canary asks the live front door for a code hourly and
+sends a tagged probe through the same mail pipeline, passing only when the
+provider's delivery event reaches our mail log (Resend's list API needs a
+full-access key, which the secret deliberately is not). B0 proven live:
+`/auth/*` answers on app.makerbay.app with caching disabled, the CSRF
+rejection arrives as a JSON 403 rather than a rewritten 200, a code
+sign-in through the dashboard origin sets an HttpOnly `__Secure-`
+session cookie, `/auth/token` from the cookie alone mints a JWT whose
+issuer is api.makerbay.app and the API accepts it, sign-out kills the
+cookie, and the anonymous dashboard load probes the session once and
+shows the sign-in page. B1 (passkeys) follows. Builds on
 docs/spec-auth.md (live). v1 proposed Better Auth's organization plugin
 mirrored into the Users table; a product review and a security review of
 that draft, run independently, both rejected it - the product review as

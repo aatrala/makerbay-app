@@ -19,9 +19,10 @@ const skippedInvitations = new Set<string>()
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
-  // Loading while signed in, or while returning from an upstream sign-in
-  // with a one-time token in the fragment (issue 157).
-  const [loading, setLoading] = useState(isLoggedIn() || /[#&]ott=/.test(window.location.hash))
+  // Always loading first: the session may be in a cookie this script cannot
+  // read (issue 158 part B), and `reload` asks the server once before the
+  // sign-in page is shown.
+  const [loading, setLoading] = useState(true)
   const [stripeMode, setStripeMode] = useState<'test' | 'live' | null>(null)
 
   const reload = useCallback(async () => {

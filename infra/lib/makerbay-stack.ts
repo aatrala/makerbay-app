@@ -756,7 +756,11 @@ export class MakerbayStack extends cdk.Stack {
       oAuth: {
         flows: { authorizationCodeGrant: true },
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
-        callbackUrls: [`https://api.${DOMAIN}/auth/callback/cognito`],
+        // The dashboard origin since part B of issue 158 (Better Auth builds
+        // the redirect from its baseURL, which is app.); the api. entry stays
+        // registered until the founder has signed in with a password once
+        // more on the new path, then goes.
+        callbackUrls: [`https://app.${DOMAIN}/auth/callback/cognito`, `https://api.${DOMAIN}/auth/callback/cognito`],
         logoutUrls: [`https://app.${DOMAIN}/`],
       },
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
@@ -1840,6 +1844,13 @@ export class MakerbayStack extends cdk.Stack {
       spaUrl: `https://app.${DOMAIN}`,
       resendSecretArn: resendSecret.secretArn,
       secretsKeyArn: secretsKey.keyArn,
+      mail: {
+        provider: EMAIL_PROVIDER,
+        from: `hello@${DOMAIN}`,
+        configSetName: emailConfigSet.configurationSetName,
+        sesSendPolicy,
+      },
+      mailLogTableName: 'makerbay-maillog',
       alerts: abuseAlerts,
     })
 
@@ -2135,20 +2146,58 @@ export class MakerbayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
 
+    /**
+     * SPA routing as a viewer-request function, not as error rewrites
+     * (issue 158). The distribution used to turn every 403 and 404 into
+     * `200 index.html`, which is fine for a missing app route and fatal
+     * once /auth/* is proxied through the same distribution: Better Auth's
+     * CSRF rejection and every permission error would arrive as a 200 with
+     * an HTML body, which the client reads as success. Error rewrites
+     * cannot be scoped to one behaviour; a function can, and this one only
+     * touches the S3 behaviour.
+     */
+    const spaRouting = new cloudfront.Function(this, 'AppSpaRouting', {
+      functionName: `makerbay-app-spa-routing-${this.account}`,
+      comment: 'Serves index.html for app routes, leaves files and /auth alone',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request
+  var uri = request.uri
+  if (uri.startsWith('/auth/') || uri.startsWith('/assets/')) return request
+  if (!uri.split('/').pop().includes('.')) request.uri = '/index.html'
+  return request
+}
+`),
+    })
     const distribution = new cloudfront.Distribution(this, 'WebDistribution', {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        functionAssociations: [{ function: spaRouting, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+      },
+      /**
+       * Sign-in on the dashboard's own origin (issue 158, spec-auth-phase2
+       * part B). The passkey ceremony binds to a cookie, and a cookie set by
+       * api. cannot be read by app.; proxying /auth/* here makes Better
+       * Auth's cookies first-party. Caching disabled and every viewer header
+       * forwarded except Host, the same shape the streaming endpoint has run
+       * on since it shipped. A cached /auth/get-session would hand one
+       * person's session to another; the deploy check asserts it is not.
+       */
+      additionalBehaviors: {
+        '/auth/*': {
+          origin: new origins.HttpOrigin(`api.${DOMAIN}`),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        },
       },
       defaultRootObject: 'index.html',
       domainNames: [`app.${DOMAIN}`],
       certificate,
-      // SPA routing: unknown paths fall through to index.html
-      errorResponses: [
-        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' },
-      ],
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
     })
     new route53.ARecord(this, 'AppAlias', {
