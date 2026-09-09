@@ -789,11 +789,14 @@ export class MakerbayStack extends cdk.Stack {
       ...(branding
         ? {
             settings: branding.settings,
+            // LIGHT, not DYNAMIC: the style runs in light mode and only looks
+            // for a light asset, so a DYNAMIC one left the placeholder frame
+            // on screen. The wordmark is 4:1 for the 240x60 logo slot.
             assets: [{
               category: 'FORM_LOGO',
-              colorMode: 'DYNAMIC',
-              extension: 'PNG',
-              bytes: fs.readFileSync(path.join(repoRoot, 'site/src/assets/icon-192.png')).toString('base64'),
+              colorMode: 'LIGHT',
+              extension: 'SVG',
+              bytes: fs.readFileSync(path.join(repoRoot, 'infra/branding/wordmark.svg')).toString('base64'),
             }],
           }
         : { useCognitoProvidedValues: true }),
