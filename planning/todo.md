@@ -2983,7 +2983,13 @@ metering and insights endpoints already record what the measurement reads.
 docs/vision.md §4, replacing "worth revisiting once there are paying
 customers" with the number that causes the revisit.
 
-### 156 — Resend as the active mail provider ⏳ code shipped 2026-09-08, cutover waits on the founder's API key
+### 156 — Resend as the active mail provider ✅ live 2026-09-09
+Cutover done: `EMAIL_PROVIDER = 'resend'` deployed, a sign-in code mailed
+through Resend and delivered, both webhook events accepted with 200. One
+lesson: the first API key the founder made was restricted to a single
+domain and Resend refused `hello@makerbay.app` with "not authorized to send
+emails from makerbay.app" - a key needs "All domains" because owner mail
+and customer mail leave from different ones. Original plan below.
 AWS declined the SES appeal (issue 76) a second time on 2026-09-08 with a
 template reply naming nothing from the appeal. That reads as an
 account-age signal, not a content one, so SES stops being the critical
@@ -3069,7 +3075,13 @@ code" → with SES active only a verified address receives it; with Resend
 any address does. Then the code → dashboard. "Sign in with it" → Cognito
 hosted page → back to the dashboard signed in as the same user.
 
-**Founder, before 1b:** confirm the defaults in docs/spec-auth.md, put the
-Resend key in (issue 156) so any address can receive a code, sign in once
-each way on the dark path. Then the flip is `AUTH_PROVIDER` in the stack,
+**Proven live 2026-09-09 through Resend:** code requested → mailed and
+delivered → sign-in with the code → JWT minted → `/v1/core/me` answered
+with the new user → sign-out killed the session. Also shipped: a CloudWatch
+alarm `makerbay-auth-code-not-sent`, because Better Auth answers success
+to a code request even when the send fails (it swallows the error).
+
+**Founder, before 1b:** confirm the defaults in docs/spec-auth.md and sign
+in once each way on the dark path (the password leg needs your Cognito
+password, which nothing here can exercise). Then the flip is `AUTH_PROVIDER` in the stack,
 `DEFAULT_AUTH_PROVIDER` in web-kit, deploy, publish the dashboard.

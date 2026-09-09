@@ -10,11 +10,16 @@ still signs in on Cognito until `AUTH_PROVIDER` and
 `DEFAULT_AUTH_PROVIDER` flip (phase 1b). Founder decisions listed at the
 end; defaults apply until changed.
 
-**Still to prove before the flip:** a full emailed-code sign-in on the live
-dashboard. With SES as the active mail provider that needs a verified
-address; with Resend it works for anyone, and the code can be read back
-through Resend's sent-mail log. Everything up to the code check is proven
-live (the send lands, a wrong code is refused, the JWT verifies).
+**Proven live 2026-09-09 with Resend as the mail provider:** code requested,
+mailed and delivered, sign-in with the code, JWT minted, API answered,
+sign-out revoked the session. Still for the founder: one password sign-in
+through the Cognito upstream, which needs a real password.
+
+**Known limitation:** Better Auth answers `success: true` to a code request
+even when the email fails to send (it swallows the error in its background
+task wrapper). The login page therefore cannot tell the user. The
+`makerbay-auth-code-not-sent` alarm on the auth function's logs is the
+safety net; it pages on the first failure in five minutes.
 
 ## Why
 
