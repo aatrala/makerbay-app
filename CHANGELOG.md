@@ -62,6 +62,9 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   Processing Agreement now say how sign-in actually works (codes and
   passkeys, no passwords) and list Resend as the company that delivers our
   email. Both legal documents move to version 1.1.
+- Changed `platform` The page you see when signing in with a MakerBay
+  password now looks like MakerBay: our logo, colours and buttons, instead
+  of the plain grey form it showed before. The password itself is unchanged.
 
 ## 2.28.0 - 2026-08-29
 

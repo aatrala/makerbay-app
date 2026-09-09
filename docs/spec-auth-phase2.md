@@ -1,6 +1,6 @@
 # Spec: sign-in phase 2 - people in a workspace, and passkeys (issue 158)
 
-Status: **v2 APPROVED 2026-09-09 on the defaults; Part A LIVE 2026-09-09; Part B0 (auth on the dashboard's origin) LIVE 2026-09-09; Part B1 (passkeys) LIVE 2026-09-09; founder confirmed passkey sign-in on a phone and the upstream password sign-in ("Sign in with it") through the app. callback on 2026-09-10; the old api. Cognito callback is removed, so one callback is registered.**
+Status: **v2 APPROVED 2026-09-09 on the defaults; Part A LIVE 2026-09-09; Part B0 (auth on the dashboard's origin) LIVE 2026-09-09; Part B1 (passkeys) LIVE 2026-09-09; founder confirmed passkey sign-in on a phone and the upstream password sign-in ("Sign in with it") through the app. callback on 2026-09-10; the old api. Cognito callback is removed, so one callback is registered. The Cognito page itself moved to managed login with a MakerBay branding style (infra/branding/upstream-login.json) the same day, after the founder saw the unbranded classic page.**
 Proven end to end against the deployed API with two test addresses: invite
 (email delivered, no link), seat wall on the third person, invitee sees the
 invitation at sign-in, joins as member, is refused every owner route, leaves

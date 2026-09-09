@@ -1,3 +1,4 @@
+import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as cdk from 'aws-cdk-lib'
 import { Construct } from 'constructs'
@@ -743,12 +744,16 @@ export class MakerbayStack extends cdk.Stack {
      * exchanges and links to its own user. Cognito sends no email in that
      * flow, so the sandbox that broke sign-up has no bearing on it.
      *
-     * The classic hosted UI on the free prefix domain, deliberately: it is
-     * on screen for the two seconds of the redirect, and the branded managed
-     * login costs another resource and an ACM certificate.
+     * Managed login on the free prefix domain (issue 158, 2026-09-10). The
+     * classic hosted UI was the first choice, on the belief that branding it
+     * needed a custom domain and a certificate; it does not. The pool is on
+     * the Essentials plan, which includes managed login, and the branding
+     * style below is one CloudFormation resource. The founder saw the
+     * unbranded page once and that was enough.
      */
     userPool.addDomain('UpstreamDomain', {
       cognitoDomain: { domainPrefix: 'makerbay-auth' },
+      managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
     })
     const upstreamClient = userPool.addClient('BetterAuthUpstream', {
       generateSecret: false,
@@ -765,6 +770,33 @@ export class MakerbayStack extends cdk.Stack {
       },
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
       preventUserExistenceErrors: true,
+    })
+    /*
+     * The MakerBay look for that page. `infra/branding/upstream-login.json`
+     * is the settings document Cognito's branding editor works with (the
+     * merged defaults with our colours and logo changed); the logo is the
+     * site's 192px icon. Until the file exists the style is Cognito's
+     * modern default, which is already a page with a form in the middle
+     * rather than the 2015 one.
+     */
+    const brandingFile = path.join(repoRoot, 'infra/branding/upstream-login.json')
+    const branding = fs.existsSync(brandingFile)
+      ? (JSON.parse(fs.readFileSync(brandingFile, 'utf8')) as { settings: unknown })
+      : undefined
+    new cognito.CfnManagedLoginBranding(this, 'UpstreamBranding', {
+      userPoolId: userPool.userPoolId,
+      clientId: upstreamClient.userPoolClientId,
+      ...(branding
+        ? {
+            settings: branding.settings,
+            assets: [{
+              category: 'FORM_LOGO',
+              colorMode: 'DYNAMIC',
+              extension: 'PNG',
+              bytes: fs.readFileSync(path.join(repoRoot, 'site/src/assets/icon-192.png')).toString('base64'),
+            }],
+          }
+        : { useCognitoProvidedValues: true }),
     })
 
     // ── Functions ────────────────────────────────────────────────────────
