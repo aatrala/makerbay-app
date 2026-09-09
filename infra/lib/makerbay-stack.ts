@@ -756,11 +756,11 @@ export class MakerbayStack extends cdk.Stack {
       oAuth: {
         flows: { authorizationCodeGrant: true },
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
-        // The dashboard origin since part B of issue 158 (Better Auth builds
-        // the redirect from its baseURL, which is app.); the api. entry stays
-        // registered until the founder has signed in with a password once
-        // more on the new path, then goes.
-        callbackUrls: [`https://app.${DOMAIN}/auth/callback/cognito`, `https://api.${DOMAIN}/auth/callback/cognito`],
+        // The dashboard origin only, since part B of issue 158 (Better Auth
+        // builds the redirect from its baseURL, which is app.). The old api.
+        // entry was removed 2026-09-10 once the new path was verified: one
+        // registered callback, so nothing else can complete the flow.
+        callbackUrls: [`https://app.${DOMAIN}/auth/callback/cognito`],
         logoutUrls: [`https://app.${DOMAIN}/`],
       },
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],

@@ -3127,9 +3127,10 @@ origin by CloudFront (caching disabled, all methods), SPA routing moved
 from error rewrites to a CloudFront Function so a CSRF 403 stays a 403,
 Better Auth's baseURL is app.makerbay.app with the JWT issuer pinned to
 api.makerbay.app, sessions live in an HttpOnly first-party cookie with
-the access JWT in memory only, and the bridge route is gone. The `api.`
-Cognito callback stays until the founder re-tests password sign-in on
-the new path, then it is removed so there is one.
+the access JWT in memory only, and the bridge route is gone. The old `api.`
+Cognito callback was removed 2026-09-10 (founder confirmed passkey
+sign-in on a phone; Cognito verified to accept the app. redirect), so one
+callback is registered.
 
 **Part B1 (live 2026-09-09):** `@better-auth/passkey` pinned to the
 better-auth version, rpID `makerbay.app`, origin exactly the dashboard,
