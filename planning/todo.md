@@ -3041,7 +3041,12 @@ shows "delivered" in MailLog within a minute.
 through Cognito's own sender (50/day, unbranded). That is issue 110's
 `CustomEmailSender` question, now reframed by the Clerk evaluation.
 
-### 157 — Customer sign-in on Better Auth ⏳ phases 0-1 shipped dark 2026-09-09; flip awaits founder
+### 157 — Customer sign-in on Better Auth ✅ live 2026-09-09 (phase 1b flipped after the founder proved both legs)
+Founder signed in on the dark path with a code (resolved to the migrated
+owner user and the existing workspace) and with the Cognito password
+through the upstream, then said go. `AUTH_PROVIDER` and
+`DEFAULT_AUTH_PROVIDER` are `better-auth`; rollback is the same two
+constants. Phase 2 (passkeys, organisations) is next. Original notes below.
 Spec: docs/spec-auth.md. Decision after evaluating every hosted and
 self-hosted alternative (WorkOS, Clerk, Kinde, Stytch, Auth0, Descope,
 Hexclave, Ory, Zitadel, Logto, SuperTokens, Hanko, FusionAuth, Firebase,

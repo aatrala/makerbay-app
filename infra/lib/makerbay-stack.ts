@@ -92,7 +92,7 @@ const EMAIL_PROVIDER: 'ses' | 'resend' = 'resend'
  * app.makerbay.app/?auth=better-auth before anything flips. Flipping this
  * changes the dashboard build's default and nothing on the API.
  */
-const AUTH_PROVIDER: 'cognito' | 'better-auth' = 'cognito'
+const AUTH_PROVIDER: 'cognito' | 'better-auth' = 'better-auth'
 
 export class MakerbayStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {

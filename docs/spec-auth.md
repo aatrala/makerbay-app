@@ -1,6 +1,8 @@
 # Spec: customer authentication on Better Auth (issue 157)
 
-Status: **PHASES 0 AND 1 SHIPPED DARK 2026-09-09.** The adapter passed Better
+Status: **LIVE 2026-09-09 (phase 1b flipped).** Production customers sign
+in with an emailed code; existing passwords still work through the Cognito
+upstream. Phases 0 and 1 history follows. The adapter passed Better
 Auth's conformance suites (114 of 116; the two misses are the harness's
 30-second timeout over the WAN, not failures). The AuthStack is deployed,
 JWKS is live at `https://api.makerbay.app/auth/jwks`, the six existing

@@ -8,7 +8,7 @@
  */
 export type AuthProvider = 'cognito' | 'better-auth'
 
-export const DEFAULT_AUTH_PROVIDER: AuthProvider = 'cognito'
+export const DEFAULT_AUTH_PROVIDER: AuthProvider = 'better-auth'
 
 const KEY = 'mb.authProvider'
 

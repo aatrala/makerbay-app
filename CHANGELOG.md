@@ -31,6 +31,15 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 - Changed `platform` The staff console's email page reports which provider
   it tested, and its suppression tool reads and clears the live provider's
   list - saying plainly that removal is global across every workspace.
+- Added `platform` **Sign in with a code, no password.** Enter your email,
+  type the six-digit code we send, and you are in. New accounts are created
+  the same way, with nothing to remember. The code arrives from
+  hello@makerbay.app in the same style as every other MakerBay email, and it
+  never contains a link - a code email with a button is what a forged one
+  looks like, so ours never has one. Anyone who already has a MakerBay
+  password can still use it: the sign-in page offers "sign in with it" and
+  takes you to the familiar password screen and back. Sessions last seven
+  days.
 
 ## 2.28.0 - 2026-08-29
 
