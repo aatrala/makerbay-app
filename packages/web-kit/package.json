@@ -8,6 +8,7 @@
     "./styles.css": "./src/styles.css"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

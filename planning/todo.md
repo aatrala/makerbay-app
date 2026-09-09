@@ -3090,7 +3090,7 @@ to a code request even when the send fails (it swallows the error).
 in once each way on the dark path (the password leg needs your Cognito
 password, which nothing here can exercise).
 
-### 158 — People in a workspace, and passkeys ⏳ Part A and B0 live 2026-09-09; B1 passkeys next
+### 158 — People in a workspace, and passkeys ✅ 2026-09-09 (A, B0, B1 all live)
 Spec: docs/spec-auth-phase2.md, v2 after a product review and a security
 review of v1 both rejected mirroring Better Auth's organization plugin
 into the Users table. Membership stays in core: a Users row (now with
@@ -3126,7 +3126,20 @@ the access JWT in memory only, and the bridge route is gone. The `api.`
 Cognito callback stays until the founder re-tests password sign-in on
 the new path, then it is removed so there is one.
 
-**Part B1 (next):** passkeys ("Sign in with your fingerprint next time"),
-fingerprint required, rpID makerbay.app, Account page list.
+**Part B1 (live 2026-09-09):** `@better-auth/passkey` pinned to the
+better-auth version, rpID `makerbay.app`, origin exactly the dashboard,
+user verification REQUIRED and enforced server-side in both
+`afterVerification` callbacks (the plugin itself only asks for it),
+`session.freshAge` one hour. Every add and remove emails the account
+(`passkeyChanged`, no link, says where the list is). Dashboard: the
+email field carries `username webauthn` so a saved passkey is offered
+before typing, a "Sign in with fingerprint or face" button, an offer
+card on Home after a code sign-in on a device with a platform
+authenticator ("Not now" per browser, back after the third code
+sign-in), and the Account page lists devices with rename, remove and
+add. Proven live with `scripts/passkey-smoke.mjs`, a software
+authenticator. Not built: a code re-check before add or remove (noted
+in the spec as the next step); last-used dates (the plugin row has no
+field for it).
  Then the flip is `AUTH_PROVIDER` in the stack,
 `DEFAULT_AUTH_PROVIDER` in web-kit, deploy, publish the dashboard.

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   AuthError,
   authProvider,
@@ -6,8 +6,12 @@ import {
   confirmSignUp,
   forgotPassword,
   login,
+  noteCodeSignIn,
+  passkeyAutofillPossible,
+  passkeysPossible,
   sendCode,
   signInWithCode,
+  signInWithPasskey,
   signUp,
   startUpstreamSignIn,
 } from '@makerbay/web-kit'
@@ -48,6 +52,29 @@ function CodeLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const passkeys = passkeysPossible()
+
+  /*
+   * A browser with a saved passkey offers it on the email field before
+   * anything is typed (issue 158 part B1): the request waits quietly in the
+   * background and resolves only if the person picks the passkey. Typing an
+   * email and asking for a code leaves it waiting, which is harmless.
+   */
+  useEffect(() => {
+    if (!passkeys) return
+    let alive = true
+    void (async () => {
+      if (!(await passkeyAutofillPossible()) || !alive) return
+      try {
+        await signInWithPasskey({ autofill: true })
+        if (alive) onLoggedIn()
+      } catch {
+        // Cancelled or unsupported: the code path is right there.
+      }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // The server's code picks the sentence; its message is the fallback.
   const fail = (err: unknown) =>
@@ -67,11 +94,24 @@ function CodeLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
         setStep('code')
       } else {
         await signInWithCode(email, code)
+        noteCodeSignIn()
         onLoggedIn()
       }
     } catch (err) {
       fail(err)
     } finally {
+      setBusy(false)
+    }
+  }
+
+  const useFingerprint = async () => {
+    setError('')
+    setBusy(true)
+    try {
+      await signInWithPasskey()
+      onLoggedIn()
+    } catch (err) {
+      if (!(err instanceof AuthError && err.code === 'PASSKEY_CANCELLED')) fail(err)
       setBusy(false)
     }
   }
@@ -106,7 +146,7 @@ function CodeLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
           <>
             <p>We will email you a six-digit code. No password to remember.</p>
             <label>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="email" />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="username webauthn" />
           </>
         ) : (
           <>
@@ -124,10 +164,15 @@ function CodeLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
           </>
         )}
         {error && <div className="error">{error}</div>}
-        <div className="mt">
+        <div className="mt row">
           <button disabled={busy || (step === 'code' && code.length !== 6)}>
             {busy ? 'Working…' : step === 'email' ? 'Email me a code' : 'Sign in'}
           </button>
+          {passkeys && step === 'email' && (
+            <button type="button" className="ghost" disabled={busy} onClick={() => void useFingerprint()}>
+              Sign in with fingerprint or face
+            </button>
+          )}
         </div>
       </form>
     </Frame>
@@ -141,6 +186,10 @@ function explainAuth(code: string, message?: string): string {
     OTP_EXPIRED: 'That code has expired. Ask for a new one.',
     TOO_MANY_ATTEMPTS: 'Too many tries. Ask for a new code.',
     USER_NOT_FOUND: 'We could not find an account for that email.',
+    PASSKEY_NOT_FOUND: 'This device is not set up to sign in here yet. Use a code, then add it under Your account.',
+    AUTHENTICATION_FAILED: 'That did not work. Use a code instead.',
+    USER_VERIFICATION_REQUIRED: 'That device did not check who you are. Use a fingerprint, face or PIN, or a code.',
+    CHALLENGE_NOT_FOUND: 'That took too long. Try again.',
     http_429: 'Slow down a little - try again in a minute.',
     http_500: 'Our side had a problem sending the code. Try again in a moment.',
   }

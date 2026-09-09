@@ -50,6 +50,14 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   now watches the delivery receipt come back through our own mail log,
   rather than asking the provider's log, so it needs no extra access to
   prove the pipeline works.
+- Added `platform` **Sign in with your fingerprint or face.** After you
+  sign in with a code on a phone or laptop that has a fingerprint, face or
+  PIN built in, MakerBay offers to remember that device. Say yes and next
+  time there is no code to wait for: the device checks it is you and you
+  are in. Your emailed code keeps working everywhere else. Every device you
+  add or remove is listed under Your account, and you get an email each
+  time one changes, so a device you do not recognise is spotted and removed
+  in a minute.
 
 ## 2.28.0 - 2026-08-29
 

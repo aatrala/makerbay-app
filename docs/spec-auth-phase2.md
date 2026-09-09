@@ -1,6 +1,6 @@
 # Spec: sign-in phase 2 - people in a workspace, and passkeys (issue 158)
 
-Status: **v2 APPROVED 2026-09-09 on the defaults; Part A LIVE 2026-09-09; Part B0 (auth on the dashboard's origin) LIVE 2026-09-09; B1 passkeys next.**
+Status: **v2 APPROVED 2026-09-09 on the defaults; Part A LIVE 2026-09-09; Part B0 (auth on the dashboard's origin) LIVE 2026-09-09; Part B1 (passkeys) LIVE 2026-09-09.**
 Proven end to end against the deployed API with two test addresses: invite
 (email delivered, no link), seat wall on the third person, invitee sees the
 invitation at sign-in, joins as member, is refused every owner route, leaves
@@ -15,7 +15,20 @@ sign-in through the dashboard origin sets an HttpOnly `__Secure-`
 session cookie, `/auth/token` from the cookie alone mints a JWT whose
 issuer is api.makerbay.app and the API accepts it, sign-out kills the
 cookie, and the anonymous dashboard load probes the session once and
-shows the sign-in page. B1 (passkeys) follows. Builds on
+shows the sign-in page. B1 proven live with a software authenticator
+(`scripts/passkey-smoke.mjs`, a P-256 key playing the phone): a
+registration without user verification is refused with
+`USER_VERIFICATION_REQUIRED`, one with it is stored under the given name,
+an anonymous browser signs in with the credential and mints a token the
+API accepts, an assertion without user verification is refused and sets
+no session, rename and remove work, and a removed credential can no
+longer sign in. Add and remove each emailed the account. Two deviations
+from the table below: `session.freshAge` is 1 hour as specified, but
+the plugin only verifies with `requireUserVerification: false`, so the
+"required" is enforced in the two `afterVerification` callbacks; and
+the Account page shows created dates only, because the plugin's row has
+no last-used field and adding one outside its schema is not safe with
+the adapter factory. Builds on
 docs/spec-auth.md (live). v1 proposed Better Auth's organization plugin
 mirrored into the Users table; a product review and a security review of
 that draft, run independently, both rejected it - the product review as

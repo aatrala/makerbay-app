@@ -125,6 +125,9 @@ export class AuthStack extends cdk.NestedStack {
         AUTH_BASE_URL: `https://app.${props.domain}`,
         AUTH_ISSUER: apiUrl,
         AUTH_SPA_URL: `https://app.${props.domain}`,
+        // Passkeys bind to this for life (issue 158 part B1): the apex, so
+        // one credential covers app. and any future host.
+        AUTH_RP_ID: props.domain,
         AUTH_UPSTREAMS: props.upstreams.join(','),
         COGNITO_ISSUER: `https://cognito-idp.${this.region}.amazonaws.com/${props.userPool.userPoolId}`,
         COGNITO_UPSTREAM_CLIENT_ID: props.upstreamClient.userPoolClientId,

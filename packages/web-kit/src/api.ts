@@ -19,6 +19,22 @@ export {
   signInWithCode,
   startUpstreamSignIn,
 } from './auth/better-auth'
+export {
+  addPasskey,
+  declinePasskeyOffer,
+  hasPlatformAuthenticator,
+  listPasskeys,
+  noteCodeSignIn,
+  passkeyAutofillPossible,
+  passkeyOfferPending,
+  passkeysPossible,
+  removePasskey,
+  renamePasskey,
+  settlePasskeyOffer,
+  signInWithPasskey,
+  thisDeviceName,
+  type Passkey,
+} from './auth/passkeys'
 
 const COGNITO_URL = 'https://cognito-idp.us-east-1.amazonaws.com/'
 const CLIENT_ID = '3267h4gvj28r6ahaui5evn6dl4'

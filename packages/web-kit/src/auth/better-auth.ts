@@ -24,6 +24,7 @@ import { API_BASE } from '../config'
 
 const FIRST_PARTY_HOST = 'app.makerbay.app'
 const firstParty = (): boolean => typeof window !== 'undefined' && window.location.hostname === FIRST_PARTY_HOST
+export const isFirstParty = firstParty
 const authBase = (): string => (firstParty() ? `${window.location.origin}/auth` : `${API_BASE}/auth`)
 
 const MARKER_KEY = 'mb.signedIn'
@@ -46,7 +47,7 @@ let accessJwt: string | undefined
 export const isSignedIn = (): boolean =>
   firstParty() ? storage.get(MARKER_KEY) === '1' : Boolean(storage.get(SESSION_KEY))
 
-const remember = (token?: string) => {
+export const rememberSession = (token?: string) => {
   if (firstParty()) storage.set(MARKER_KEY, '1')
   else if (token) storage.set(SESSION_KEY, token)
 }
@@ -57,7 +58,7 @@ export function clear(): void {
   accessJwt = undefined
 }
 
-async function call(path: string, body?: unknown, method = 'POST'): Promise<any> {
+export async function authCall(path: string, body?: unknown, method = 'POST'): Promise<any> {
   const session = firstParty() ? null : storage.get(SESSION_KEY)
   const r = await fetch(`${authBase()}${path}`, {
     method,
@@ -81,13 +82,13 @@ async function call(path: string, body?: unknown, method = 'POST'): Promise<any>
 
 /** Step one of the code sign-in. Works for a new address too: the account is created when the code is used. */
 export async function sendCode(email: string): Promise<void> {
-  await call('/email-otp/send-verification-otp', { email: email.trim().toLowerCase(), type: 'sign-in' })
+  await authCall('/email-otp/send-verification-otp', { email: email.trim().toLowerCase(), type: 'sign-in' })
 }
 
 /** Step two. Remembers the session and mints the first access token. */
 export async function signInWithCode(email: string, otp: string): Promise<void> {
-  const data = await call('/sign-in/email-otp', { email: email.trim().toLowerCase(), otp: otp.trim() })
-  remember(typeof data.token === 'string' ? data.token : undefined)
+  const data = await authCall('/sign-in/email-otp', { email: email.trim().toLowerCase(), otp: otp.trim() })
+  rememberSession(typeof data.token === 'string' ? data.token : undefined)
   if (!isSignedIn()) throw new AuthError(500, 'no_session', 'Signed in, but no session was returned.')
   await mintAccessToken()
 }
@@ -101,7 +102,7 @@ export async function signInWithCode(email: string, otp: string): Promise<void> 
  */
 export async function startUpstreamSignIn(provider = 'cognito'): Promise<void> {
   if (!firstParty()) throw new AuthError(400, 'first_party_only', 'Password sign-in works on app.makerbay.app.')
-  const data = await call('/sign-in/social', {
+  const data = await authCall('/sign-in/social', {
     provider,
     callbackURL: `${window.location.origin}/`,
     errorCallbackURL: `${window.location.origin}/?auth_error=upstream`,
@@ -119,9 +120,9 @@ export async function startUpstreamSignIn(provider = 'cognito'): Promise<void> {
 export async function finishExternalSignIn(): Promise<boolean> {
   if (!firstParty() || isSignedIn()) return false
   try {
-    const session = await call('/get-session', undefined, 'GET')
+    const session = await authCall('/get-session', undefined, 'GET')
     if (!session || !session.user) return false
-    remember()
+    rememberSession()
     await mintAccessToken()
     return true
   } catch {
@@ -139,7 +140,7 @@ function expiryOf(jwt: string): number {
 }
 
 export async function mintAccessToken(): Promise<string> {
-  const data = await call('/token', undefined, 'GET')
+  const data = await authCall('/token', undefined, 'GET')
   if (typeof data.token !== 'string') throw new AuthError(401, 'unauthorized')
   accessJwt = data.token
   return data.token
@@ -163,7 +164,7 @@ export async function accessToken(force = false): Promise<string> {
 
 export async function signOut(): Promise<void> {
   try {
-    if (isSignedIn()) await call('/sign-out', {})
+    if (isSignedIn()) await authCall('/sign-out', {})
   } catch {
     // Signing out of a session that is already gone is still signed out.
   }

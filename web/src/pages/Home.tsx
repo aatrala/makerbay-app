@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { QrBlock, Skeleton, api, tradeExamples, type Me } from '@makerbay/web-kit'
+import PasskeyOfferCard from './PasskeyOfferCard'
 
 /**
  * The front door (issues 74, 136, 148).
@@ -311,6 +312,8 @@ export default function Home({ me }: { me: Me }) {
   return (
     <>
       <h1>Welcome{me.tenant?.name ? `, ${me.tenant.name}` : ''}</h1>
+      {/* After a code sign-in on a device with a fingerprint: renders nothing otherwise. */}
+      <PasskeyOfferCard />
       {showSetup && steps && (
         <p>
           Your assistant, diary and review requests are already on. Three things

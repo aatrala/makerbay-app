@@ -3,6 +3,7 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 import { betterAuth } from 'better-auth'
 import { bearer, emailOTP, genericOAuth, jwt, oneTimeToken } from 'better-auth/plugins'
 import { dynamoAdapter } from './adapter'
+import { passkeyHooks, passkeyPlugin } from './passkeys'
 import { sendOtp } from './otp-mail'
 import { upstreamProviders } from './providers'
 import { authSecrets } from './secrets'
@@ -22,6 +23,8 @@ import { authSecrets } from './secrets'
  * - `genericOAuth`: the upstream seam; see providers.ts.
  * - `oneTimeToken`: after an upstream redirect the session lands in a cookie
  *   on api.makerbay.app; the bridge turns it into a token the SPA can hold.
+ * - `passkey`: "sign in with your fingerprint next time" (issue 158 part
+ *   B1). Configured in passkeys.ts, which also holds the add/remove emails.
  */
 const SECONDS = { day: 24 * 60 * 60 }
 
@@ -50,7 +53,11 @@ async function build() {
     session: {
       expiresIn: 7 * SECONDS.day,
       updateAge: 1 * SECONDS.day,
+      // Adding or removing a passkey needs a session younger than this
+      // (the plugin's fresh-session check). An hour, not the default day.
+      freshAge: 60 * 60,
     },
+    hooks: passkeyHooks,
     account: {
       accountLinking: {
         enabled: true,
@@ -93,6 +100,7 @@ async function build() {
       }),
       oneTimeToken({ expiresIn: 3, storeToken: 'hashed' }),
       genericOAuth({ config: upstreamProviders() }),
+      passkeyPlugin(),
     ],
   })
 }
