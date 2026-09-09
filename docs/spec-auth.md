@@ -14,8 +14,8 @@ decisions listed at the end; defaults apply until changed.
 
 **Proven live 2026-09-09 with Resend as the mail provider:** code requested,
 mailed and delivered, sign-in with the code, JWT minted, API answered,
-sign-out revoked the session. Still for the founder: one password sign-in
-through the Cognito upstream, which needs a real password.
+sign-out revoked the session. The founder confirmed the password sign-in through
+the Cognito upstream on the dashboard origin on 2026-09-10.
 
 **Known limitation:** Better Auth answers `success: true` to a code request
 even when the email fails to send (it swallows the error in its background
