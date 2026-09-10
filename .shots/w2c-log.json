@@ -1,0 +1,94 @@
+[
+  {
+    "step": "nav:links",
+    "ok": true,
+    "value": "[{\"t\":\"Home\",\"h\":\"/home\"},{\"t\":\"Set it up for me\",\"h\":\"/setup\"},{\"t\":\"Requests\",\"h\":\"/requests\"},{\"t\":\"Bookings\",\"h\":\"/booking/diary\"},{\"t\":\"Quotes\",\"h\":\"/quotes\"},{\"t\":\"Get paid\",\"h\":\"/payments\"},{\"t\":\"Contacts\",\"h\":\"/contacts\"},{\"t\":\"Genie\",\"h\":\"/genie\"},{\"t\":\"Assistant\",\"h\":\"/assistant/playground\"},{\"t\":\"Your page\",\"h\":\"/page\"},{\"t\":\"Get found\",\"h\":\"/get-found\"},{\"t\":\"Reviews\",\"h\":\"/reviews\"},{\"t\":\"Set it up for me\",\"h\":\"/setup\"},{\"t\":\"Do it\",\"h\":\"/booking/hours\"},{\"t\":\"Say when you are free\",\"h\":\"/booking/hours\"},{\"t\":\"Put your page online\",\"h\":\"/page\"},{\"t\":\"Let it answer while you are un\",\"h\":\"/assistant/knowledge\"},{\"t\":\"Quote in a minute instead of a\",\"h\":\"/quotes/prices\"},{\"t\":\"Send people somewhere to leave\",\"h\":\"/get-found\"},{\"t\":\"Open the demo →\",\"h\":\"https://demo.makerbay.app\"},{\"t\":\"Hide setup\",\"h\":\"#\"},{\"t\":\"Requests\",\"h\":\"/requests\"},{\"t\":\"Diary\",\"h\":\"/booking/diary\"},{\"t\":\"Quotes\",\"h\":\"/quotes\"}]",
+    "err": null
+  },
+  {
+    "step": "nav:bookings",
+    "ok": true,
+    "value": "Bookings",
+    "err": null
+  },
+  {
+    "step": "bookings:url",
+    "ok": true,
+    "value": "https://app.makerbay.app/booking/diary",
+    "err": null
+  },
+  {
+    "step": "bookings:text",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Diary Services Hours Diary Everything booked, in Asia/Calcutta. Coming up Block out time Nothing booked yet Once you have a service and your hours, share your booking link and customers can book themselves in. Set up what you offer",
+    "err": null
+  },
+  {
+    "step": "w2c-1-bookings.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "booking:open",
+    "ok": true,
+    "value": "notfound",
+    "err": null
+  },
+  {
+    "step": "booking:detail",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Diary Services Hours Diary Everything booked, in Asia/Calcutta. Coming up Block out time Nothing booked yet Once you have a service and your hours, share your booking link and customers can book themselves in. Set up what you offer",
+    "err": null
+  },
+  {
+    "step": "w2c-2-booking-detail.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "block:open",
+    "ok": true,
+    "value": "Block out time",
+    "err": null
+  },
+  {
+    "step": "w2c-3-block-dialog.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "block:fields",
+    "ok": true,
+    "value": "[{\"tag\":\"INPUT\",\"type\":\"date\",\"id\":\"blk-date\",\"name\":\"\",\"ph\":\"\"},{\"tag\":\"INPUT\",\"type\":\"time\",\"id\":\"blk-from\",\"name\":\"\",\"ph\":\"\"},{\"tag\":\"INPUT\",\"type\":\"time\",\"id\":\"blk-to\",\"name\":\"\",\"ph\":\"\"},{\"tag\":\"INPUT\",\"type\":\"text\",\"id\":\"blk-reason\",\"name\":\"\",\"ph\":\"School run\"}]",
+    "err": null
+  },
+  {
+    "step": "block:buttons",
+    "ok": true,
+    "value": "[\"TTest pageaatrala+b1@gmail.com▴\",\"Close\",\"Block\"]",
+    "err": null
+  },
+  {
+    "step": "nav:contacts",
+    "ok": true,
+    "value": "Contacts",
+    "err": null
+  },
+  {
+    "step": "contacts:url",
+    "ok": true,
+    "value": "https://app.makerbay.app/contacts",
+    "err": null
+  },
+  {
+    "step": "contacts:text",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Contacts Everyone your business has dealt with, in one list. Your other modules add to it as customers arrive, so it stays current without data entry. All statuses new contacted active won lost New contact Export CSV Import a list from anywhere with name, email or phone columns. Anyone already here is matched rather than duplicated. Export whenever you like — a customer list you cannot take with you is not really yours. NAME CONTACT STATUS LAST ACTIVITY E2E Workflow Customer aatrala+b2@gmail.com 0400000000 new 2 min ago",
+    "err": null
+  },
+  {
+    "step": "w2c-4-contacts.jpg",
+    "ok": true,
+    "err": null
+  }
+]

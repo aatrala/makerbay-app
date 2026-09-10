@@ -1,0 +1,75 @@
+[
+  {
+    "step": "requests:text",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Inbox Settings Requests Every question your assistant could not close, and everyone who asked to be contacted. All New Open Closed No requests yet When your assistant cannot answer, it offers to take the customer’s details. Those land here. Put your assistant live",
+    "err": null
+  },
+  {
+    "step": "w2d-1-requests.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "diary:text2",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Diary Services Hours Diary Everything booked, in Asia/Calcutta. Coming up Block out time Nothing booked yet Once you have a service and your hours, share your booking link and customers can book themselves in. Set up what you offer",
+    "err": null
+  },
+  {
+    "step": "w2d-2-diary.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "block:open",
+    "ok": true,
+    "value": "Block out time",
+    "err": null
+  },
+  {
+    "step": "block:setdate",
+    "ok": true,
+    "value": "filled 2026-09-12",
+    "err": null
+  },
+  {
+    "step": "w2d-3-block-filled.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "block:submit",
+    "ok": true,
+    "value": "clicked",
+    "err": null
+  },
+  {
+    "step": "diary:after-block",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Diary Services Hours Diary Everything booked, in Asia/Calcutta. Coming up Block out time WHEN WHO WHAT STATUS ACTIONS Sat 12 Sept, 09:00 – 12:00 your time E2E test block blocked Remove",
+    "err": null
+  },
+  {
+    "step": "w2d-4-after-block.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "block:remove",
+    "ok": true,
+    "value": "Remove",
+    "err": null
+  },
+  {
+    "step": "diary:after-remove",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Diary Services Hours Diary Everything booked, in Asia/Calcutta. Coming up Block out time Nothing booked yet Once you have a service and your hours, share your booking link and customers can book themselves in. Set up what you offer",
+    "err": null
+  },
+  {
+    "step": "w2d-5-after-remove.jpg",
+    "ok": true,
+    "err": null
+  }
+]

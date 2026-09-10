@@ -230,7 +230,8 @@ export default function Home({ me }: { me: Me }) {
           // Not "are there any hours" - every workspace starts with Mon-Fri
           // 9-5 from DEFAULT_BOOKING_CONFIG, so that test ticked before the
           // owner had done anything. What matters is whether they SAVED them.
-          done: booking ? Boolean(booking.config?.updatedAt) : undefined,
+          // `saved` covers rows written before updatedAt existed (tester finding V5).
+          done: booking ? Boolean(booking.config?.updatedAt || booking.saved) : undefined,
         },
         {
           key: 'page',

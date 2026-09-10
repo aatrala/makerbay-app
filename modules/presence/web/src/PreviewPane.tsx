@@ -6,7 +6,14 @@ import { useEffect, useState } from 'react'
  * nonce, so every save busts the CloudFront cache instantly for the owner
  * even though visitors keep the cached copy for a few minutes.
  */
-export default function PreviewPane({ pageUrl, refreshKey, draftHtml }: { pageUrl: string; refreshKey: number; draftHtml?: string | null }) {
+export default function PreviewPane({ pageUrl, refreshKey, draftHtml, unpublishedHtml }: {
+  pageUrl: string
+  refreshKey: number
+  /** The would-be page for unsaved edits. */
+  draftHtml?: string | null
+  /** The saved page rendered server-side, for a page visitors cannot see yet (tester finding V1). */
+  unpublishedHtml?: string | null
+}) {
   const [mode, setMode] = useState<'desktop' | 'mobile'>('desktop')
   const [nonce, setNonce] = useState(0)
 
@@ -31,13 +38,19 @@ export default function PreviewPane({ pageUrl, refreshKey, draftHtml }: { pageUr
       <p className="meta">
         {draftHtml
           ? 'Showing your unsaved changes. Save to make them real.'
-          : 'Your saves show here immediately. Visitors see them within about 5 minutes — the page is cached for speed.'}
+          : unpublishedHtml
+            ? 'Not published yet: this is how it will look. Visitors get "page not found" until you tick Publish below.'
+            : 'Your saves show here immediately. Visitors see them within about 5 minutes — the page is cached for speed.'}
       </p>
       <div className={`preview-stage${mode === 'mobile' ? ' phone' : ''}`}>
         <div className={mode === 'mobile' ? 'phone-frame' : 'desktop-frame'}>
           {draftHtml
             ? <iframe title="Page preview (unsaved)" srcDoc={draftHtml} />
-            : <iframe title="Page preview" src={`${pageUrl}?preview=${nonce}`} />}
+            : unpublishedHtml
+              ? <iframe title="Page preview (not published)" srcDoc={unpublishedHtml} />
+              // `v` is a cache-buster and nothing else; `preview` means a
+              // prospect token to the public route.
+              : <iframe title="Page preview" src={`${pageUrl}?v=${nonce}`} />}
         </div>
       </div>
     </div>

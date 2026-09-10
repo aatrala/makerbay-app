@@ -3149,3 +3149,22 @@ in the spec as the next step); last-used dates (the plugin row has no
 field for it).
  Then the flip is `AUTH_PROVIDER` in the stack,
 `DEFAULT_AUTH_PROVIDER` in web-kit, deploy, publish the dashboard.
+
+### 159 — End-to-end tester findings, 10-11 September ✅ 2026-09-11
+An external tester (Kimi agent, `e2e-test-report-2026-09-10.md`) ran a
+read-only pass, a visual pass and a write-workflow pass. Every finding
+was reviewed, and each real one fixed the same day; the report carries
+the inline verdicts and two resolution logs. The one that mattered:
+**a booking made without a deposit was confirmed to the customer and
+never stored** (regression from the 26 August deposits release, masked
+until Resend made customer email deliverable on 8 September). Zero real
+bookings were lost; the tester's three were. The lesson is already in
+the code as a regression test: the booking row is written before any
+side effect, and no test had ever covered `createBooking`. Also fixed:
+the page preview 404 (a query-parameter collision with prospect
+previews, plus an honest "not published yet" preview), the Home hours
+step, the widget chip row and link wrapping, stale module FAQs, the
+help.makerbay.app root, and Cognito self sign-up.
+**Manual test:** book a service on a test page without a deposit; the
+diary shows it within a reload. Your page → Preview shows the page
+whether or not it is published.

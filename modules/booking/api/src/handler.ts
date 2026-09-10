@@ -52,6 +52,7 @@ import {
   getBooking,
   getBookingConfig,
   getService,
+  hasBookingConfig,
   listServices,
   putBooking,
   putBookingConfig,
@@ -107,8 +108,12 @@ export const handler = async (
     if (method === 'GET' && path === '/v1/booking/config') {
       // payoutsEnabled rides along so the Services screen knows whether the
       // deposit field is armed, without a cross-module fetch.
-      const [config, tenant] = await Promise.all([getBookingConfig(tenantId), getTenant(tenantId)])
-      return json(200, { config, payoutsEnabled: tenant?.payoutsEnabled === true })
+      const [config, tenant, saved] = await Promise.all([
+        getBookingConfig(tenantId), getTenant(tenantId), hasBookingConfig(tenantId),
+      ])
+      // `saved` tells Home's checklist the owner has been here, for rows
+      // written before updatedAt existed (tester finding V5).
+      return json(200, { config, payoutsEnabled: tenant?.payoutsEnabled === true, saved })
     }
     // Undo, free on every tier. A snapshot is taken before every write above,
     // so anything the owner or a setup job changed can be put back (issue 100).
@@ -400,6 +405,19 @@ async function createBooking(
     })
   }
 
+  /*
+   * The row FIRST, then the side effects (tester finding V4, 2026-09-11).
+   *
+   * The deposits refactor of 2026-08-26 folded the instant path's only
+   * write into confirmSideEffects, inside its "confirmation email failed"
+   * branch. While customer mail was failing (the SES sandbox) that branch
+   * always ran and nobody noticed; the day Resend started delivering, every
+   * no-deposit booking stopped being stored - the customer read "Booked",
+   * the contact was created, the owner was emailed, a reminder was
+   * scheduled, and the diary stayed empty. confirmSideEffects must never be
+   * the thing that persists a booking.
+   */
+  await putBooking(row)
   const emailed = await confirmSideEffects(tenantId, businessName, row, config.timezone, config.notifyEmail)
   return json(201, { bookingId, booking: view, emailed })
 }
@@ -949,6 +967,7 @@ async function updateConfig(tenantId: string, event: Event): Promise<APIGatewayP
       : existing.closures,
     notifyEmail: String(b.notifyEmail ?? existing.notifyEmail).slice(0, 200),
     intro: String(b.intro ?? DEFAULT_BOOKING_CONFIG.intro).slice(0, 300),
+    updatedAt: new Date().toISOString(),
   }
   await snapshotConfig(tenantId, 'booking.config', existing, 'before saving hours and availability', actor.id)
   await putBookingConfig(config)

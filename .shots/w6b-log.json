@@ -1,0 +1,54 @@
+[
+  {
+    "step": "pg:fill",
+    "ok": true,
+    "value": "filled",
+    "err": null
+  },
+  {
+    "step": "w6b-1-filled.jpg",
+    "ok": true
+  },
+  {
+    "step": "pg:save",
+    "ok": true,
+    "value": "Save page",
+    "err": null
+  },
+  {
+    "step": "pg:after",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Page Share Your page A real web page for your business, built from what you have already set up. Your services and hours come from Bookings; change them there and the page changes too. Saved - the preview shows it now. Visitors see it within about 5 minutes. Dismiss Content Appearance Publish Hidden from search engines until it is finished. A half-empty page ranked under your name does more harm than none. Still missing: a photo. Page checklist 3 of 7 done Next: Add a photo Do it All steps CONTENT Photo One good photo — you at work, your van, your shopfront. It is the difference between a page that looks real and one that looks abandoned. Words Business name The big title at the top of your page — and your workspace's name ever",
+    "err": null
+  },
+  {
+    "step": "w6b-2-saved.jpg",
+    "ok": true
+  },
+  {
+    "step": "pv:iframes",
+    "ok": true,
+    "value": "[\"https://makerbay.app/p/test-page?preview=2\"]",
+    "err": null
+  },
+  {
+    "step": "pv:refresh",
+    "ok": true,
+    "value": "Refresh",
+    "err": null
+  },
+  {
+    "step": "w6b-3-preview.jpg",
+    "ok": true
+  },
+  {
+    "step": "home:text",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Welcome, Test page Your assistant, diary and review requests are already on. Three things turn them into yours — and at the end you have a link to send people. Getting started 1 of 3 done Rather not do this bit? Paste your website address and we fill in your page, your services, your prices and what your assistant knows. Nothing goes live until you have looked at it. Set it up for me Next: The hours you will take work. Customers can only book inside them, so nobody rings you at nine on a Sunday. Do it ✓ Done: Say what you do and what it costs ○ To do: Say when you are free The hours you will take work. Customers can only book inside them, so nobody rings you at nine on a Sunday. ○ To do: Put your page online An intro in your ow",
+    "err": null
+  },
+  {
+    "step": "w6b-4-home.jpg",
+    "ok": true
+  }
+]

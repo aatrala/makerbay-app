@@ -1,0 +1,56 @@
+[
+  {
+    "step": "kn:tab0",
+    "ok": true,
+    "value": "Paste text",
+    "err": null
+  },
+  {
+    "step": "kn:fill0",
+    "ok": true,
+    "value": "filled",
+    "err": null
+  },
+  {
+    "step": "w5d-1-filled.jpg",
+    "ok": true
+  },
+  {
+    "step": "kn:save0",
+    "ok": true,
+    "value": "Add to knowledge",
+    "err": null
+  },
+  {
+    "step": "kn:after",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Knowledge Everything your assistant knows comes from these sources. It will never invent an answer — if something is not here, it says so. Added. It will be ready to answer from in a minute or two. Dismiss Add knowledge From your website Upload a document Paste tex",
+    "err": null
+  },
+  {
+    "step": "w5d-2-after-save.jpg",
+    "ok": true
+  },
+  {
+    "step": "pg:ask",
+    "ok": true,
+    "value": "typed",
+    "err": null
+  },
+  {
+    "step": "pg:send",
+    "ok": true,
+    "value": "Send",
+    "err": null
+  },
+  {
+    "step": "pg:poll0",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. What satisfaction guarantee do you offer? We offer a 42-day satisfaction guarantee on all workshop bookings. If you're not happy within 42 days, ",
+    "err": null
+  },
+  {
+    "step": "w5d-3-answer.jpg",
+    "ok": true
+  }
+]

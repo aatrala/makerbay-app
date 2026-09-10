@@ -80,6 +80,23 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
   centres are and where to find a business's one, instead of a 404.
 - Changed `platform` The password sign-in page no longer offers to create
   an account. New accounts come through the code sign-in only.
+- Fixed `booking` **A booking made on your page without a deposit was
+  confirmed to the customer but never saved**, so it never reached your
+  diary. The slip dated from 26 August and was hidden while customer email
+  was not going out; it surfaced the day it did. Found by an end-to-end
+  test on 10 September; no real customer booking was affected. The diary
+  entry is now written before anyone is emailed.
+- Fixed `presence` The preview on Your page showed "page not found" for
+  every workspace. It now shows your page as saved, and says plainly when
+  the page is not published yet instead of promising visitors can see it.
+- Fixed `platform` The Home checklist step "Say when you are free" now
+  ticks once you have saved your hours.
+- Fixed `assistant` In the chat bubble the row of quick questions fades at
+  the edge so it is clear it scrolls, and a web address in an answer no
+  longer breaks in the middle of its name.
+- Changed `quotes` "Get the link" now says that it marks the quote as sent
+  and locks the price. That is deliberate: a customer holding a link must
+  never be re-priced underneath them.
 
 ## 2.28.0 - 2026-08-29
 

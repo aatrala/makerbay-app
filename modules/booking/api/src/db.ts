@@ -65,6 +65,8 @@ export interface BookingConfigRow extends BookingHours {
   notifyEmail: string
   /** Shown on the public booking page above the slot picker. */
   intro: string
+  /** When the owner last saved this screen. Absent until they have (tester finding V5). */
+  updatedAt?: string
 }
 
 export const DEFAULT_BOOKING_CONFIG: Omit<BookingConfigRow, 'tenantId'> = {
@@ -96,6 +98,14 @@ export async function getBookingConfig(tenantId: string): Promise<BookingConfigR
     if (tenant?.timezone) row.timezone = tenant.timezone
   }
   return row
+}
+
+/** Whether the owner has ever saved the Hours screen: the row only exists after a save. */
+export async function hasBookingConfig(tenantId: string): Promise<boolean> {
+  const r = await ddb.send(new GetCommand({
+    TableName: Tables.config(), Key: { tenantId }, ProjectionExpression: 'tenantId',
+  }))
+  return Boolean(r.Item)
 }
 
 export async function putBookingConfig(row: BookingConfigRow): Promise<void> {

@@ -64,7 +64,25 @@ function PagePage({ me }: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [previewNonce, setPreviewNonce] = useState(0)
   const [draftHtml, setDraftHtml] = useState<string | null>(null)
+  // The saved page, rendered server-side, while it is unpublished: the live
+  // URL is a 404 by design until Publish is ticked, and the pane must not
+  // show that 404 to the owner (tester finding V1).
+  const [unpublishedHtml, setUnpublishedHtml] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const renderSaved = useCallback(async (cfg: PresenceConfig, name: string) => {
+    if (cfg.published) { setUnpublishedHtml(null); return }
+    try {
+      const r = await fetch(`${(window as unknown as { __MB_API?: string }).__MB_API ?? 'https://api.makerbay.app'}/v1/presence/preview`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${await getAccessToken()}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ ...cfg, businessName: name }),
+      })
+      setUnpublishedHtml(r.ok ? await r.text() : null)
+    } catch {
+      setUnpublishedHtml(null)
+    }
+  }, [])
 
   // Live draft preview (issue 51 follow-up): as the form changes, render the
   // WOULD-BE page server-side, debounced so typing stays smooth.
@@ -101,10 +119,11 @@ function PagePage({ me }: { me: Me }) {
       setChecklist(r.checklist ?? [])
       setPageUrl(r.pageUrl)
       setAreas((r.config.serviceAreas ?? []).join(', '))
+      void renderSaved(r.config, me.tenant?.name ?? '')
     } catch (e) {
       setError(explain(e))
     }
-  }, [])
+  }, [renderSaved, me.tenant?.name])
 
   useEffect(() => { void load() }, [load])
 
@@ -132,7 +151,10 @@ function PagePage({ me }: { me: Me }) {
       setPreviewNonce((n) => n + 1)
       dirtyRef.current = false
       setDraftHtml(null)
-      setNote('Saved - the preview shows it now. Visitors see it within about 5 minutes.')
+      await renderSaved(r.config, bizName.trim() || (me.tenant?.name ?? ''))
+      setNote(r.config.published
+        ? 'Saved - the preview shows it now. Visitors see it within about 5 minutes.'
+        : 'Saved. Your page is not published yet, so only you can see it here. Tick Publish when it is ready.')
     })
   }
 
@@ -372,7 +394,7 @@ function PagePage({ me }: { me: Me }) {
       {!config && !error && <div className="card"><Skeleton rows={6} /></div>}
       </div>
       <div className="pg-side">
-        <PreviewPane pageUrl={pageUrl} refreshKey={previewNonce} draftHtml={draftHtml} />
+        <PreviewPane pageUrl={pageUrl} refreshKey={previewNonce} draftHtml={draftHtml} unpublishedHtml={unpublishedHtml} />
       </div>
       </div>
     </>

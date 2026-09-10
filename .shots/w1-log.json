@@ -1,0 +1,45 @@
+[
+ {
+  "step": "w1-services.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "services:body",
+  "ok": true,
+  "value": "Loading…",
+  "err": null
+ },
+ {
+  "step": "services:add-click",
+  "ok": true,
+  "value": "notfound",
+  "err": null
+ },
+ {
+  "step": "w1-services-form.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "services:form-fields",
+  "ok": true,
+  "value": "[{\"tag\":\"INPUT\",\"type\":\"text\",\"name\":\"\",\"id\":\"\",\"ph\":\"\",\"label\":\"\"},{\"tag\":\"INPUT\",\"type\":\"text\",\"name\":\"\",\"id\":\"s-name\",\"ph\":\"Quote visit\",\"label\":\"\"},{\"tag\":\"INPUT\",\"type\":\"number\",\"name\":\"\",\"id\":\"s-dur\",\"ph\":\"\",\"label\":\"\"},{\"tag\":\"INPUT\",\"type\":\"number\",\"name\":\"\",\"id\":\"s-buf\",\"ph\":\"\",\"label\":\"\"},{\"tag\":\"INPUT\",\"type\":\"number\",\"name\":\"\",\"id\":\"s-price\",\"ph\":\"0.00\",\"label\":\"\"},{\"tag\":\"INPUT\",\"type\":\"number\",\"name\":\"\",\"id\":\"s-dep\",\"ph\":\"150.00\",\"label\":\"\"}]",
+  "err": null
+ },
+ {
+  "step": "w1-hours.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "hours:body",
+  "ok": true,
+  "value": "MakerBay\nHome\nSet it up for me\nWORK\nRequests\nBookings\nQuotes\nGet paid\nContacts\nGROW\nGenie\nAssistant\nYour page\nGet found\nReviews\nT\nTest page\naatrala+b1@gmail.com\n▴\nDiary\nServices\nHours\nHours\n\nWhen you work. Slots are only ever offered inside these windows.\n\nTimezone\n\nAn IANA name such as Australia/Sydney. Every slot is worked out in your timezone, so a customer booking from overseas still sees your hours.\n\nOpening hours\nMonday\nto\nTuesday\nto\nWednesday\nto\nThursday\nto\nFriday\nto\nSaturday\nSunday\nShortest notice (hours)\nHow far ahead (days)\nSend booking notifications to\nWhat customers see above the times\nSave hours",
+  "err": null
+ },
+ {
+  "step": "DONE",
+  "ok": true
+ }
+]

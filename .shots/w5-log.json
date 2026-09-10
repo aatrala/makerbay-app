@@ -1,0 +1,25 @@
+[
+  {
+    "step": "kn:text",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Knowledge Everything your assistant knows comes from these sources. It will never invent an answer — if something is not here, it says so. Add knowledge From your website Upload a document Paste text Point us at your site and we will list its pages, or add one page at a time. Pages that build their content with JavaScript may come back empty — we will tell you if that happens. Find pages Add page Sources Your assistant has nothing to answer from yet Add your website above and it will be answering customer questions in a couple of minutes. Most businesses start with their FAQ, pricing and opening hours.",
+    "err": null
+  },
+  {
+    "step": "kn:fields",
+    "ok": true,
+    "value": "[{\"tag\":\"INPUT\",\"type\":\"text\",\"id\":\"\",\"ph\":\"https://your-business.com\"},{\"tag\":\"INPUT\",\"type\":\"text\",\"id\":\"\",\"ph\":\"https://your-business.com/faq — add a single page\"}]",
+    "err": null
+  },
+  {
+    "step": "kn:buttons",
+    "ok": true,
+    "value": "[\"TTest pageaatrala+b1@gmail.com▴\",\"From your website\",\"Upload a document\",\"Paste text\",\"Find pages\",\"Add page\"]",
+    "err": null
+  },
+  {
+    "step": "w5-1-knowledge.jpg",
+    "ok": true,
+    "err": null
+  }
+]

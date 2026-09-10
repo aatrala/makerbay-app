@@ -41,7 +41,9 @@ const html = (statusCode: number, body: string): APIGatewayProxyResultV2 => ({
   headers: {
     'content-type': 'text/html; charset=utf-8',
     // Cached at CloudFront; edits appear within one cache period (spec §9).
-    'cache-control': 'public, max-age=60, s-maxage=300',
+    // Not-found answers are never cached: a page published a minute after
+    // its first visit must not stay a 404 at the edge for five.
+    'cache-control': statusCode >= 400 ? 'no-store' : 'public, max-age=60, s-maxage=300',
     'x-content-type-options': 'nosniff',
   },
   body,
@@ -149,7 +151,11 @@ async function publicRoute(method: string, event: Event): Promise<APIGatewayProx
    * from their public website, and it must never appear in a search result.
    */
   const previewToken = String(event.queryStringParameters?.preview ?? '').trim()
-  if (previewToken) {
+  // Only a token-shaped value is a prospect preview. The dashboard's own
+  // preview pane used to append `?preview=<n>` purely to bust the cache,
+  // which landed here and 404ed every workspace's preview (tester finding
+  // V1, 2026-09-11); it now uses `?v=`, and a stray short value is ignored.
+  if (previewToken && /^[A-Za-z0-9_-]{16,128}$/.test(previewToken)) {
     const draft = await getProspectPreview(previewToken)
     if (!draft) return html(404, renderNotFound())
     const name = draft.businessName?.trim() || 'Your business'

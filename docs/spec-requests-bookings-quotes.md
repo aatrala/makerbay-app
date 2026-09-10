@@ -248,6 +248,7 @@ sentAt, acceptedAt, declinedAt
 | `GET /v1/quotes/{id}` | Cognito | One quote |
 | `PATCH /v1/quotes/{id}` | Cognito | Edit a draft |
 | `POST /v1/quotes/{id}/send` | Cognito | Email it, status → sent |
+| `POST /v1/quotes/{id}/share` | Cognito | Reveal the public link without emailing (issue 118). Also status → sent: the link is what makes the price binding, so it locks editing the same way, and it emits the metered `quote.sent` event. Same for invoices. |
 | `GET /v1/public/quotes/{token}` | token | Customer view |
 | `POST /v1/public/quotes/{token}/respond` | token | Accept or decline |
 

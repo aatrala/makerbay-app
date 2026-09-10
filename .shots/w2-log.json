@@ -1,0 +1,100 @@
+[
+ {
+  "step": "w2-1-form-filled.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "svc:add",
+  "ok": true,
+  "value": "Add service",
+  "err": null
+ },
+ {
+  "step": "w2-2-after-add.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "svc:list",
+  "ok": true,
+  "value": "MakerBay\nHome\nSet it up for me\nWORK\nRequests\nBookings\nQuotes\nGet paid\nContacts\nGROW\nGenie\nAssistant\nYour page\nGet found\nReviews\nT\nTest page\naatrala+b1@gmail.com\n▴\nDiary\nServices\nHours\nServices\n\nWhat customers can book, and how long each one takes.\n\nAdded.\nDismiss\nYour booking page\n\nShare this anywhere. No website needed.\n\nOpen\nAdd a service\nName\nMinutes\nBuffer\nPrice\nDeposit\n\nBuffer is the gap held after each appointment — travel, clean-down, notes. Deposits need payments — set up Get paid first.\n\nAdd service\nWhat you offer\nSERVICE\tLENGTH\tPRICE\tDEPOSIT\tBOOKABLE\t\nE2E Test Service\t30 min +15\t$120.00\t—\tyes\tRemove",
+  "err": null
+ },
+ {
+  "step": "w2-3-booking-page.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "bk:service",
+  "ok": true,
+  "value": "E2E Test Service$120.00 · 30 min",
+  "err": null
+ },
+ {
+  "step": "w2-4-days.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "bk:day",
+  "ok": true,
+  "value": "Thursday 10 September",
+  "err": null
+ },
+ {
+  "step": "w2-5-times.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "bk:time",
+  "ok": true,
+  "value": "notfound",
+  "err": null
+ },
+ {
+  "step": "w2-6-details.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "bk:fill",
+  "ok": true,
+  "value": "[]",
+  "err": null
+ },
+ {
+  "step": "bk:confirm",
+  "ok": true,
+  "value": "notfound",
+  "err": null
+ },
+ {
+  "step": "w2-7-confirmation.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "bk:final",
+  "ok": true,
+  "value": "Test page\n\nNothing free that day — try another.\n\nPick a different day\n\nPowered by MakerBay",
+  "err": null
+ },
+ {
+  "step": "w2-8-diary.jpg",
+  "ok": true,
+  "err": null
+ },
+ {
+  "step": "diary:text",
+  "ok": true,
+  "value": "MakerBay\nHome\nSet it up for me\nWORK\nRequests\nBookings\nQuotes\nGet paid\nContacts\nGROW\nGenie\nAssistant\nYour page\nGet found\nReviews\nT\nTest page\naatrala+b1@gmail.com\n▴\nDiary\nServices\nHours\nDiary\n\nEverything booked, in Asia/Calcutta.\n\nComing up\nBlock out time\nNothing booked yet\n\nOnce you have a service and your hours, share your booking link and customers can book themselves in.\n\nSet up what you offer",
+  "err": null
+ },
+ {
+  "step": "DONE",
+  "ok": true
+ }
+]

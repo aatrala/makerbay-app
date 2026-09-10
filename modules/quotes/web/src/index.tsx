@@ -636,6 +636,12 @@ function QuoteDetail() {
               quote and never get its link at all.
             */}
             <p>Send the link however you like - a text, WhatsApp, or just hand them your phone.</p>
+            {quote.status === 'draft' && (
+              <p className="meta">
+                Getting the link marks the quote as sent and locks the price, so the customer can never be
+                quietly re-priced while holding it. To change it after that, use Revise.
+              </p>
+            )}
             <div className="row">
               <button onClick={share} disabled={busy}>
                 {busy ? 'Working…' : publicUrl ? 'Copy the link' : 'Get the link'}

@@ -1,0 +1,90 @@
+[
+  {
+    "step": "kn:tab",
+    "ok": true,
+    "value": "notfound",
+    "err": null
+  },
+  {
+    "step": "kn:fill",
+    "ok": true,
+    "value": "missing",
+    "err": null
+  },
+  {
+    "step": "kn:save",
+    "ok": true,
+    "value": "notfound",
+    "err": null
+  },
+  {
+    "step": "kn:after",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Knowledge Everything your assistant knows comes from these sources. It will never invent an answer — if something is not here, it says so. Add knowledge From your website Upload a document Paste text Point us at your site and we will list its pages, or add one page at a time. Pages that build their content with JavaScript may come back empty — we will tell you if that happens. Find pages Add page Sources Your assistant has nothing to answer from yet Add your website above and it will be answering customer questions in a couple of minutes. Most businesses start with their FAQ, pricing and opening hours.",
+    "err": null
+  },
+  {
+    "step": "w5c-1-source-added.jpg",
+    "ok": true,
+    "err": null
+  },
+  {
+    "step": "pg:ask",
+    "ok": true,
+    "value": "typed",
+    "err": null
+  },
+  {
+    "step": "pg:send",
+    "ok": true,
+    "value": "Send",
+    "err": null
+  },
+  {
+    "step": "pg:poll0",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. No knowledge yet. Your assistant will decline every question until you give it something to read. Add knowledge What satisfaction guarantee do you offer? I don't have that information yet. Please contact the team directly. Was this helpful? 👍 👎 Send Got an answer that was wrong or missing? Add the right information under Knowledge and ask again.",
+    "err": null
+  },
+  {
+    "step": "pg:poll1",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. No knowledge yet. Your assistant will decline every question until you give it something to read. Add knowledge What satisfaction guarantee do you offer? I don't have that information yet. Please contact the team directly. Was this helpful? 👍 👎 Send Got an answer that was wrong or missing? Add the right information under Knowledge and ask again.",
+    "err": null
+  },
+  {
+    "step": "pg:poll2",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. No knowledge yet. Your assistant will decline every question until you give it something to read. Add knowledge What satisfaction guarantee do you offer? I don't have that information yet. Please contact the team directly. Was this helpful? 👍 👎 Send Got an answer that was wrong or missing? Add the right information under Knowledge and ask again.",
+    "err": null
+  },
+  {
+    "step": "pg:poll3",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. No knowledge yet. Your assistant will decline every question until you give it something to read. Add knowledge What satisfaction guarantee do you offer? I don't have that information yet. Please contact the team directly. Was this helpful? 👍 👎 Send Got an answer that was wrong or missing? Add the right information under Knowledge and ask again.",
+    "err": null
+  },
+  {
+    "step": "pg:poll4",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. No knowledge yet. Your assistant will decline every question until you give it something to read. Add knowledge What satisfaction guarantee do you offer? I don't have that information yet. Please contact the team directly. Was this helpful? 👍 👎 Send Got an answer that was wrong or missing? Add the right information under Knowledge and ask again.",
+    "err": null
+  },
+  {
+    "step": "pg:poll5",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. No knowledge yet. Your assistant will decline every question until you give it something to read. Add knowledge What satisfaction guarantee do you offer? I don't have that information yet. Please contact the team directly. Was this helpful? 👍 👎 Send Got an answer that was wrong or missing? Add the right information under Knowledge and ask again.",
+    "err": null
+  },
+  {
+    "step": "pg:poll6",
+    "ok": true,
+    "value": "MakerBay Home Set it up for me WORK Requests Bookings Quotes Get paid Contacts GROW Genie Assistant Your page Get found Reviews T Test page aatrala+b1@gmail.com ▴ Playground Knowledge Behavior Help centre Deploy Conversations Insights Playground Test your assistant exactly as a customer will experience it. Answers come only from your knowledge sources. No knowledge yet. Your assistant will decline every question until you give it something to read. Add knowledge What satisfaction guarantee do you offer? I don't have that information yet. Please contact the team directly. Was this helpful? 👍 👎 Send Got an answer that was wrong or missing? Add the right information under Knowledge and ask again.",
+    "err": null
+  },
+  {
+    "step": "w5c-2-answer.jpg",
+    "ok": true,
+    "err": null
+  }
+]
