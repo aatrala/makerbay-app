@@ -150,3 +150,7 @@ infra/outputs.json
 # Scratch: browser-automation payloads, probe screenshots, throwaway output.
 # Anything worth keeping belongs in docs/ or planning/.
 tmp/
+
+# An external tester's working files (screenshots, WebBridge scripts and logs); the report itself is tracked.
+.shots/
+.wb-*
