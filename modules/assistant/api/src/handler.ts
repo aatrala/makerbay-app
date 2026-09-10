@@ -56,6 +56,7 @@ import {
   renderArticle,
   renderIndex,
   isVendoredFont,
+  renderLanding,
   renderNotFound,
   renderRobots,
   renderSitemap,
@@ -248,7 +249,7 @@ async function helpRoute(event: Event): Promise<APIGatewayProxyResultV2> {
   const wantsRobots = q.robots === '1'
 
   if (wantsRobots && !slug) return renderRobots()
-  if (!slug) return renderNotFound()
+  if (!slug) return renderLanding()
 
   const tenant = await getTenantBySlugOrAlias(slug)
   if (!tenant) return renderNotFound()

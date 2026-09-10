@@ -685,7 +685,10 @@ export class MakerbayStack extends cdk.Stack {
     const verifyMail = authEmail('verify')
     const userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: 'makerbay',
-      selfSignUpEnabled: true,
+      // Off since 2026-09-10 (tester item t06): every new account comes
+      // through the code sign-in on Better Auth. Cognito's own sign-up
+      // page would otherwise create password accounts beside it.
+      selfSignUpEnabled: false,
       signInAliases: { email: true },
       autoVerify: { email: true },
       /*

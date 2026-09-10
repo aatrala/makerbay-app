@@ -266,7 +266,8 @@ function PasswordLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
       hint={
         mode === 'login' ? (
           <>
-            New to MakerBay? <a href="#" onClick={(e) => { e.preventDefault(); go('signup') }}>Create an account</a>
+            {/* No sign-up here since 2026-09-10: new accounts come through the code sign-in. */}
+            New to MakerBay? <a href="/?auth=better-auth">Sign in with a code instead</a>
             {' · '}
             <a href="#" onClick={(e) => { e.preventDefault(); go('forgot') }}>Forgot password?</a>
           </>

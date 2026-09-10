@@ -609,6 +609,37 @@ export function renderNotFound(): APIGatewayProxyResultV2 {
   )
 }
 
+/**
+ * The bare domain (tester item t05, 2026-09-10). Every help centre lives
+ * at help.makerbay.app/{page-name}; a person who lands on the root has
+ * either trimmed a link or is curious, and a 404 helps neither.
+ */
+export function renderLanding(): APIGatewayProxyResultV2 {
+  return html(
+    200,
+    chrome({
+      title: 'MakerBay help centres',
+      description: 'Every business on MakerBay can publish its own help centre here, at its own address.',
+      canonical: HELP_ORIGIN,
+      brand: '#c2410c',
+      siteName: 'MakerBay',
+      slug: '',
+      theme: 'clean',
+      opts: { tier: 'free' },
+      body:
+        '<div class="hero"><h1>Help centres on MakerBay</h1>'
+        + '<p class="lead">Every business on MakerBay can publish its own help centre here, at an address of its '
+        + 'own: <strong>help.makerbay.app/<em>their-page-name</em></strong>. The answers come from the business, '
+        + 'not from us.</p>'
+        + '<p>If someone sent you a link that landed here, check it has the business name after the slash. '
+        + 'If you run a business and want one of these, it is part of the assistant in your '
+        + '<a href="https://app.makerbay.app">MakerBay dashboard</a>. For MakerBay itself, see '
+        + '<a href="https://makerbay.app">makerbay.app</a>.</p></div>',
+    }),
+    3600,
+  )
+}
+
 /** Category display order; anything unrecognised lands in General. */
 const CATEGORY_ORDER = [
   'Getting started',

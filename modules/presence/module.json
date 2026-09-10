@@ -55,11 +55,11 @@
       },
       {
         "q": "Can I take payment on it?",
-        "a": "Not yet. Money going into your account needs a payment setup we are still building, and we would rather say so than half-do it."
+        "a": "Yes, once you connect your bank through Stripe from the Payments screen: bookings can take a deposit, accepted quotes can take a deposit, and invoices get a Pay online button. The money goes straight to your account; MakerBay never holds it."
       },
       {
         "q": "Can I use my own domain?",
-        "a": "Yes, with Presence Pro: connect a domain you own, add two DNS records, and the same page serves at yourbusiness.com.au with its own certificate. The free makerbay.app page stays either way."
+        "a": "Yes, on the Trade plan: connect a domain you own, add two DNS records, and the same page serves at yourbusiness.com.au with its own certificate. The free makerbay.app page stays either way."
       }
     ]
   }

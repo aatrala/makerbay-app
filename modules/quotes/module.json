@@ -61,7 +61,7 @@
       },
       {
         "q": "Can the customer pay a deposit when they accept?",
-        "a": "Not yet, for the same reason: paying money into your account needs a payment setup we have not built. The quote records the acceptance; you invoice from it and collect however you do today."
+        "a": "Yes. Set a deposit percentage on the quote and the customer pays it by card the moment they accept, straight into your own account through Stripe. MakerBay never holds the money and adds no fee on top of Stripe's. Unpaid invoices get a Pay online button the same way, and mark themselves paid when the money lands."
       }
     ]
   },

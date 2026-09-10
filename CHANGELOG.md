@@ -65,6 +65,21 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 - Changed `platform` The page you see when signing in with a MakerBay
   password now looks like MakerBay: our logo, colours and buttons, instead
   of the plain grey form it showed before. The password itself is unchanged.
+- Fixed `voice` The Missed-call rescue page said nothing is ever recorded.
+  A voicemail the caller leaves is recorded and written out, and kept for
+  the periods the Data Processing Agreement states. The page now says so.
+- Fixed `booking` The Bookings page still said deposits were "not yet";
+  they have been live since 2.24.0. The answer now describes how a deposit
+  secures the slot.
+- Fixed `quotes` The Quotes page still said a customer could not pay a
+  deposit on acceptance; they have been able to since 2.4.0.
+- Fixed `presence` The Page module's answers still said payment was not
+  built and named a plan that no longer exists. Payments are live and the
+  plan is Trade.
+- Added `platform` help.makerbay.app itself now explains what the help
+  centres are and where to find a business's one, instead of a 404.
+- Changed `platform` The password sign-in page no longer offers to create
+  an account. New accounts come through the code sign-in only.
 
 ## 2.28.0 - 2026-08-29
 

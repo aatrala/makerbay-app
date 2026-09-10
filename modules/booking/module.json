@@ -21,7 +21,7 @@
   ],
   "roadmap": {
     "order": 4,
-    "note": "Shipped. Single calendar, several services; deposits and calendar sync are deliberately not in v1."
+    "note": "Shipped. Single calendar, several services, deposits per service; calendar sync is deliberately not in yet."
   },
   "marketing": {
     "summary": "Publish your availability, let customers book themselves in, and send the reminders that stop no-shows. The assistant can take the booking mid-conversation instead of sending people to a separate page.",
@@ -51,7 +51,7 @@
       },
       {
         "q": "Can I take a deposit at booking time?",
-        "a": "Not yet. Taking money into your account needs a payment setup we have not built, and half of it would be worse than none. Bookings v1 confirms the time; you take payment however you do today."
+        "a": "Yes. Give any service a fixed deposit and the customer pays it by card to secure the slot: the time is held for 35 minutes while they pay, the booking confirms itself when the money lands, and your diary shows it as paid. A no-show costs the no-show, not you. Money goes straight to your own account through Stripe; MakerBay never holds it and adds no fee on top of Stripe's. Refunds are yours to give from the Payments screen."
       }
     ]
   },
