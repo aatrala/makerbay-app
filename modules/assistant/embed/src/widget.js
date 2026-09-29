@@ -36,7 +36,12 @@
   var frame = document.createElement('iframe')
   frame.title = 'Chat'
   frame.src = ORIGIN + '/embed?' + (key ? 'key=' + encodeURIComponent(key) : 'slug=' + encodeURIComponent(slug))
-  frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin')
+  // allow-popups (+ escape): Stripe Checkout refuses to load inside any
+  // frame, so a deposit or invoice paid from the bubble opens in a new tab,
+  // and that tab must not inherit the sandbox or Stripe refuses it too. The
+  // same flags let the "Powered by" and Google-review links open at all.
+  // Still no allow-top-navigation: the bubble can never move the host page.
+  frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox')
   frame.style.cssText = [
     'position:fixed', 'bottom:88px', side + ':20px', 'width:380px', 'height:min(560px,70vh)',
     'max-width:calc(100vw - 40px)', 'border:none', 'border-radius:14px', 'z-index:2147483000',

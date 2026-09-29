@@ -159,6 +159,62 @@
     })
   }
 
+  /*
+   * Paying from inside the chat bubble (founder report, 2026-09-29).
+   *
+   * The bubble is a sandboxed iframe on somebody else's website, and Stripe
+   * Checkout refuses to load inside any frame, so sending the frame to the
+   * session URL showed nothing. Inside a frame the payment opens in a new
+   * tab instead. The tab has to be opened on the tap itself - a popup
+   * blocker allows a window opened during a tap and refuses one opened
+   * after an async reply - so the tap opens a blank tab at once and the
+   * Stripe URL is written into it when the session arrives. The frame then
+   * watches for the payment to land and updates itself, so the visitor can
+   * close the tab and still see the result here.
+   */
+  var framed = window.self !== window.top
+  function openPayTab() {
+    if (!framed) return null
+    try {
+      var w = window.open('about:blank', '_blank')
+      if (w && w.document) {
+        w.document.title = 'Secure payment'
+        w.document.body.innerHTML =
+          '<p style="font:16px/1.5 system-ui,sans-serif;padding:24px;color:#57534e">Opening secure payment\u2026</p>'
+      }
+      return w
+    } catch (e) { return null }
+  }
+  function closePayTab(tab) {
+    if (tab && !tab.closed) { try { tab.close() } catch (e) { /* not ours any more */ } }
+  }
+  /** Sends the visitor to Stripe. Returns 'here' (this page went), 'tab' (a new tab did) or 'blocked'. */
+  function goPay(url, tab) {
+    if (!framed) { location.href = url; return 'here' }
+    if (tab && !tab.closed) { try { tab.location.href = url; return 'tab' } catch (e) { /* fall through */ } }
+    var w = window.open(url, '_blank')
+    return w ? 'tab' : 'blocked'
+  }
+  /** What the frame says while the tab does the paying. */
+  function payElsewhere(url, how, what) {
+    return '<p class="q-state ok">' +
+      (how === 'blocked'
+        ? 'Your browser stopped the payment tab from opening. '
+        : 'Finish paying in the tab that just opened. ') +
+      esc(what) + '</p>' +
+      '<p><a class="' + (how === 'blocked' ? 'primary' : '') + '" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+      (how === 'blocked' ? 'Open the secure payment' : 'Payment tab not there? Open it again') + '</a></p>'
+  }
+  /** Polls until isPaid resolves true (about half an hour), then re-renders the page in its paid state. */
+  function watchPayment(isPaid, n) {
+    isPaid().then(function (paid) {
+      if (paid) { location.reload(); return }
+      if ((n || 0) < 450) setTimeout(function () { watchPayment(isPaid, (n || 0) + 1) }, 4000)
+    }).catch(function () {
+      if ((n || 0) < 450) setTimeout(function () { watchPayment(isPaid, (n || 0) + 1) }, 4000)
+    })
+  }
+
   if (!slug) return fail('This link is not valid.')
 
   // The business's accent colour, so the booking, quote, review and invoice
@@ -316,8 +372,11 @@
             var btn = app.querySelector('.primary')
             btn.disabled = true
             btn.textContent = 'Booking…'
+            // Opened now, on the tap, if a deposit is coming; see openPayTab.
+            var tab = dep ? openPayTab() : null
             post(API + '/v1/public/booking', payload).then(function (res) {
-              if (res.status === 201 && res.data.depositRequired) return payDeposit(res.data, btn)
+              if (res.status === 201 && res.data.depositRequired) return payDeposit(res.data, btn, tab)
+              closePayTab(tab)
               if (res.status === 201) return stepDone(res.data)
               btn.disabled = false
               btn.textContent = 'Confirm booking'
@@ -345,23 +404,59 @@
         }
 
         // The slot is held; Stripe takes it from here (spec-booking-deposits.md).
-        function payDeposit(data, btn) {
+        function payDeposit(data, btn, tab) {
           btn.textContent = 'Opening secure payment…'
           post(API + '/v1/public/payments/session', {
             slug: slug, kind: 'booking_deposit', token: data.token,
           }).then(function (res) {
-            if (res.status === 200 && res.data.url) { location.href = res.data.url; return }
+            if (res.status === 200 && res.data.url) {
+              var how = goPay(res.data.url, tab)
+              if (how !== 'here') waitForDeposit(info.business, data.booking || {}, data.token, res.data.url, how)
+              return
+            }
+            closePayTab(tab)
             btn.disabled = false
             btn.textContent = 'Try the payment again'
             var err = document.getElementById('f-err')
             if (err) err.textContent = (res.data && res.data.message) || 'The payment page could not be opened. Your slot is held for a few more minutes — try again.'
-            btn.onclick = function (e) { e.preventDefault(); btn.disabled = true; payDeposit(data, btn) }
+            btn.onclick = function (e) { e.preventDefault(); btn.disabled = true; payDeposit(data, btn, openPayTab()) }
           })
         }
 
         stepService()
       })
       .catch(function () { fail('Online booking is not available right now.') })
+  }
+
+  /**
+   * The slot is held and Stripe is open in another tab: say so, and watch
+   * the booking until the deposit lands, then show Booked right here.
+   */
+  function waitForDeposit(business, b, bookingToken, url, how) {
+    var foot = '</div><footer>Powered by <a href="https://makerbay.app" target="_blank" rel="noopener">MakerBay</a></footer>'
+    var headHtml = '<header><div class="name">' + esc(business || '') + '</div></header><div class="page-body">'
+    app.innerHTML = headHtml +
+      '<div class="done"><h2>' + esc(b.serviceName || 'Your booking') + '</h2>' +
+      '<p>' + esc(b.date || '') + ' at ' + esc(b.time || '') + '</p>' +
+      payElsewhere(url, how, 'Your slot is held while you pay, and this page will update by itself once the deposit lands.') +
+      '</div>' + foot
+    var statusUrl = API + '/v1/public/booking/' + encodeURIComponent(bookingToken) + '?slug=' + encodeURIComponent(slug)
+    var n = 0
+    ;(function check() {
+      get(statusUrl).then(function (r) {
+        var cur = r.status === 200 && r.data.booking
+        if (cur && cur.status === 'confirmed') {
+          app.innerHTML = headHtml +
+            '<div class="done"><div class="tick">&#10003;</div><h2>Booked</h2>' +
+            '<p>' + esc(cur.serviceName || '') + '<br />' + esc(cur.date || '') + ' at ' + esc(cur.time || '') + '</p>' +
+            (cur.depositCents ? '<p class="hint">Deposit received: ' + money(cur.depositCents) + '. A confirmation email is on its way.</p>' : '') +
+            '</div>' + foot
+          return
+        }
+        if (cur && cur.status !== 'pending_payment') return fail('This booking is ' + esc(cur.status || 'no longer available') + '.')
+        if (++n < 450) setTimeout(check, 4000)
+      }).catch(function () { if (++n < 450) setTimeout(check, 4000) })
+    })()
   }
 
   /**
@@ -401,9 +496,15 @@
           this.disabled = true
           this.textContent = 'Opening secure payment…'
           var self = this
+          var tab = openPayTab()
           post(API + '/v1/public/payments/session', { slug: slug, kind: 'booking_deposit', token: token })
             .then(function (r2) {
-              if (r2.status === 200 && r2.data.url) { location.href = r2.data.url; return }
+              if (r2.status === 200 && r2.data.url) {
+                var how = goPay(r2.data.url, tab)
+                if (how !== 'here') waitForDeposit(res.data.business, b, token, r2.data.url, how)
+                return
+              }
+              closePayTab(tab)
               self.disabled = false
               self.textContent = 'Pay the deposit'
               fail((r2.data && r2.data.message) || 'The payment could not be started. The time may have been released — book again.')
@@ -599,9 +700,21 @@
       if (payBtn) payBtn.addEventListener('click', function () {
         payBtn.disabled = true
         payBtn.textContent = 'Opening secure payment…'
+        var tab = openPayTab()
         post(API + '/v1/public/payments/session', { slug: slug, kind: 'quote_deposit', token: token })
           .then(function (r) {
-            if (r.status === 200 && r.data.url) { location.href = r.data.url; return }
+            if (r.status === 200 && r.data.url) {
+              var how = goPay(r.data.url, tab)
+              if (how === 'here') return
+              payBtn.parentNode.innerHTML = payElsewhere(r.data.url, how, 'This page will show the deposit as paid once it lands.')
+              watchPayment(function () {
+                return get(base + '?slug=' + encodeURIComponent(slug)).then(function (r2) {
+                  return r2.status === 200 && !!(r2.data.quote.deposit && r2.data.quote.deposit.paid)
+                })
+              })
+              return
+            }
+            closePayTab(tab)
             payBtn.disabled = false
             payBtn.textContent = 'Try again'
             document.getElementById('pay-err').textContent =
@@ -814,9 +927,20 @@
         if (payNow) payNow.addEventListener('click', function () {
           payNow.disabled = true
           payNow.textContent = 'Opening secure payment…'
+          var tab = openPayTab()
           post(API + '/v1/public/payments/session', { slug: slug, kind: 'invoice', token: token })
             .then(function (r) {
-              if (r.status === 200 && r.data.url) { location.href = r.data.url; return }
+              if (r.status === 200 && r.data.url) {
+                var how = goPay(r.data.url, tab)
+                if (how === 'here') return
+                payNow.parentNode.innerHTML = payElsewhere(r.data.url, how, 'This page will show Paid once the payment lands.')
+                watchPayment(function () {
+                  return get(API + '/v1/public/quotes/invoice?slug=' + encodeURIComponent(slug) + '&token=' + encodeURIComponent(token))
+                    .then(function (r2) { return r2.status === 200 && !!r2.data.invoice.paidAt })
+                })
+                return
+              }
+              closePayTab(tab)
               payNow.disabled = false
               payNow.textContent = 'Try again'
               document.getElementById('pay-err').textContent =

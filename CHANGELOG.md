@@ -97,6 +97,11 @@ Areas are `platform`, or a module id (`assistant`, `contacts`, `requests`,
 - Changed `quotes` "Get the link" now says that it marks the quote as sent
   and locks the price. That is deliberate: a customer holding a link must
   never be re-priced underneath them.
+- Fixed `payments` Paying a deposit or an invoice from the chat bubble on
+  your own website showed a blank panel, because the card payment page
+  refuses to load inside any embedded frame. From the bubble, payment now
+  opens in a new tab, and the bubble updates itself to Booked or Paid as
+  soon as the money lands, even if the tab is closed.
 
 ## 2.28.0 - 2026-08-29
 
