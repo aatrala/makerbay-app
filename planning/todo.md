@@ -3168,3 +3168,22 @@ help.makerbay.app root, and Cognito self sign-up.
 **Manual test:** book a service on a test page without a deposit; the
 diary shows it within a reload. Your page → Preview shows the page
 whether or not it is published.
+
+### 160 — Paying from the chat bubble opened nothing ✅ 2026-09-29
+Founder tried a Stripe payment from the assistant widget on a page and
+it failed: the bubble is a sandboxed iframe and Stripe Checkout refuses
+to load inside any frame, so `location.href` to the session URL showed
+a blank panel. Only the embedded bubble was affected; the hosted pages
+on chat.makerbay.app are top-level and always worked. Fix in
+`pages.js`: inside a frame the tap opens a tab at once (popup blockers
+allow a window opened during a tap, not one opened after the async
+session reply), the Stripe URL is written into it when the session
+arrives, and the frame polls the booking, quote or invoice until the
+payment lands and shows Booked or Paid itself. `widget.js` sandbox
+gains `allow-popups allow-popups-to-escape-sandbox`, which also makes
+the "Powered by" and Google review links work inside the bubble; still
+no top navigation. Proven in a sandboxed-frame harness; published with
+`publish-embed.mjs`.
+**Manual test:** on a page with the bubble, book a service with a
+deposit; a new tab opens on Stripe and the bubble shows Booked once
+the test card goes through.
